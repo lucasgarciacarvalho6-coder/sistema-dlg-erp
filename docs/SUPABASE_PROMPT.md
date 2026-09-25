@@ -111,6 +111,23 @@ npx supabase functions deploy admin-colaboradores
 
 As variáveis `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` já existem nas Edge Functions. Não é preciso configurar nada.
 
+### 3b. Edge Function `ler-contrato`: leitura do contrato com IA grátis (Google Gemini)
+
+Os contratos da DLG têm os dados **escritos à mão**, e o OCR do navegador não lê letra à mão direito. Esta função manda as páginas do contrato para o **Gemini, na cota gratuita do Google**. Ele devolve os campos do formulário, as turmas (período, série e quantidade), o CNPJ da escola e o local e a data da assinatura. Código: [`supabase/functions/ler-contrato/index.ts`](../supabase/functions/ler-contrato/index.ts).
+
+- **Sem a função ou sem a chave:** o sistema usa sozinho a leitura básica do navegador.
+- **Permissão exigida:** `operacional / criar`.
+
+**Publicar:**
+1. Em [aistudio.google.com](https://aistudio.google.com), entre com uma conta Google e vá em **Get API key → Create API key**. É grátis e não pede cartão.
+2. No Supabase: **Edge Functions → Secrets → Add new secret**, com nome `GEMINI_API_KEY` e a chave como valor.
+   - A chave fica **só aqui**, nunca no `.env.local` nem na Vercel.
+   - Opcional: `GEMINI_MODEL` troca o modelo. Sem ela, a função tenta `gemini-2.5-flash` e depois `gemini-flash-latest`.
+3. **Edge Functions → Deploy a new function → Via Editor**. Use o nome `ler-contrato`, cole o arquivo acima e clique em **Deploy**.
+4. Nos detalhes da função, deixe **Verify JWT with legacy secret desligado**. A função confere o usuário sozinha.
+
+> Na cota gratuita, o Google pode usar o conteúdo enviado para melhorar os serviços dele. Para evitar isso, ative o faturamento no Google AI Studio. Nesse caso cada leitura custa uma fração de centavo.
+
 ---
 
 ## 4. Integração do front-end ✅ (já feita)

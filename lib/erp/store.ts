@@ -729,6 +729,33 @@ export async function anexarArquivoContrato(arquivo: File): Promise<{ caminho: s
   return { caminho }
 }
 
+// ---- Leitura do contrato com IA (Edge Function "ler-contrato" → Gemini, cota gratuita) ----
+// Devolve os campos crus da IA; 'indisponivel' = sem Supabase/sem chave/função não publicada (usa a leitura do navegador)
+export async function lerContratoComIA(
+  paginas: string[],
+  vendedores: string[],
+): Promise<{ campos: Record<string, unknown> } | { erro: string; indisponivel?: boolean }> {
+  if (MODO !== 'supabase') return { erro: 'Modo demonstração', indisponivel: true }
+  const { data, error } = await sb().functions.invoke('ler-contrato', { body: { paginas, vendedores } })
+  if (error) {
+    let msg = error.message
+    let codigo = ''
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const corpo = (await error.context.json()) as { erro?: string; codigo?: string }
+        msg = corpo.erro ?? msg
+        codigo = corpo.codigo ?? ''
+      } catch {
+        // mantém a mensagem genérica
+      }
+    }
+    const naoPublicada = /Failed to send|not found|404/i.test(msg)
+    return { erro: naoPublicada ? 'Leitor com IA ainda não publicado no Supabase.' : msg, indisponivel: naoPublicada || codigo === 'nao_configurado' }
+  }
+  const campos = (data as { campos?: Record<string, unknown> } | null)?.campos
+  return campos ? { campos } : { erro: 'A IA não devolveu os campos.' }
+}
+
 export async function abrirArquivoContrato(caminho: string) {
   if (MODO !== 'supabase') {
     avisar('No modo demonstração o arquivo não fica guardado — só o nome.', 'erro')

@@ -38,7 +38,11 @@ const NUMERICOS = ['fichasPrevistas', 'bonificacaoPorFicha']
 const CAMPOS_IA = ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'fichasPrevistas', 'dataPrevista', 'bonificacaoPorFicha', 'pixNome', 'pixChave', 'pixBanco']
 const normalizar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
 
-type EstadoIA = { estado: 'parado' } | { estado: 'lendo'; progresso: number } | { estado: 'ok'; lidos: number; texto: string } | { estado: 'erro'; msg: string }
+type EstadoIA =
+  | { estado: 'parado' }
+  | { estado: 'lendo'; progresso: number; etapa: string }
+  | { estado: 'ok'; lidos: number; texto: string; fonte: 'ia' | 'local'; aviso?: string }
+  | { estado: 'erro'; msg: string }
 
 export default function ContratosEscolaPage() {
   const s = useErp()
@@ -58,7 +62,7 @@ export default function ContratosEscolaPage() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [confirmar, setConfirmar] = useState<Registro | null>(null)
-  // Leitura automática (OCR grátis no navegador): estado, campos preenchidos e campos a conferir
+  // Leitura automática (IA grátis do Google; sem ela, OCR no navegador): estado, campos preenchidos e a conferir
   const [ia, setIa] = useState<EstadoIA>({ estado: 'parado' })
   const [iaCampos, setIaCampos] = useState<Set<string>>(new Set())
   const [duvidas, setDuvidas] = useState<Set<string>>(new Set())
@@ -94,12 +98,12 @@ export default function ContratosEscolaPage() {
   }
 
   const lerComIA = async (arquivo: File) => {
-    setIa({ estado: 'lendo', progresso: 0 })
+    setIa({ estado: 'lendo', progresso: 0, etapa: 'Preparando' })
     setVerTexto(false)
     const r = await lerContratoLocal(
       arquivo,
       vendedores.map((v) => String(v.nome)),
-      (p) => setIa({ estado: 'lendo', progresso: p }),
+      (p, etapa) => setIa({ estado: 'lendo', progresso: p, etapa }),
     )
     if ('erro' in r) return setIa({ estado: 'erro', msg: r.erro })
     const c = r.campos
@@ -123,9 +127,12 @@ export default function ContratosEscolaPage() {
       for (const [k, v] of Object.entries(novos)) if (!String(f[k] ?? '').trim() || iaCampos.has(k)) n[k] = v
       return n
     })
+    // turmas, CNPJ da escola, assinatura... (o que não tem campo próprio) vão para a observação
+    if (r.observacao) novos.observacao = r.observacao
+    if (r.observacao) setForm((f) => (!f.observacao.trim() || iaCampos.has('observacao') ? { ...f, observacao: r.observacao } : f))
     setIaCampos(new Set(Object.keys(novos)))
     setDuvidas(new Set(r.duvidas.map((d) => (d === 'vendedorNome' ? 'vendedorId' : d)).filter((d) => d in novos)))
-    setIa({ estado: 'ok', lidos: Object.keys(novos).length, texto: r.texto })
+    setIa({ estado: 'ok', lidos: Object.keys(novos).length, texto: r.texto, fonte: r.fonte, aviso: r.aviso })
   }
 
   const escolherArquivo = async (arquivo: File | undefined) => {
@@ -374,24 +381,28 @@ export default function ContratosEscolaPage() {
               <p className={`font-bold uppercase tracking-widest text-[10px] mb-1 ${ia.estado === 'erro' ? 'text-red-400' : ia.estado === 'ok' ? 'text-emerald-400' : 'text-blue-400'}`}>
                 Leitura automática (grátis)
               </p>
-              {ia.estado === 'parado' && 'Anexe a foto ou o PDF do contrato: o sistema lê o texto e preenche os campos ao lado. Você só confere antes de concluir. Funciona melhor com contrato digitado e foto reta, bem iluminada.'}
+              {ia.estado === 'parado' && 'Anexe a foto ou o PDF do contrato: a IA lê o documento, inclusive a letra à mão, e preenche os campos ao lado. Você só confere antes de concluir. Foto de perto, reta e bem iluminada lê melhor.'}
               {ia.estado === 'lendo' && (
                 <>
                   <span className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span> Lendo o contrato... {Math.round(ia.progresso * 100)}%
+                    <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
+                    {ia.etapa === 'Lendo com IA' ? 'Lendo o contrato com IA... (alguns segundos)' : `${ia.etapa}... ${Math.round(ia.progresso * 100)}%`}
                   </span>
                   <span className="block h-1 mt-2 rounded-full bg-white/[0.06] overflow-hidden">
-                    <span className="block h-full bg-blue-500 transition-all" style={{ width: `${Math.round(ia.progresso * 100)}%` }}></span>
+                    <span className={`block h-full bg-blue-500 transition-all ${ia.etapa === 'Lendo com IA' ? 'animate-pulse' : ''}`} style={{ width: `${ia.etapa === 'Lendo com IA' ? 100 : Math.round(ia.progresso * 100)}%` }}></span>
                   </span>
-                  <span className="block mt-1 text-zinc-500">Na primeira vez o navegador baixa o idioma português (~2 MB).</span>
+                  {ia.etapa === 'Lendo o texto' && <span className="block mt-1 text-zinc-500">Leitura básica do navegador (na primeira vez baixa o idioma português, ~2 MB).</span>}
                 </>
               )}
               {ia.estado === 'ok' && (
                 <>
-                  {ia.lidos > 0 ? `Preenchi ${ia.lidos} campo(s), marcados com "LIDO". Confira todos antes de concluir.` : 'Li o documento, mas não reconheci os campos. Veja o texto lido abaixo e preencha à mão.'}
-                  {duvidas.size > 0 && <span className="text-yellow-400 font-bold"> {duvidas.size} campo(s) em amarelo foram achados sem rótulo: confira.</span>}
+                  {ia.aviso && <span className="block mb-1 text-yellow-400 font-bold">{ia.aviso}</span>}
+                  {ia.lidos > 0
+                    ? `${ia.fonte === 'ia' ? 'A IA leu o contrato e preencheu' : 'Preenchi'} ${ia.lidos} campo(s), marcados com "LIDO". Confira todos antes de concluir.`
+                    : 'Li o documento, mas não reconheci os campos. Veja o texto lido abaixo e preencha à mão.'}
+                  {duvidas.size > 0 && <span className="text-yellow-400 font-bold"> {duvidas.size} campo(s) em amarelo estavam difíceis de ler: confira.</span>}
                   <button type="button" onClick={() => setVerTexto(!verTexto)} className="block mt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white">
-                    {verTexto ? '▾ Esconder texto lido' : '▸ Ver texto lido'}
+                    {verTexto ? '▾ Esconder o que foi lido' : '▸ Ver tudo o que foi lido'}
                   </button>
                   {verTexto && <pre className="mt-2 max-h-48 overflow-auto custom-scrollbar whitespace-pre-wrap text-[10px] text-zinc-400 bg-black/40 rounded-xl p-3">{ia.texto}</pre>}
                 </>
@@ -469,7 +480,14 @@ export default function ContratosEscolaPage() {
                   </div>
                   <p className="text-[10px] text-zinc-500">Doação à escola por aluno fotografado (entre R$ {bonMin} e R$ {bonMax} • faixa editável em ADM › Configurações).</p>
                 </div>
-                <div className="md:col-span-2">{campo('observacao', 'Observação')}</div>
+                <div className="md:col-span-2">
+                  <div className="space-y-2">
+                    <label className={labelCls}>
+                      Observação {marcaIA('observacao')}
+                    </label>
+                    <textarea rows={3} value={form.observacao ?? ''} onChange={(e) => alterarCampo('observacao', e.target.value)} className={`${inputCls} resize-y`} />
+                  </div>
+                </div>
               </div>
             </div>
 

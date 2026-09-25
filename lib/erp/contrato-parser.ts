@@ -45,7 +45,7 @@ const limpar = (v: string) =>
 
 // Rótulos que começam outro campo (para não pegar a linha seguinte errada nem "vazar" o valor)
 const ROTULO_QUALQUER =
-  /\b(escola|inep|cidade|municipio|uf|estado|endereco|bairro|telefone|fone|celular|whatsapp|diretora?|responsavel|alunos|fichas|data|bonificacao|doacao|pix|titular|favorecido|banco|vendedora?|representante|consultora?|cnpj|cpf|cep|e-?mail)\b\s*[:\-]/
+  /\b(escola|inep|cidade|municipio|uf|estado|endereco|bairro|telefone|fone|celular|whatsapp|diretora?|responsavel|representad[ao] por|alunos|fichas|data|bonificacao|doacao|pix|titular|favorecido|banco|vendedora?|representante|consultora?|cnpj|cpf|cep|e-?mail)\b\s*[:\-]/
 
 interface Rotulo {
   re: RegExp
@@ -203,7 +203,7 @@ export function interpretarContrato(texto: string, vendedores: string[] = []): R
 
   // ---- Diretora / responsável ----
   const resp = porRotulo(linhas, [
-    { re: /\b(diretor\(a\)|diretora|diretor|responsavel legal|responsavel pela escola|responsavel|coordenadora|coordenador|gestora|gestor)\b\s*[:\-]/ },
+    { re: /\b(representad[ao] por|diretor\(a\)|diretora|diretor|responsavel legal|responsavel pela escola|responsavel|coordenadora|coordenador|gestora|gestor)\b\s*[:\-]/ },
   ])
   if (resp) {
     const nome = limpar(resp.replace(/\b(cpf|rg|telefone|tel|fone)\b.*$/i, '').replace(/^(prof[aªº°]?|professora?|sra?|dona|dra?|diretora?)\.?\s+/i, ''))
@@ -221,7 +221,7 @@ export function interpretarContrato(texto: string, vendedores: string[] = []): R
   // ---- Data agendada das fotos ----
   const data = porRotulo(linhas, [
     { re: /\bdata\s*(da|das|de|do)?\s*(sessao|sessao fotografica|fotos?|fotografia|agendada|agendamento|prevista|visita|atendimento|realizacao)\b\s*[:\-]?/ },
-    { re: /\b(agendad[ao] para|previst[ao] para)\b\s*[:\-]?/ },
+    { re: /\b(agendad[ao] para|previst[ao] para|realizadas? na data|realizadas? em)\b\s*[:\-]?/ },
   ])
   const iso = data ? dataISO(data) : null
   if (iso) campos.dataPrevista = iso
@@ -277,4 +277,87 @@ export function interpretarContrato(texto: string, vendedores: string[] = []): R
   }
 
   return { campos, duvidas }
+}
+
+// ---------------- Leitura com IA ----------------
+
+const str = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'number' && v ? String(v) : '')
+const num = (v: unknown) => (typeof v === 'number' ? v : Number(String(v ?? '').replace(',', '.')) || 0)
+const dataBR = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : iso)
+
+const ROTULOS_IA: Record<string, string> = {
+  escola: 'Escola',
+  cnpjEscola: 'CNPJ da escola',
+  inep: 'INEP',
+  endereco: 'Endereço',
+  bairro: 'Bairro',
+  cidade: 'Cidade',
+  uf: 'UF',
+  responsavel: 'Representado por',
+  telefone: 'Celular',
+  telefone2: 'Outro telefone',
+  email: 'E-mail',
+  bonificacaoPorFicha: 'Doação por aluno (R$)',
+  fichasPrevistas: 'Total de alunos',
+  dataPrevista: 'Data das fotos',
+  empresaContratada: 'Empresa (vendedor)',
+  vendedorNome: 'Vendedor',
+  localAssinatura: 'Local da assinatura',
+  dataAssinatura: 'Data da assinatura',
+  pixNome: 'PIX • titular',
+  pixChave: 'PIX • chave',
+  pixBanco: 'PIX • banco',
+  outrasInformacoes: 'Outras anotações',
+}
+
+// Resposta da IA (Gemini) → campos do formulário + observação com o que não tem campo próprio
+export function normalizarLeituraIA(c: Record<string, unknown>, vendedores: string[]) {
+  const turmas = Array.isArray(c.turmas)
+    ? (c.turmas as Record<string, unknown>[]).map((t) => ({ periodo: str(t.periodo), serie: str(t.serie), quantidade: num(t.quantidade) })).filter((t) => t.periodo || t.serie || t.quantidade)
+    : []
+  const totalTurmas = turmas.reduce((a, t) => a + t.quantidade, 0)
+  const bairro = str(c.bairro)
+  const endereco = str(c.endereco)
+  const vendedor = str(c.vendedorNome)
+
+  const campos: CamposContrato = {
+    escola: str(c.escola).toUpperCase(),
+    inep: str(c.inep).replace(/\D/g, '').slice(0, 8),
+    cidade: str(c.cidade),
+    uf: str(c.uf).toUpperCase().slice(0, 2),
+    endereco: [endereco, bairro && !endereco.toLowerCase().includes(bairro.toLowerCase()) ? bairro : ''].filter(Boolean).join(' - '),
+    telefone: str(c.telefone),
+    responsavel: str(c.responsavel).replace(/^(prof[aªº°]?|professora?)\.?\s+/i, ''),
+    fichasPrevistas: String(Math.round(num(c.fichasPrevistas) || totalTurmas) || ''),
+    dataPrevista: /^\d{4}-\d{2}-\d{2}$/.test(str(c.dataPrevista)) ? str(c.dataPrevista) : '',
+    bonificacaoPorFicha: num(c.bonificacaoPorFicha) > 0 && num(c.bonificacaoPorFicha) <= 100 ? String(num(c.bonificacaoPorFicha)) : '',
+    pixNome: str(c.pixNome).toUpperCase(),
+    pixChave: str(c.pixChave),
+    pixBanco: str(c.pixBanco),
+    vendedorNome: vendedores.includes(vendedor) ? vendedor : '',
+  }
+  for (const k of Object.keys(campos) as (keyof CamposContrato)[]) if (!campos[k]) delete campos[k]
+
+  // Tudo que não tem campo próprio vai para a observação (para não perder nada do contrato)
+  const obs: string[] = []
+  if (turmas.length) obs.push(`Turmas: ${turmas.map((t) => [t.periodo, t.serie, t.quantidade ? `${t.quantidade} alunos` : ''].filter(Boolean).join(' • ')).join(' | ')}`)
+  if (str(c.cnpjEscola)) obs.push(`CNPJ da escola: ${str(c.cnpjEscola)}`)
+  if (str(c.telefone2)) obs.push(`Outro telefone: ${str(c.telefone2)}`)
+  if (str(c.email)) obs.push(`E-mail: ${str(c.email)}`)
+  if (str(c.empresaContratada) && !campos.vendedorNome) obs.push(`Empresa/vendedor no contrato: ${str(c.empresaContratada)}`)
+  if (str(c.localAssinatura) || str(c.dataAssinatura)) obs.push(`Assinado em ${[str(c.localAssinatura), dataBR(str(c.dataAssinatura))].filter(Boolean).join(', ')}`)
+  if (str(c.outrasInformacoes)) obs.push(str(c.outrasInformacoes))
+
+  const mapaDuvida: Record<string, string> = { bairro: 'endereco', turmas: 'fichasPrevistas' }
+  const duvidas = (Array.isArray(c.duvidas) ? (c.duvidas as unknown[]).map(String) : []).map((d) => mapaDuvida[d] ?? d)
+  if (vendedor && !campos.vendedorNome) duvidas.push('vendedorNome')
+
+  // "Texto lido": tudo o que a IA encontrou, em linhas legíveis
+  const linhas = Object.entries(ROTULOS_IA)
+    .map(([k, r]) => [r, k === 'dataPrevista' || k === 'dataAssinatura' ? dataBR(str(c[k])) : str(c[k])])
+    .filter(([, v]) => v)
+    .map(([r, v]) => `${r}: ${v}`)
+  if (turmas.length) linhas.push(...turmas.map((t) => `Turma: ${[t.periodo, t.serie, t.quantidade ? `${t.quantidade} alunos` : ''].filter(Boolean).join(' • ')}`))
+
+  return { campos, duvidas, observacao: obs.join(' • '), texto: linhas.join('\n') }
 }
