@@ -666,6 +666,39 @@ export async function confirmarContratoEscola(id: string): Promise<string | null
   return erro
 }
 
+// Cancelar: contrato fica no histórico (aba Cancelados); a visita sai da agenda
+export async function cancelarContratoEscola(id: string, motivo: string): Promise<string | null> {
+  if (MODO === 'supabase') return gravar(() => sb().rpc('cancelar_contrato_escola', { p_id: id, p_motivo: motivo }), 'Contrato cancelado.')
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.cancelarContratoEscola(d, id, motivo, ctx)
+  })
+  avisar(erro ?? 'Contrato cancelado.', erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Excluir: apaga contrato, visita, histórico e ordem "Aguardando fotos" (+ a foto/PDF do contrato)
+export async function excluirContratoEscola(id: string): Promise<string | null> {
+  if (MODO === 'supabase') {
+    const { data, error } = await sb().rpc('excluir_contrato_escola', { p_id: id })
+    if (error) {
+      const msg = traduzirErro(error)
+      avisar(msg)
+      return msg
+    }
+    if (typeof data === 'string' && data) await sb().storage.from('contratos').remove([data]) // melhor esforço
+    avisar('Contrato excluído.', 'ok')
+    agendarRecarga(150)
+    return null
+  }
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.excluirContratoEscola(d, id, ctx)
+  })
+  avisar(erro ?? 'Contrato excluído.', erro ? 'erro' : 'ok')
+  return erro
+}
+
 // Histórico de contatos/fichas. Com `fichas`, atualiza as fichas autorizadas da visita.
 export async function registrarHistoricoVisita(visitaId: string, h: { tipo: string; fichas?: number; descricao: string }): Promise<string | null> {
   if (MODO === 'supabase') {

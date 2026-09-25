@@ -3,13 +3,13 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
-import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, confirmarContratoEscola, criarRegistro, useErp, usePode } from '@/lib/erp/store'
+import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, cancelarContratoEscola, confirmarContratoEscola, criarRegistro, excluirContratoEscola, useErp, usePode } from '@/lib/erp/store'
 import { lerContratoLocal } from '@/lib/erp/leitura-contrato'
 import { colecao } from '@/lib/erp/metrics'
-import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, nomePJ, pixCompleto } from '@/lib/erp/operacional'
+import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, corEquipe, equipeDaVisita, nomePJ, nomeVeiculo, pixCompleto } from '@/lib/erp/operacional'
 import { brl, dataBR, num } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
-import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, Tabs, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
+import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, Tabs, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
 type Aba = 'conferencia' | 'agenda' | 'todos' | 'cancelados'
 
@@ -62,6 +62,10 @@ export default function ContratosEscolaPage() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [confirmar, setConfirmar] = useState<Registro | null>(null)
+  // Cancelar / excluir (com confirmação)
+  const [acao, setAcao] = useState<{ tipo: 'cancelar' | 'excluir'; contrato: Registro } | null>(null)
+  const [motivo, setMotivo] = useState('')
+  const [executando, setExecutando] = useState(false)
   // Leitura automática (IA grátis do Google; sem ela, OCR no navegador): estado, campos preenchidos e a conferir
   const [ia, setIa] = useState<EstadoIA>({ estado: 'parado' })
   const [iaCampos, setIaCampos] = useState<Set<string>>(new Set())
@@ -73,6 +77,42 @@ export default function ContratosEscolaPage() {
   const vendedores = colecao(s, 'pj_vendedores').filter((v) => v.status !== 'Inativo')
   const pCriar = podeFazer('operacional', 'criar')
   const pEditar = podeFazer('operacional', 'editar')
+  // Escola já fotografada: fichas, fechamento e pagamentos dependem da visita → não cancela nem exclui
+  const jaFotografado = (c: Registro) =>
+    colecao(s, 'agenda_visitas').some((v) => v.contratoId === c.id && (v.status === 'Fotografada' || v.status === 'Fechamento enviado'))
+  // Equipe direcionada para o contrato confirmado (da visita na agenda)
+  const celulaEquipe = (c: Registro) => {
+    if (c.status !== 'Na agenda') return <span className="text-[10px] text-zinc-600">—</span>
+    const v = colecao(s, 'agenda_visitas')
+      .filter((x) => x.contratoId === c.id && x.status !== 'Cancelada')
+      .sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]
+    if (!v) return <span className="text-[10px] text-zinc-600">—</span>
+    const eq = equipeDaVisita(s, v)
+    if (!eq.nome && !eq.veiculo && !eq.motorista && !eq.fotografos.length) return <Badge texto="Equipe a definir" tom="orange" />
+    return (
+      <div className="text-[11px] leading-snug space-y-0.5">
+        <p className={`font-black uppercase tracking-wider text-[10px] ${TONS[corEquipe(eq.nome)].texto}`}>{eq.nome || 'Equipe sem nome'}</p>
+        <p className="text-zinc-300">🚐 {eq.veiculo ? nomeVeiculo(eq.veiculo) : String(v.carro || '') || <span className="text-orange-400">sem veículo</span>}</p>
+        <p className="text-zinc-400">
+          🧑‍✈️ {eq.motorista ? String(eq.motorista.nome).split(' ')[0] : <span className="text-orange-400">sem motorista</span>} • 📷{' '}
+          {eq.fotografos.length ? eq.fotografos.map((f) => String(f.nome).split(' ')[0]).join(', ') : <span className="text-orange-400">sem fotógrafo</span>}
+        </p>
+      </div>
+    )
+  }
+  const pedirAcao = (tipo: 'cancelar' | 'excluir', contrato: Registro) => {
+    setMotivo('')
+    setAcao({ tipo, contrato })
+  }
+  const executarAcao = async () => {
+    if (!acao) return
+    setExecutando(true)
+    const falha = acao.tipo === 'cancelar' ? await cancelarContratoEscola(acao.contrato.id, motivo) : await excluirContratoEscola(acao.contrato.id)
+    setExecutando(false)
+    if (falha) return
+    setAcao(null)
+    if (editando?.id === acao.contrato.id) setAberto(false)
+  }
 
   const lista = useMemo(() => {
     const t = busca.toLowerCase()
@@ -250,8 +290,9 @@ export default function ContratosEscolaPage() {
                   <th className="px-4 py-4 font-bold">Vendedor PJ</th>
                   <th className="px-4 py-4 font-bold text-right">Fichas</th>
                   <th className="px-4 py-4 font-bold">Data</th>
-                  <th className="px-4 py-4 font-bold text-right">Bonificação</th>
-                  <th className="px-4 py-4 font-bold">Pendências</th>
+                  {aba !== 'todos' && <th className="px-4 py-4 font-bold text-right">Bonificação</th>}
+                  {aba !== 'agenda' && <th className="px-4 py-4 font-bold">Pendências</th>}
+                  {(aba === 'agenda' || aba === 'todos') && <th className="px-4 py-4 font-bold">Equipe da viagem</th>}
                   {aba === 'todos' && <th className="px-4 py-4 font-bold">Status</th>}
                   <th className="px-4 py-4 font-bold text-right">Ações</th>
                 </tr>
@@ -265,10 +306,14 @@ export default function ContratosEscolaPage() {
                         <p className="text-white font-bold tracking-wide">{String(c.escola)}</p>
                         <p className="text-[11px] text-zinc-500 font-mono">{String(c.cidade || '—')} - {String(c.uf || '')}</p>
                       </td>
-                      <td className="px-4 py-4 text-zinc-400 whitespace-nowrap">{nomePJ(s, c.vendedorId)}</td>
+                      <td className="px-4 py-4 text-zinc-400 whitespace-nowrap" title={String(nomePJ(s, c.vendedorId))}>
+                        {/* primeiro e último nome: a tabela cabe em telas de notebook */}
+                        {String(nomePJ(s, c.vendedorId)).split(' ').filter((_, i, a) => i === 0 || i === a.length - 1).join(' ')}
+                      </td>
                       <td className="px-4 py-4 text-right text-white font-bold">{num(Number(c.fichasPrevistas || 0))}</td>
                       <td className="px-4 py-4 text-zinc-400 whitespace-nowrap">{dataBR(String(c.dataPrevista || ''))}</td>
-                      <td className="px-4 py-4 text-right text-zinc-300 whitespace-nowrap">{Number(c.bonificacaoPorFicha) ? `${brl(Number(c.bonificacaoPorFicha))}/ficha` : '—'}</td>
+                      {aba !== 'todos' && <td className="px-4 py-4 text-right text-zinc-300 whitespace-nowrap">{Number(c.bonificacaoPorFicha) ? `${brl(Number(c.bonificacaoPorFicha))}/ficha` : '—'}</td>}
+                      {aba !== 'agenda' && (
                       <td className="px-4 py-4">
                         <div className="flex flex-col items-start gap-1.5">
                           {falta.length ? (
@@ -281,14 +326,25 @@ export default function ContratosEscolaPage() {
                           {!pixCompleto(c) && <Badge texto="PIX pendente" tom="yellow" />}
                         </div>
                       </td>
+                      )}
+                      {(aba === 'agenda' || aba === 'todos') && (
+                        <td className="px-4 py-4 min-w-[200px]">
+                          {celulaEquipe(c)}
+                          {aba === 'agenda' && !pixCompleto(c) && (
+                            <div className="mt-1.5">
+                              <Badge texto="PIX pendente" tom="yellow" />
+                            </div>
+                          )}
+                        </td>
+                      )}
                       {/* nas outras abas o status já é o próprio filtro */}
                       {aba === 'todos' && (
                         <td className="px-4 py-4">
                           <Badge texto={String(c.status)} tom={c.status === 'Na agenda' ? 'blue' : c.status === 'Cancelado' ? 'red' : 'orange'} />
                         </td>
                       )}
-                      <td className="px-4 py-4">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-3 py-4">
+                        <div className="flex justify-end gap-0.5">
                           {c.status === 'Em conferência' && pEditar && (
                             <button
                               onClick={() => (falta.length ? abrir(c) : setConfirmar(c))}
@@ -306,6 +362,25 @@ export default function ContratosEscolaPage() {
                           {pEditar && (
                             <button onClick={() => abrir(c)} title="Revisar / editar" className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05]">
                               <Icon nome="edit" className="w-4 h-4" />
+                            </button>
+                          )}
+                          {pEditar && c.status === 'Cancelado' && (
+                            <button
+                              onClick={() => atualizarRegistro('contratos_escola', c.id, { status: 'Em conferência' }, 'operacional')}
+                              title="Cancelado por engano? Volta para a conferência"
+                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20"
+                            >
+                              Reativar
+                            </button>
+                          )}
+                          {pEditar && c.status !== 'Cancelado' && (
+                            <button onClick={() => pedirAcao('cancelar', c)} title="Cancelar contrato (fica no histórico)" className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10">
+                              <Icon nome="x" className="w-4 h-4" />
+                            </button>
+                          )}
+                          {pEditar && (
+                            <button onClick={() => pedirAcao('excluir', c)} title="Excluir contrato (erro de digitação, duplicado...)" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10">
+                              <Icon nome="trash" className="w-4 h-4" />
                             </button>
                           )}
                         </div>
@@ -328,18 +403,17 @@ export default function ContratosEscolaPage() {
         largura="max-w-5xl"
         rodape={
           <>
-            {editando && editando.status === 'Em conferência' && (
-              <button
-                onClick={async () => {
-                  setSalvando(true)
-                  const f = await atualizarRegistro('contratos_escola', editando.id, { status: 'Cancelado' }, 'operacional')
-                  setSalvando(false)
-                  if (!f) setAberto(false)
-                }}
-                className="mr-auto px-5 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl"
-              >
-                Cancelar contrato
-              </button>
+            {editando && pEditar && (
+              <div className="mr-auto flex gap-1">
+                {editando.status !== 'Cancelado' && (
+                  <button onClick={() => pedirAcao('cancelar', editando)} className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-orange-400 hover:bg-orange-500/10 rounded-xl">
+                    Cancelar contrato
+                  </button>
+                )}
+                <button onClick={() => pedirAcao('excluir', editando)} className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl">
+                  Excluir
+                </button>
+              </div>
             )}
             <button onClick={() => setAberto(false)} className={btnSecundario}>Fechar</button>
             <button onClick={() => salvar(false)} disabled={salvando || enviandoArquivo} className={btnSecundario}>
@@ -534,6 +608,56 @@ export default function ContratosEscolaPage() {
             </p>
             <p className="text-xs text-zinc-500">A visita entra na agenda e a Produção recebe a ordem aguardando as fotos.</p>
             {!pixCompleto(confirmar) && <p className="text-xs text-yellow-400">PIX da escola ainda pendente — lembre de completar antes do fechamento.</p>}
+          </div>
+        )}
+      </Modal>
+
+      {/* Confirmação: cancelar ou excluir contrato */}
+      <Modal
+        aberto={!!acao}
+        titulo={acao?.tipo === 'excluir' ? 'Excluir contrato?' : 'Cancelar contrato?'}
+        subtitulo={acao ? `${acao.contrato.escola} • ${acao.contrato.cidade || ''}` : ''}
+        onFechar={() => setAcao(null)}
+        largura="max-w-lg"
+        rodape={
+          <>
+            <button onClick={() => setAcao(null)} className={btnSecundario}>Voltar</button>
+            {acao && !jaFotografado(acao.contrato) && (
+              <button
+                onClick={executarAcao}
+                disabled={executando}
+                className={`px-6 py-3 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-60 ${acao.tipo === 'excluir' ? 'bg-red-600 hover:bg-red-500' : 'bg-orange-600 hover:bg-orange-500'}`}
+              >
+                {executando ? 'Aguarde...' : acao.tipo === 'excluir' ? 'Excluir definitivamente' : 'Cancelar contrato'}
+              </button>
+            )}
+          </>
+        }
+      >
+        {acao && jaFotografado(acao.contrato) ? (
+          <p className="text-sm text-orange-400 font-bold">
+            Esta escola já foi fotografada: fichas, fechamento e pagamentos dependem deste contrato, então ele não pode ser {acao.tipo === 'excluir' ? 'excluído' : 'cancelado'}.
+          </p>
+        ) : acao?.tipo === 'excluir' ? (
+          <div className="space-y-3 text-sm text-zinc-300">
+            <p>Use para <strong className="text-white">erro de digitação ou contrato importado em duplicidade</strong>. Será apagado:</p>
+            <ul className="list-disc pl-5 space-y-1 text-zinc-400">
+              <li>o contrato e a foto/PDF anexada;</li>
+              {acao.contrato.status === 'Na agenda' && <li>a visita na Agenda Fotográfica e o histórico dela;</li>}
+              {acao.contrato.status === 'Na agenda' && <li>a ordem da Produção que aguardava as fotos.</li>}
+            </ul>
+            <p className="text-red-400 font-bold">Não dá para desfazer. Se a escola desistiu, prefira Cancelar (fica no histórico).</p>
+          </div>
+        ) : (
+          <div className="space-y-4 text-sm text-zinc-300">
+            <p>
+              O contrato vai para a aba <strong className="text-white">Cancelados</strong>
+              {acao?.contrato.status === 'Na agenda' ? ', a visita sai da agenda e a Produção é avisada' : ''}. Dá para reativar depois.
+            </p>
+            <div className="space-y-2">
+              <label className={labelCls}>Motivo (opcional)</label>
+              <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: escola desistiu, data não confirmada..." className={inputCls} />
+            </div>
           </div>
         )}
       </Modal>

@@ -7,7 +7,7 @@ import { STATUS_VENDEDOR_PJ } from '@/lib/erp/config'
 import { parametros } from '@/lib/erp/parametros'
 import { atualizarRegistro, criarRegistro, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao, diaReferencia, esperadoAteHoje, resumo, serieMes, somar } from '@/lib/erp/metrics'
-import { nomePJ, pendenciasDoDia, responsavelOperacional } from '@/lib/erp/operacional'
+import { STATUS_VEICULO, nomePJ, pendenciasDoDia, responsavelOperacional } from '@/lib/erp/operacional'
 import { ehDiaUtil } from '@/lib/erp/calendario'
 import PainelMeta from '@/components/erp/PainelMeta'
 import { addDias, dataBR, hoje, inicioSemana, mesAtual, nomeMes, num, pct, rotuloSemana } from '@/lib/erp/format'
@@ -17,7 +17,7 @@ import { PillSituacao } from '@/components/erp/status'
 import { situacaoResumo } from '@/lib/erp/metrics'
 import { BarChart, Badge, EmptyState, Modal, PageHeader, Panel, ProgressBar, StatCard, Tabs, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
-type Aba = 'gestao' | 'dashboard' | 'rota' | 'vendedores' | 'fotografos' | 'motoristas'
+type Aba = 'gestao' | 'dashboard' | 'rota' | 'vendedores' | 'fotografos' | 'motoristas' | 'veiculos'
 
 const ABAS: { id: Aba; label: string }[] = [
   { id: 'gestao', label: 'Gestão diária' },
@@ -26,6 +26,7 @@ const ABAS: { id: Aba; label: string }[] = [
   { id: 'vendedores', label: 'Vendedores de contrato' },
   { id: 'fotografos', label: 'Fotógrafos' },
   { id: 'motoristas', label: 'Motoristas' },
+  { id: 'veiculos', label: 'Veículos' },
 ]
 
 const PIX: Campo[] = [
@@ -55,6 +56,7 @@ export default function ControleOperacionalPage() {
       {aba === 'vendedores' && <VendedoresContrato />}
       {aba === 'fotografos' && <Freelancers tipo="Fotógrafo" />}
       {aba === 'motoristas' && <Freelancers tipo="Motorista" />}
+      {aba === 'veiculos' && <Veiculos />}
     </div>
   )
 }
@@ -430,6 +432,71 @@ function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
           { label: 'Cadastrados', valor: rs.length, tom: 'blue' },
           { label: fotografo ? 'Ativos' : 'Ativos • prontos para viagem', valor: rs.filter((r) => r.status === 'Ativo').length, tom: 'emerald' },
           { label: 'Inativos', valor: rs.filter((r) => r.status !== 'Ativo').length, tom: 'red' },
+        ]}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// VEÍCULOS da operação (vão na equipe de cada viagem, junto com motorista e fotógrafos)
+// ---------------------------------------------------------------------------
+function Veiculos() {
+  const s = useErp()
+  const visitas = colecao(s, 'agenda_visitas').filter((v) => v.status === 'Agendada' || v.status === 'Fotografada')
+  const hj = hoje()
+  const naEstradaHoje = new Set(visitas.filter((v) => v.data === hj && v.veiculoId).map((v) => String(v.veiculoId)))
+  const proxima = (id: string) =>
+    visitas
+      .filter((v) => v.veiculoId === id && v.status === 'Agendada' && String(v.data) >= hj)
+      .sort((a, b) => String(a.data).localeCompare(String(b.data)))[0]
+  return (
+    <div className="animate-fade-in">
+      <CrudPage
+        embutido
+        colecao="veiculos"
+        modulo="operacional"
+        setor="operacional"
+        moduloLabel="Veículos"
+        titulo="Veículos"
+        descricao="Carros e vans da operação. Na agenda, cada visita recebe a equipe da viagem: veículo, motorista e de 1 a 4 fotógrafos."
+        rotuloNovo="Novo veículo"
+        campos={[
+          { chave: 'modelo', label: 'Modelo', tipo: 'texto', obrigatorio: true },
+          { chave: 'placa', label: 'Placa', tipo: 'texto', obrigatorio: true, exibir: (r) => <span className="font-mono font-bold text-white">{String(r.placa || '').toUpperCase()}</span> },
+          { chave: 'ano', label: 'Ano', tipo: 'numero', tabela: false },
+          { chave: 'cor', label: 'Cor', tipo: 'texto', tabela: false },
+          { chave: 'lugares', label: 'Lugares', tipo: 'numero', obrigatorio: true, padrao: () => 5 },
+          { chave: 'status', label: 'Situação', tipo: 'select', opcoes: [...STATUS_VEICULO], obrigatorio: true, padrao: () => 'Disponível', tabela: false },
+          {
+            chave: 'proximaViagem',
+            label: 'Próxima viagem',
+            tipo: 'texto',
+            formulario: false,
+            exibir: (r) => {
+              const v = proxima(r.id)
+              return v ? (
+                <span className="text-xs">
+                  <strong className="text-white">{dataBR(String(v.data))}</strong> <span className="text-zinc-400">• {String(v.cidade)}-{String(v.uf)}</span>
+                  {v.equipe ? <span className="text-blue-400"> • {String(v.equipe)}</span> : null}
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-500">—</span>
+              )
+            },
+          },
+          { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
+        ]}
+        status={{
+          campo: 'status',
+          tons: { Disponível: 'emerald', 'Na estrada hoje': 'blue', 'Em manutenção': 'orange', Inativo: 'red' },
+          valor: (r) => (r.status === 'Disponível' && naEstradaHoje.has(r.id) ? 'Na estrada hoje' : String(r.status || 'Disponível')),
+        }}
+        kpis={(rs) => [
+          { label: 'Cadastrados', valor: rs.length, tom: 'blue' },
+          { label: 'Disponíveis', valor: rs.filter((r) => r.status === 'Disponível').length, tom: 'emerald' },
+          { label: 'Na estrada hoje', valor: rs.filter((r) => naEstradaHoje.has(r.id)).length, tom: 'blue' },
+          { label: 'Em manutenção', valor: rs.filter((r) => r.status === 'Em manutenção').length, tom: 'orange' },
         ]}
       />
     </div>

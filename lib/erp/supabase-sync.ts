@@ -55,6 +55,7 @@ export function traduzirErro(e: { message: string; code?: string }) {
   if (e.code === '42501' || /row-level security|permission denied/i.test(e.message)) return 'Sem permissão para esta ação (bloqueado pelo servidor).'
   if (e.code === '23505') return 'Registro duplicado.'
   if (e.code === '23503') return 'Registro vinculado a outros dados — não pode ser removido.'
+  if (e.code === 'PGRST202' || /Could not find the function/i.test(e.message)) return 'Função do banco não encontrada: rode o SQL mais recente de docs/supabase no SQL Editor.'
   if (e.code === 'PGRST205' || /relation .* does not exist|Could not find the table/i.test(e.message)) return 'Tabela não encontrada — rode docs/supabase/schema.sql no SQL Editor.'
   return e.message
 }

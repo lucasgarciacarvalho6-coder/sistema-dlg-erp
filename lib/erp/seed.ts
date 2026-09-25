@@ -23,7 +23,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 4 // v4: metas com PISO e metas por mês; fichas do Operacional todas na RMC
+export const VERSAO_DADOS = 5 // v5: veículos e equipes de viagem (várias equipes no mesmo dia em estados diferentes)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -289,14 +289,36 @@ export function gerarSeed(): ErpState {
       ['Fotógrafo', 'Lucas Andrade', 'Cianorte', 'Iniciante', 150, 'Ativo'],
       ['Motorista', 'José Carlos Lima', 'Umuarama', '', 200, 'Ativo'],
       ['Motorista', 'Márcio Souza', 'Maringá', '', 200, 'Inativo'],
+      ['Fotógrafo', 'Ana Paula Souza', 'Presidente Prudente', 'Profissional', 200, 'Ativo'],
+      ['Fotógrafo', 'Bruno Lima', 'Presidente Prudente', 'Iniciante', 150, 'Ativo'],
+      ['Fotógrafo', 'Carla Dias', 'Assis', 'Profissional', 190, 'Ativo'],
+      ['Motorista', 'Paulo Ribeiro', 'Presidente Prudente', '', 200, 'Ativo'],
+      ['Fotógrafo', 'Diego Matos', 'Naviraí', 'Profissional', 200, 'Ativo'],
+      ['Motorista', 'Renato Alves', 'Naviraí', '', 200, 'Ativo'],
     ] as const
   ).map(([tipo, nome, cidade, nivel, diaria, status], i) =>
-    inserir(s, 'freelancers', { tipo, nome, cidade, uf: 'PR', telefone: `(44) 9950${i}-11${i}${i}`, status, nivel, diaria, pixNome: nome, pixChave: `${nome.split(' ')[0].toLowerCase()}@pix.com`, pixBanco: 'Banco do Brasil' }),
+    inserir(s, 'freelancers', { tipo, nome, cidade, uf: i >= 8 ? 'MS' : i >= 4 ? 'SP' : 'PR', telefone: `(44) 9950${i}-11${i}${i}`, status, nivel, diaria, pixNome: nome, pixChave: `${nome.split(' ')[0].toLowerCase()}@pix.com`, pixBanco: 'Banco do Brasil' }),
   )
-  const [thiago, lucas, jose] = freelancers
+  const [thiago, lucas, jose, , ana, bruno, carla, paulo, diego, renato] = freelancers
+
+  // Veículos da operação
+  const [doblo, master, spin] = (
+    [
+      ['Fiat Doblò', 'BCA2E45', 2021, 'Branco', 7, 'Disponível'],
+      ['Renault Master', 'QWE7H12', 2022, 'Prata', 12, 'Disponível'],
+      ['Chevrolet Spin', 'PRT3J88', 2019, 'Cinza', 7, 'Disponível'],
+      ['Fiat Strada', 'MNB4K21', 2018, 'Vermelho', 2, 'Em manutenção'],
+    ] as const
+  ).map(([modelo, placa, ano, cor, lugares, status]) => inserir(s, 'veiculos', { modelo, placa, ano, cor, lugares, status, observacao: '' }))
+  // Equipes de viagem: cada uma roda um estado (podem estar no mesmo dia em lugares diferentes)
+  const EQUIPES: Record<string, Record<string, string>> = {
+    PR: { equipe: 'Equipe 1', veiculoId: doblo.id, carro: 'Fiat Doblò • BCA2E45', fotografoIds: `${thiago.id},${lucas.id}`, motoristaId: jose.id },
+    SP: { equipe: 'Equipe 2', veiculoId: master.id, carro: 'Renault Master • QWE7H12', fotografoIds: `${ana.id},${bruno.id},${carla.id}`, motoristaId: paulo.id },
+    MS: { equipe: 'Equipe 3', veiculoId: spin.id, carro: 'Chevrolet Spin • PRT3J88', fotografoIds: diego.id, motoristaId: renato.id },
+  }
 
   // Contratos: [escola, cidade, endereço, telefone, diretora, vendedor, fichas, dias até a visita, bonificação, PIX?]
-  const contratosEscola: [string, string, string, string, string, string, number, number, number, boolean][] = [
+  const contratosEscola: [string, string, string, string, string, string, number, number, number, boolean, string?][] = [
     ['PROJETO ESPAÇO CRIANÇA', 'Altônia', 'Rua Ouro Alto, 605 — Jardim Panorama', '(44) 99997-7391', 'Jasmin (Diretora)', ahmed.id, 140, -8, 10, true],
     ['ESCOLA MUNICIPAL SOL NASCENTE', 'Pérola', 'Av. Brasil, 1200 — Centro', '(44) 3636-1122', 'Marcos (Diretor)', ahmed.id, 120, -5, 8, true],
     ['CMEI PEQUENO PRÍNCIPE', 'Xambrê', 'Rua das Flores, 88', '(44) 3637-3344', 'Aline (Coord.)', rodrigo.id, 90, -3, 9, true],
@@ -304,13 +326,16 @@ export function gerarSeed(): ErpState {
     ['SANTA TEREZINHA C M E I', 'São José B. Vista', 'Rua São José, 30', '(46) 3232-4455', 'Rosângela (Diretora)', rodrigo.id, 95, 1, 8, true],
     ['MARIA MAYSRE M PESSUTI EF', 'Catanduvas', 'Av. Central, 900', '(45) 3234-7788', 'Cláudia (Coord.)', ahmed.id, 210, 4, 10, false],
     ['ESCOLA ESTADUAL VILA RICA', 'Umuarama', 'Rua Vila Rica, 12', '(44) 3622-1010', 'Helena (Diretora)', rodrigo.id, 180, 9, 9, true],
+    ['EMEF MONTEIRO LOBATO', 'Presidente Prudente', 'Rua Tenente Nicolau Maffei, 410', '(18) 3221-4400', 'Sandra (Diretora)', ahmed.id, 230, 1, 9, true, 'SP'],
+    ['ESCOLA MUNICIPAL PANTANAL', 'Naviraí', 'Av. Weimar Gonçalves Torres, 800', '(67) 3461-2200', 'Regina (Coord.)', rodrigo.id, 110, 1, 8, true, 'MS'],
+    ['COLÉGIO NOVO HORIZONTE', 'Assis', 'Rua Floriano Peixoto, 95', '(18) 3322-7788', 'Paulo (Diretor)', ahmed.id, 160, 4, 10, false, 'SP'],
   ]
-  for (const [escola, cidade, endereco, telefone, responsavel, vendedorId, fichas, dias, bonif, pix] of contratosEscola) {
+  for (const [escola, cidade, endereco, telefone, responsavel, vendedorId, fichas, dias, bonif, pix, uf = 'PR'] of contratosEscola) {
     const c = inserir(s, 'contratos_escola', {
       escola,
       inep: '',
       cidade,
-      uf: 'PR',
+      uf,
       endereco,
       telefone,
       responsavel,
@@ -334,7 +359,6 @@ export function gerarSeed(): ErpState {
   // Equipes, fichas autorizadas (histórico) e visitas já realizadas
   const visitas = col(s, 'agenda_visitas')
   const porEscola = (nome: string) => visitas.find((v) => v.escola === nome)!
-  const equipeCompleta = { equipe: 'E1', carro: 'Carro 01', fotografoIds: `${thiago.id},${lucas.id}`, motoristaId: jose.id }
   for (const [escola, confirmadas, fotografadas] of [
     ['PROJETO ESPAÇO CRIANÇA', 35, 39],
     ['ESCOLA MUNICIPAL SOL NASCENTE', 70, 74],
@@ -344,13 +368,16 @@ export function gerarSeed(): ErpState {
     ['ESCOLA ESTADUAL VILA RICA', 0, 0],
   ] as [string, number, number][]) {
     const v = porEscola(escola)
-    Object.assign(v, equipeCompleta)
+    Object.assign(v, EQUIPES[String(v.uf)] ?? EQUIPES.PR)
     if (confirmadas > 0) {
       registrarHistoricoVisita(s, v.id, { tipo: 'Atualização de fichas', fichas: Math.round(confirmadas * 0.6), descricao: `Diretora informou ${Math.round(confirmadas * 0.6)} fichas retornadas até o momento.` }, ctxOp)
       registrarHistoricoVisita(s, v.id, { tipo: 'Atualização de fichas', fichas: confirmadas, descricao: `Coordenação confirmou ${confirmadas} fichas autorizadas pelos pais.` }, ctxOp)
     }
     if (fotografadas > 0) encerrarVisita(s, v.id, fotografadas, ctxOp)
   }
+  // demais visitas agendadas recebem a equipe do estado; Vila Rica fica sem equipe (aparece em "Montar equipe")
+  for (const v of visitas) if (!v.equipe && v.status === 'Agendada') Object.assign(v, EQUIPES[String(v.uf)] ?? EQUIPES.PR)
+  Object.assign(porEscola('ESCOLA ESTADUAL VILA RICA'), { equipe: '', veiculoId: '', carro: '', fotografoIds: '', motoristaId: '' })
   registrarHistoricoVisita(s, porEscola('SANTA TEREZINHA C M E I').id, { tipo: 'Contato', descricao: 'Deixado recado com a secretaria; retornar amanhã cedo.' }, ctxOp)
 
   // Fechamento diário: um já enviado ao financeiro, um em rascunho (o terceiro fica pendente)

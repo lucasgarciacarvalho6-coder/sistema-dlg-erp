@@ -346,6 +346,43 @@ export function confirmarContratoEscola(d: ErpState, id: string, ctx: Contexto):
   return null
 }
 
+// ---- Cancelar / excluir contrato de escola (mesmas regras do SQL 006) ----
+const jaFotografado = (d: ErpState, contratoId: string) =>
+  col(d, 'agenda_visitas').some((v) => v.contratoId === contratoId && (v.status === 'Fotografada' || v.status === 'Fechamento enviado'))
+
+export function cancelarContratoEscola(d: ErpState, id: string, motivo: string, ctx: Contexto): string | null {
+  const c = col(d, 'contratos_escola').find((x) => x.id === id)
+  if (!c) return 'Contrato não encontrado.'
+  if (c.status === 'Cancelado') return 'Este contrato já está cancelado.'
+  if (jaFotografado(d, id)) return 'Esta escola já foi fotografada: o contrato não pode ser cancelado (fichas e pagamentos dependem dele).'
+  const estavaNaAgenda = c.status === 'Na agenda'
+  c.status = 'Cancelado'
+  c.observacao = [String(c.observacao || '').trim(), `Cancelado${motivo.trim() ? `: ${motivo.trim()}` : ''}`].filter(Boolean).join(' • ')
+  for (const v of col(d, 'agenda_visitas').filter((x) => x.contratoId === id && x.status === 'Agendada')) {
+    v.status = 'Cancelada'
+    inserir(d, 'agenda_historico', { visitaId: v.id, tipo: 'Visita cancelada', descricao: `Contrato cancelado${motivo.trim() ? `: ${motivo.trim()}` : ''}.`, autor: ctx.autorNome })
+  }
+  d.colecoes.ordens_producao = col(d, 'ordens_producao').filter((o) => !(o.contratoId === id && o.etapa === ETAPAS_PRODUCAO[0]))
+  if (estavaNaAgenda) {
+    notificar(d, ctx, { setores: ['producao', 'adm', 'gerencia'], tipo: 'alerta', titulo: 'Visita cancelada', descricao: `${c.escola}: contrato cancelado, a visita saiu da agenda.`, link: '/operacional/agenda' })
+  }
+  auditar(d, ctx, 'EDITAR', `Contrato cancelado: ${c.escola}`, 'operacional')
+  return null
+}
+
+export function excluirContratoEscola(d: ErpState, id: string, ctx: Contexto): string | null {
+  const c = col(d, 'contratos_escola').find((x) => x.id === id)
+  if (!c) return 'Contrato não encontrado.'
+  if (jaFotografado(d, id)) return 'Esta escola já foi fotografada: o contrato não pode ser excluído (fichas e pagamentos dependem dele).'
+  const visitas = new Set(col(d, 'agenda_visitas').filter((v) => v.contratoId === id).map((v) => v.id))
+  d.colecoes.ordens_producao = col(d, 'ordens_producao').filter((o) => !(o.contratoId === id && o.etapa === ETAPAS_PRODUCAO[0]))
+  d.colecoes.agenda_historico = col(d, 'agenda_historico').filter((h) => !visitas.has(String(h.visitaId)))
+  d.colecoes.agenda_visitas = col(d, 'agenda_visitas').filter((v) => !visitas.has(v.id))
+  d.colecoes.contratos_escola = col(d, 'contratos_escola').filter((x) => x.id !== id)
+  auditar(d, ctx, 'EXCLUIR', `Contrato de escola excluído: ${c.escola}`, 'operacional')
+  return null
+}
+
 APOS_CRIAR.agenda_visitas = (d, v, ctx) => {
   // A Produção já fica sabendo que haverá fotos dessa escola
   inserir(d, 'ordens_producao', {

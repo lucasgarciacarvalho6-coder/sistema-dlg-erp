@@ -65,6 +65,78 @@ export function contratoDaVisita(s: ErpState, visita: Registro) {
 
 export const fotografosDa = (visita: Registro) => t(visita.fotografoIds).split(',').filter(Boolean)
 
+// ---------------- Equipe da viagem (veículo + motorista + 1 a 4 fotógrafos) ----------------
+
+export const MAX_FOTOGRAFOS = 4
+export const STATUS_VEICULO = ['Disponível', 'Em manutenção', 'Inativo'] as const
+
+export const nomeVeiculo = (v: Registro | undefined) => (v ? [t(v.modelo), t(v.placa).toUpperCase()].filter(Boolean).join(' • ') : '')
+
+export interface EquipeVisita {
+  nome: string
+  veiculo?: Registro
+  motorista?: Registro
+  fotografos: Registro[]
+  faltando: string[] // o que falta para a equipe ficar completa
+  completa: boolean
+}
+
+export function equipeDaVisita(s: ErpState, v: Registro): EquipeVisita {
+  const free = colecao(s, 'freelancers')
+  const veiculo = colecao(s, 'veiculos').find((x) => x.id === v.veiculoId)
+  const motorista = free.find((x) => x.id === v.motoristaId)
+  const fotografos = fotografosDa(v)
+    .map((id) => free.find((x) => x.id === id))
+    .filter((x): x is Registro => !!x)
+  const faltando: string[] = []
+  if (!veiculo && !t(v.carro)) faltando.push('veículo')
+  if (!motorista) faltando.push('motorista')
+  if (!fotografos.length) faltando.push('fotógrafo')
+  return { nome: t(v.equipe), veiculo, motorista, fotografos, faltando, completa: faltando.length === 0 }
+}
+
+// Mesma pessoa/veículo em outra visita do MESMO dia em OUTRA cidade = conflito (não dá para estar nos dois lugares).
+// Mesma cidade no mesmo dia é permitido (a equipe faz duas escolas na cidade).
+export function conflitosEquipe(
+  s: ErpState,
+  visita: Registro,
+  eq: { data: string; veiculoId: string; motoristaId: string; fotografoIds: string[] },
+): string[] {
+  const free = colecao(s, 'freelancers')
+  const nome = (id: string) => t(free.find((x) => x.id === id)?.nome) || 'Pessoa'
+  const mesmaCidade = (o: Registro) => t(o.cidade).toLowerCase() === t(visita.cidade).toLowerCase() && t(o.uf) === t(visita.uf)
+  const outras = colecao(s, 'agenda_visitas').filter((o) => o.id !== visita.id && t(o.data) === eq.data && o.status !== 'Cancelada' && !mesmaCidade(o))
+  const avisos: string[] = []
+  for (const o of outras) {
+    const onde = `${o.escola} (${o.cidade}-${o.uf})`
+    if (eq.veiculoId && o.veiculoId === eq.veiculoId) avisos.push(`O veículo ${nomeVeiculo(colecao(s, 'veiculos').find((x) => x.id === eq.veiculoId))} já está em ${onde} neste dia.`)
+    if (eq.motoristaId && o.motoristaId === eq.motoristaId) avisos.push(`${nome(eq.motoristaId)} (motorista) já está em ${onde} neste dia.`)
+    for (const f of eq.fotografoIds) if (fotografosDa(o).includes(f)) avisos.push(`${nome(f)} (fotógrafo) já está em ${onde} neste dia.`)
+  }
+  return avisos
+}
+
+// Última composição usada por uma equipe com esse nome (para "repetir a equipe" em outra escola da viagem)
+export function ultimaComposicao(s: ErpState, nomeEquipe: string, excetoId: string) {
+  const alvo = nomeEquipe.trim().toLowerCase()
+  if (!alvo) return null
+  return (
+    colecao(s, 'agenda_visitas')
+      .filter((v) => v.id !== excetoId && t(v.equipe).trim().toLowerCase() === alvo && (t(v.veiculoId) || t(v.motoristaId) || fotografosDa(v).length))
+      .sort((a, b) => t(b.data).localeCompare(t(a.data)))[0] ?? null
+  )
+}
+
+// Cor fixa por equipe (a mesma equipe tem a mesma cor em todo o sistema)
+const CORES_EQUIPE = ['blue', 'emerald', 'orange', 'violet', 'cyan', 'yellow', 'red'] as const
+export function corEquipe(nome: string): (typeof CORES_EQUIPE)[number] | 'zinc' {
+  const n = nome.trim().toLowerCase()
+  if (!n) return 'zinc'
+  let h = 0
+  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return CORES_EQUIPE[h % CORES_EQUIPE.length]
+}
+
 // Dona da meta do Operacional: todos os contratos/fichas ficam com a coordenação (RMC).
 // Critério: colaborador ativo do Operacional com função RMC/Coordenação; senão, o primeiro ativo.
 export function responsavelOperacional(s: ErpState) {
@@ -201,8 +273,9 @@ export function pendenciasDoDia(s: ErpState): Pendencia[] {
       } else if (data <= addDias(hj, 3) && n(v.fichasConfirmadas) <= 0) {
         lista.push({ id: `fichas-${v.id}`, prioridade: 'alta', area: 'Agenda', titulo: `Confirmar fichas autorizadas: ${v.escola}`, detalhe: `Visita em ${dataBR(data)} — falar com ${v.responsavel || 'a diretora'} (${v.telefone}).`, link: `/operacional/agenda?visita=${v.id}` })
       }
-      if (data <= addDias(hj, 3) && (!t(v.motoristaId) || !fotografosDa(v).length)) {
-        lista.push({ id: `equipe-${v.id}`, prioridade: data <= addDias(hj, 1) ? 'alta' : 'media', area: 'Agenda', titulo: `Definir equipe: ${v.escola}`, detalhe: `Visita em ${dataBR(data)} sem ${!fotografosDa(v).length ? 'fotógrafo' : 'motorista'} definido.`, link: `/operacional/agenda?visita=${v.id}` })
+      const eq = equipeDaVisita(s, v)
+      if (data <= addDias(hj, 5) && !eq.completa) {
+        lista.push({ id: `equipe-${v.id}`, prioridade: data <= addDias(hj, 2) ? 'alta' : 'media', area: 'Agenda', titulo: `Montar equipe: ${v.escola}`, detalhe: `Visita em ${dataBR(data)} (${v.cidade}-${v.uf}) — falta ${eq.faltando.join(', ')}.`, link: `/operacional/agenda?visita=${v.id}` })
       }
     }
     if (v.status === 'Fotografada' && !fechamentoExistente(s, 'escola', v.id, data)) {

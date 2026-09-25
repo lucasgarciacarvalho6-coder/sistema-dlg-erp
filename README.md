@@ -309,6 +309,8 @@ VENDEDOR PJ fecha o contrato (papel)
 1. `docs/supabase/schema.sql`: banco completo. Em instalação nova, basta este.
 2. `docs/supabase/002_realtime_completo.sql`, `003_fotos_perfil.sql` e `004_operacional.sql`: só para bancos criados com versões anteriores do schema.
    - `docs/supabase/005_metas_piso_dias_uteis.sql`: rodar **sempre** depois do schema (novo ou antigo). Traz metas por mês com piso, dias úteis, fichas na RMC e parâmetros editáveis.
+   - `docs/supabase/006_cancelar_excluir_contrato.sql`: rodar depois do 005. Permite **cancelar** e **excluir** um contrato de escola. O cancelamento também tira a visita da agenda e a ordem que aguardava fotos. As duas ações são bloqueadas se a escola já foi fotografada.
+   - `docs/supabase/007_veiculos_equipes.sql`: rodar depois do 006. Cria o cadastro de **veículos** e liga o veículo a cada visita. A equipe da viagem tem veículo, motorista e de 1 a 4 fotógrafos.
 3. Criar o primeiro ADM: *Authentication → Add user* e depois o `insert` em `colaboradores` (no final do schema).
 4. Publicar a Edge Function `admin-colaboradores`, deixando **Verify JWT with legacy secret desligado**, porque a função valida o usuário sozinha.
 5. Preencher o `.env.local` e reiniciar.
@@ -378,7 +380,8 @@ ERP
 │   ├── ✅ Dashboard (metas diária, semanal e mensal) · ✅ Gestão diária (pendências acionáveis)
 │   ├── ✅ Contratos de escola (importação + revisão) · ✅ Agenda fotográfica mensal · ✅ Histórico de fichas
 │   ├── ✅ Fechamento: escola diário · vendedor semanal · adiantamento semanal dos freelancers · recibos
-│   ├── ✅ Controle de rota · ✅ Vendedores PJ · ✅ Fotógrafos · ✅ Motoristas · ✅ Tarefas avulsas
+│   ├── ✅ Controle de rota · ✅ Vendedores PJ · ✅ Fotógrafos · ✅ Motoristas · ✅ Veículos · ✅ Tarefas avulsas
+│   ├── ✅ Equipe da viagem por visita (veículo + motorista + 1 a 4 fotógrafos), aviso de conflito no mesmo dia, agenda por equipe/estado
 │   └── ✅ Leitura automática do contrato com IA grátis (Gemini, lê letra à mão); sem ela, OCR no navegador. A pessoa só confere
 │
 ├── 06. ÁREA DE VENDAS
