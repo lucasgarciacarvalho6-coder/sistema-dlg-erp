@@ -64,7 +64,7 @@ export default function AgendaFotograficaPage() {
         acoes={
           <>
             {responsavelRMC && (
-              <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] px-5 py-3 rounded-2xl flex items-center gap-4">
+              <div className="bg-painel/80 border border-white/[0.05] px-5 py-3 rounded-2xl flex items-center gap-4">
                 <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-xs">
                   {responsavelRMC.nome.split(' ').map((p) => p[0]).slice(0, 2).join('')}
                 </div>
@@ -82,7 +82,7 @@ export default function AgendaFotograficaPage() {
       />
 
       {/* Controle do mês + indicadores */}
-      <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-2xl">
+      <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-2xl">
         <div className="flex items-center gap-2 bg-black/50 border border-white/[0.05] rounded-xl p-1.5">
           <button onClick={() => setMes(mesVizinho(mes, -1))} className="p-2 hover:bg-white/[0.05] rounded-lg text-zinc-400 hover:text-white transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
@@ -113,7 +113,7 @@ export default function AgendaFotograficaPage() {
       </div>
 
       {/* Calendário mensal */}
-      <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 shadow-2xl overflow-x-auto custom-scrollbar">
+      <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6 shadow-2xl overflow-x-auto custom-scrollbar">
         <div className="flex justify-between items-center mb-6 border-b border-white/[0.05] pb-4 min-w-[900px]">
           <h3 className="text-sm font-bold text-white uppercase tracking-widest">{doMes.length} visita(s) no mês</h3>
           <span className="text-xs text-zinc-500">Clique numa escola para ver dados, histórico e atualizar fichas</span>

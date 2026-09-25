@@ -146,7 +146,7 @@ export default function MetasEditor({ modulo }: { modulo: string }) {
         {cfg.indicadores.map((ind) => {
           const m = metaSetor(s, setor, ind.id, mes)
           return (
-            <div key={ind.id} className="bg-painel-2/80 backdrop-blur-xl border border-blue-500/20 p-6 rounded-3xl">
+            <div key={ind.id} className="bg-painel-2/80 border border-blue-500/20 p-6 rounded-3xl">
               <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-400 mb-2">Meta do setor • {ind.label} • {nomeMes(mes)}</p>
               <p className="text-3xl font-black text-white">
                 {formatar(m.mensal, ind.unidade)} <span className="text-sm text-zinc-500">/ mês</span> • {dec(m.diaria)} <span className="text-sm text-zinc-500">/ dia</span>

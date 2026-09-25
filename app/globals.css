@@ -158,3 +158,12 @@ input[type='date']::-webkit-calendar-picker-indicator {
   filter: none;
   opacity: 0.6;
 }
+
+/* Brilho decorativo (manchas de luz dos cards e do fundo): máscara radial no lugar de
+   filter: blur. O visual é o mesmo e custa quase nada para a placa de vídeo. O desfoque
+   real era redesenhado a cada tecla e a cada rolagem e deixava o sistema lento em PCs comuns. */
+.brilho {
+  -webkit-mask-image: radial-gradient(closest-side, #000 20%, transparent);
+  mask-image: radial-gradient(closest-side, #000 20%, transparent);
+}
+

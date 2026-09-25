@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
 import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, confirmarContratoEscola, criarRegistro, useErp, usePode } from '@/lib/erp/store'
+import { lerContratoLocal } from '@/lib/erp/leitura-contrato'
 import { colecao } from '@/lib/erp/metrics'
 import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, nomePJ, pixCompleto } from '@/lib/erp/operacional'
 import { brl, dataBR, num } from '@/lib/erp/format'
@@ -33,6 +34,12 @@ const VAZIO: Record<string, string> = {
 
 const NUMERICOS = ['fichasPrevistas', 'bonificacaoPorFicha']
 
+// Campos que a leitura automática pode preencher (vendedor vem por nome e é casado com o cadastro)
+const CAMPOS_IA = ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'fichasPrevistas', 'dataPrevista', 'bonificacaoPorFicha', 'pixNome', 'pixChave', 'pixBanco']
+const normalizar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+type EstadoIA = { estado: 'parado' } | { estado: 'lendo'; progresso: number } | { estado: 'ok'; lidos: number; texto: string } | { estado: 'erro'; msg: string }
+
 export default function ContratosEscolaPage() {
   const s = useErp()
   const par = parametros(s)
@@ -51,6 +58,12 @@ export default function ContratosEscolaPage() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
   const [confirmar, setConfirmar] = useState<Registro | null>(null)
+  // Leitura automática (OCR grátis no navegador): estado, campos preenchidos e campos a conferir
+  const [ia, setIa] = useState<EstadoIA>({ estado: 'parado' })
+  const [iaCampos, setIaCampos] = useState<Set<string>>(new Set())
+  const [duvidas, setDuvidas] = useState<Set<string>>(new Set())
+  const [ultimoArquivo, setUltimoArquivo] = useState<File | null>(null)
+  const [verTexto, setVerTexto] = useState(false)
 
   const contratos = colecao(s, 'contratos_escola')
   const vendedores = colecao(s, 'pj_vendedores').filter((v) => v.status !== 'Inativo')
@@ -73,18 +86,61 @@ export default function ContratosEscolaPage() {
     setEditando(c ?? null)
     setPreview(null)
     setErro(null)
+    setIa({ estado: 'parado' })
+    setIaCampos(new Set())
+    setDuvidas(new Set())
+    setUltimoArquivo(null)
     setAberto(true)
+  }
+
+  const lerComIA = async (arquivo: File) => {
+    setIa({ estado: 'lendo', progresso: 0 })
+    setVerTexto(false)
+    const r = await lerContratoLocal(
+      arquivo,
+      vendedores.map((v) => String(v.nome)),
+      (p) => setIa({ estado: 'lendo', progresso: p }),
+    )
+    if ('erro' in r) return setIa({ estado: 'erro', msg: r.erro })
+    const c = r.campos
+    const novos: Record<string, string> = {}
+    for (const k of CAMPOS_IA) {
+      const v = c[k as keyof typeof c]
+      if (v === undefined || String(v).trim() === '' || (NUMERICOS.includes(k) && !Number(v))) continue
+      if (k === 'dataPrevista' && !/^\d{4}-\d{2}-\d{2}$/.test(String(v))) continue
+      novos[k] = k === 'uf' ? String(v).trim().toUpperCase().slice(0, 2) : String(v).trim()
+    }
+    if (c.vendedorNome) {
+      const alvo = normalizar(String(c.vendedorNome))
+      const v =
+        vendedores.find((x) => normalizar(String(x.nome)) === alvo) ??
+        vendedores.find((x) => normalizar(String(x.nome)).includes(alvo) || alvo.includes(normalizar(String(x.nome))))
+      if (v) novos.vendedorId = v.id
+    }
+    // Preenche o que está vazio (ou que a própria IA tinha preenchido antes); o que a pessoa digitou fica
+    setForm((f) => {
+      const n = { ...f }
+      for (const [k, v] of Object.entries(novos)) if (!String(f[k] ?? '').trim() || iaCampos.has(k)) n[k] = v
+      return n
+    })
+    setIaCampos(new Set(Object.keys(novos)))
+    setDuvidas(new Set(r.duvidas.map((d) => (d === 'vendedorNome' ? 'vendedorId' : d)).filter((d) => d in novos)))
+    setIa({ estado: 'ok', lidos: Object.keys(novos).length, texto: r.texto })
   }
 
   const escolherArquivo = async (arquivo: File | undefined) => {
     if (!arquivo) return
     if (arquivo.type.startsWith('image/')) setPreview(URL.createObjectURL(arquivo))
     else setPreview(null)
+    setUltimoArquivo(arquivo)
+    // envio do arquivo e leitura automática acontecem ao mesmo tempo
+    const leitura = lerComIA(arquivo)
     setEnviandoArquivo(true)
     const r = await anexarArquivoContrato(arquivo)
     setEnviandoArquivo(false)
     if ('erro' in r) setErro(r.erro)
     else setForm((f) => ({ ...f, arquivo: r.caminho }))
+    await leitura
   }
 
   const dados = () => {
@@ -107,12 +163,26 @@ export default function ContratosEscolaPage() {
     if (!falha && !falhaAgenda) setAberto(false)
   }
 
+  // Marca do campo: "lido" = preenchido pela leitura automática; "confira" = achado sem rótulo, conferir
+  const marcaIA = (chave: string) =>
+    duvidas.has(chave) ? (
+      <span className="ml-2 px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 text-[8px] font-black tracking-widest">CONFIRA</span>
+    ) : iaCampos.has(chave) ? (
+      <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[8px] font-black tracking-widest">LIDO</span>
+    ) : null
+  const destaqueIA = (chave: string) => (duvidas.has(chave) ? '!border-yellow-500/60' : '')
+  const alterarCampo = (chave: string, valor: string) => {
+    setForm((f) => ({ ...f, [chave]: valor }))
+    if (duvidas.has(chave)) setDuvidas((d) => new Set([...d].filter((x) => x !== chave))) // conferido pela pessoa
+  }
+
   const campo = (chave: string, label: string, obrigatorio = false, extra: Partial<React.InputHTMLAttributes<HTMLInputElement>> = {}) => (
     <div className="space-y-2">
       <label className={labelCls}>
         {label} {obrigatorio && <span className="text-blue-500">*</span>}
+        {marcaIA(chave)}
       </label>
-      <input value={form[chave] ?? ''} onChange={(e) => setForm({ ...form, [chave]: e.target.value })} className={inputCls} {...extra} />
+      <input value={form[chave] ?? ''} onChange={(e) => alterarCampo(chave, e.target.value)} className={`${inputCls} ${destaqueIA(chave)}`} {...extra} />
     </div>
   )
 
@@ -296,9 +366,42 @@ export default function ContratosEscolaPage() {
               {enviandoArquivo && <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mt-3">Enviando arquivo...</p>}
               {form.arquivo && !enviandoArquivo && <p className="text-[10px] text-zinc-500 mt-3 truncate">📎 {form.arquivo.replace(/^[0-9a-f-]{36}-/, '')}</p>}
             </label>
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-[11px] text-zinc-300 leading-relaxed">
-              <p className="font-bold text-blue-400 uppercase tracking-widest text-[10px] mb-1">Leitura automática (em breve)</p>
-              Nesta versão, confira o documento e preencha os campos ao lado. A leitura por IA vai preencher tudo sozinha e você só revisa.
+            <div
+              className={`rounded-2xl p-4 text-[11px] text-zinc-300 leading-relaxed border ${
+                ia.estado === 'erro' ? 'bg-red-500/10 border-red-500/20' : ia.estado === 'ok' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-blue-500/10 border-blue-500/20'
+              }`}
+            >
+              <p className={`font-bold uppercase tracking-widest text-[10px] mb-1 ${ia.estado === 'erro' ? 'text-red-400' : ia.estado === 'ok' ? 'text-emerald-400' : 'text-blue-400'}`}>
+                Leitura automática (grátis)
+              </p>
+              {ia.estado === 'parado' && 'Anexe a foto ou o PDF do contrato: o sistema lê o texto e preenche os campos ao lado. Você só confere antes de concluir. Funciona melhor com contrato digitado e foto reta, bem iluminada.'}
+              {ia.estado === 'lendo' && (
+                <>
+                  <span className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span> Lendo o contrato... {Math.round(ia.progresso * 100)}%
+                  </span>
+                  <span className="block h-1 mt-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <span className="block h-full bg-blue-500 transition-all" style={{ width: `${Math.round(ia.progresso * 100)}%` }}></span>
+                  </span>
+                  <span className="block mt-1 text-zinc-500">Na primeira vez o navegador baixa o idioma português (~2 MB).</span>
+                </>
+              )}
+              {ia.estado === 'ok' && (
+                <>
+                  {ia.lidos > 0 ? `Preenchi ${ia.lidos} campo(s), marcados com "LIDO". Confira todos antes de concluir.` : 'Li o documento, mas não reconheci os campos. Veja o texto lido abaixo e preencha à mão.'}
+                  {duvidas.size > 0 && <span className="text-yellow-400 font-bold"> {duvidas.size} campo(s) em amarelo foram achados sem rótulo: confira.</span>}
+                  <button type="button" onClick={() => setVerTexto(!verTexto)} className="block mt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white">
+                    {verTexto ? '▾ Esconder texto lido' : '▸ Ver texto lido'}
+                  </button>
+                  {verTexto && <pre className="mt-2 max-h-48 overflow-auto custom-scrollbar whitespace-pre-wrap text-[10px] text-zinc-400 bg-black/40 rounded-xl p-3">{ia.texto}</pre>}
+                </>
+              )}
+              {ia.estado === 'erro' && ia.msg}
+              {ultimoArquivo && ia.estado !== 'lendo' && ia.estado !== 'parado' && (
+                <button type="button" onClick={() => lerComIA(ultimoArquivo)} className="block mt-2 text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-white">
+                  ↻ Ler novamente
+                </button>
+              )}
             </div>
             {/* Checklist dos obrigatórios */}
             <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 space-y-1.5">
@@ -340,8 +443,9 @@ export default function ContratosEscolaPage() {
                 <div className="space-y-2">
                   <label className={labelCls}>
                     Vendedor de contrato (PJ) <span className="text-blue-500">*</span>
+                    {marcaIA('vendedorId')}
                   </label>
-                  <select value={form.vendedorId} onChange={(e) => setForm({ ...form, vendedorId: e.target.value })} className={`${inputCls} appearance-none`}>
+                  <select value={form.vendedorId} onChange={(e) => alterarCampo('vendedorId', e.target.value)} className={`${inputCls} appearance-none ${destaqueIA('vendedorId')}`}>
                     <option value="">Selecione...</option>
                     {vendedores.map((v) => (
                       <option key={v.id} value={v.id}>{String(v.nome)}</option>
@@ -353,9 +457,10 @@ export default function ContratosEscolaPage() {
                 <div className="space-y-2">
                   <label className={labelCls}>
                     Bonificação por ficha (R$) <span className="text-blue-500">*</span>
+                    {marcaIA('bonificacaoPorFicha')}
                   </label>
                   <div className="flex gap-2">
-                    <input type="number" step="0.5" min={0} value={form.bonificacaoPorFicha} onChange={(e) => setForm({ ...form, bonificacaoPorFicha: e.target.value })} className={inputCls} />
+                    <input type="number" step="0.5" min={0} value={form.bonificacaoPorFicha} onChange={(e) => alterarCampo('bonificacaoPorFicha', e.target.value)} className={`${inputCls} ${destaqueIA('bonificacaoPorFicha')}`} />
                     {atalhosBonificacao.map((v) => (
                       <button key={v} type="button" onClick={() => setForm({ ...form, bonificacaoPorFicha: String(v) })} className={`px-3 rounded-xl text-xs font-bold border ${Number(form.bonificacaoPorFicha) === v ? 'border-blue-500/50 bg-blue-500/10 text-blue-400' : 'border-white/[0.05] text-zinc-400 hover:text-white'}`}>
                         {v}
@@ -370,8 +475,8 @@ export default function ContratosEscolaPage() {
 
             <div className="space-y-4 pt-4 border-t border-white/[0.05]">
               <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Dados PIX da escola <span className="text-zinc-500 normal-case tracking-normal font-medium">— pode completar depois</span></p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {campo('pixNome', 'Nome de quem recebe')}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                {campo('pixNome', 'Titular (quem recebe)')}
                 {campo('pixChave', 'Chave PIX')}
                 {campo('pixBanco', 'Banco')}
               </div>

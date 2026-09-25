@@ -33,7 +33,7 @@ export default function RedefinirSenhaPage() {
 
   return (
     <main className="min-h-screen w-full flex items-center justify-center bg-painel-2 text-white p-6 relative overflow-hidden">
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/10 rounded-full brilho scale-150 pointer-events-none"></div>
       <div className="w-full max-w-sm relative z-10">
         <div className="flex flex-col items-center mb-10">
           <img src="/logo.png" alt="DLG Photos" className="w-24 h-24 object-contain drop-shadow-[0_0_30px_rgba(37,99,235,0.4)]" />

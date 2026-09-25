@@ -142,7 +142,7 @@ export default function PainelMeta({
   const caixa = 'bg-white/[0.03] border border-white/[0.05] rounded-xl px-4 py-2.5 text-center'
 
   return (
-    <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden">
+    <div className="bg-painel/80 border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden">
       <div className={`${grande ? 'p-8' : 'p-6'} space-y-5`}>
         {/* Cabeçalho: pessoa + meta diária + dias úteis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">

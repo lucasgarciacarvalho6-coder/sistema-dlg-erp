@@ -63,22 +63,22 @@ export default function AdmVisaoTVPage() {
 
       {/* Números gigantes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 bg-painel-2/80 backdrop-blur-xl border border-blue-500/30 p-8 rounded-3xl relative overflow-hidden">
+        <div className="md:col-span-1 bg-painel-2/80 border border-blue-500/30 p-8 rounded-3xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-80 shadow-[0_0_15px_#3b82f6]"></div>
-          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-blue-500/20 blur-3xl rounded-full"></div>
+          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-blue-500/20 brilho scale-150 rounded-full"></div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400 relative z-10">Total Faturado • Cobrança</p>
           <p className="text-5xl xl:text-6xl font-black text-white tracking-tighter mt-4 relative z-10 break-words">{brl(faturado)}</p>
           <p className="text-[10px] text-zinc-400 mt-4 uppercase tracking-widest font-bold relative z-10">Hoje: {brl(faturadoHoje)} • {nomeMes(mes)}</p>
         </div>
-        <div className="bg-painel-2/80 backdrop-blur-xl border border-white/[0.08] p-8 rounded-3xl relative overflow-hidden">
+        <div className="bg-painel-2/80 border border-white/[0.08] p-8 rounded-3xl relative overflow-hidden">
           <div className={`absolute top-0 left-0 w-full h-1 ${TONS.blue.solido} opacity-50`}></div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Total Fotografado • Operacional</p>
           <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4">{num(fotografado.mes)}</p>
           <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold">Fichas • {pct(fotografado.pctMes)} da meta mensal</p>
         </div>
-        <div className="bg-painel-2/80 backdrop-blur-xl border border-violet-500/20 p-8 rounded-3xl relative overflow-hidden">
+        <div className="bg-painel-2/80 border border-violet-500/20 p-8 rounded-3xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-violet-500 opacity-60 shadow-[0_0_15px_#8b5cf6]"></div>
-          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-violet-500/10 blur-3xl rounded-full"></div>
+          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-violet-500/10 brilho scale-150 rounded-full"></div>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Total em Produção</p>
           <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4 relative z-10">{emProducao}</p>
           <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold relative z-10">Ordens abertas • {ordens.length - emProducao} concluídas</p>

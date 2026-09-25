@@ -62,7 +62,7 @@ export default function LoginPage() {
       <div className="relative hidden lg:flex lg:w-[55%] flex-col justify-center items-center p-8 bg-fundo overflow-hidden border-r border-zinc-900/50">
         
         {/* Glow backdrop gigante para destacar a logo */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full brilho scale-150 pointer-events-none"></div>
 
         {/* Textura de Fundo Escurecida nas Bordas */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--color-black)_100%)] pointer-events-none opacity-90"></div>
@@ -108,7 +108,7 @@ export default function LoginPage() {
         </div>
         
         {/* Glow subtil atrás do form */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-600/5 rounded-full brilho scale-150 pointer-events-none"></div>
 
         <div className="w-full max-w-sm relative z-10">
           
@@ -250,7 +250,7 @@ export default function LoginPage() {
 
       {/* Recuperação de senha (mock) */}
       {recuperando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onMouseDown={() => setRecuperando(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onMouseDown={() => setRecuperando(false)}>
           <div className="bg-modal border border-white/[0.1] rounded-[2rem] w-full max-w-md shadow-[0_0_80px_rgba(0,0,0,0.9)] p-8 space-y-6" onMouseDown={(e) => e.stopPropagation()}>
             <div>
               <h3 className="text-xl font-black text-white tracking-tight">Recuperar senha</h3>

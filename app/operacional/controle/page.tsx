@@ -123,7 +123,7 @@ function DashboardOperacional() {
   const bloco = (rotulo: string, feito: number, meta: number, detalhe: string) => {
     const p = meta > 0 ? (feito / meta) * 100 : 0
     return (
-      <div className="bg-painel-2/80 backdrop-blur-xl border border-white/[0.05] p-6 rounded-3xl space-y-3">
+      <div className="bg-painel-2/80 border border-white/[0.05] p-6 rounded-3xl space-y-3">
         <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400">{rotulo}</p>
         <div className="flex items-end justify-between">
           <p className="text-4xl font-black text-white tracking-tight">{num(feito)}</p>
@@ -215,7 +215,7 @@ function ControleRota() {
       </div>
 
       {podeFazer('operacional', 'criar') && vendedorId && (
-        <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6">
+        <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6">
           <p className="text-lg font-bold text-white tracking-wide">Nova rota operacional</p>
           <p className="text-[10px] text-zinc-400 uppercase tracking-widest mt-0.5 mb-5">Orienta as cidades e a ordem de visitação de {nomePJ(s, vendedorId)}</p>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">

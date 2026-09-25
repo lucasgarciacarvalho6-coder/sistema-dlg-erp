@@ -30,7 +30,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
   const atual = mes === mesAtual()
 
   return (
-    <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden">
+    <div className="bg-painel/80 border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden">
       <div className={`border-b border-white/[0.05] flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white/[0.01] ${grande ? 'px-8 py-4' : 'p-6'}`}>
         <div>
           <h2 className={`font-black text-white tracking-wide ${grande ? 'text-2xl' : 'text-lg'}`}>Placar das áreas • meta do mês</h2>
@@ -156,7 +156,7 @@ export function EvolucaoSetor({ s, setor, mes, grande = false }: { s: ErpState; 
   const ph = hover ? pontos[hover - 1] : null
 
   return (
-    <div className={`bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl ${grande ? 'p-7' : 'p-5'} relative`}>
+    <div className={`bg-painel/80 border border-white/[0.05] rounded-3xl ${grande ? 'p-7' : 'p-5'} relative`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <p className={`font-black text-white ${grande ? 'text-2xl' : 'text-base'}`}>{cfg.nome}</p>
@@ -395,7 +395,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
 
   return (
     <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto custom-scrollbar">
-      <div className="absolute top-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-600/10 blur-[150px] rounded-full pointer-events-none"></div>
+      <div className="absolute top-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-600/10 brilho scale-150 rounded-full pointer-events-none"></div>
 
       <div className="relative z-10 px-8 py-6 2xl:p-10 space-y-5 max-w-[2200px] mx-auto">
         {/* barra superior */}

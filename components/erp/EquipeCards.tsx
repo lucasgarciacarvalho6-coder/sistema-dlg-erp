@@ -39,10 +39,10 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
       tabIndex={onAbrir ? 0 : undefined}
       onClick={onAbrir}
       onKeyDown={(e) => onAbrir && (e.key === 'Enter' || e.key === ' ') && onAbrir()}
-      className={`bg-painel-2/80 backdrop-blur-xl border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all ${onAbrir ? 'cursor-pointer hover:border-blue-500/40' : ''}`}
+      className={`bg-painel-2/80 border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all ${onAbrir ? 'cursor-pointer hover:border-blue-500/40' : ''}`}
     >
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} opacity-70 ${t.brilho}`}></div>
-      <div className={`absolute -bottom-14 -right-14 w-40 h-40 ${t.suave} blur-3xl rounded-full pointer-events-none`}></div>
+      <div className={`absolute -bottom-14 -right-14 w-40 h-40 ${t.suave} brilho scale-150 rounded-full pointer-events-none`}></div>
 
       {/* Identificação */}
       <div className="flex items-start gap-4 relative z-10">
@@ -168,7 +168,7 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
 
   if (todos.length === 0) {
     return (
-      <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl">
+      <div className="bg-painel/80 border border-white/[0.05] rounded-3xl">
         <EmptyState titulo="Nenhum colaborador nas áreas" descricao="Cadastre a equipe em Colaboradores. Cada pessoa aparece aqui com foto, metas e gráfico." />
         <div className="pb-8 text-center">
           <Link href="/adm/colaboradores" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">

@@ -2,6 +2,7 @@
 // do módulo Operacional (glassmorphism escuro + acento azul).
 
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Tom } from '@/lib/erp/types'
 import Icon from './Icon'
 
@@ -59,7 +60,7 @@ export function Panel({
   semPadding?: boolean
 }) {
   return (
-    <div className={`bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden ${className}`}>
+    <div className={`bg-painel/80 border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden ${className}`}>
       {(titulo || acoes) && (
         <div className="p-6 border-b border-white/[0.05] flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white/[0.01]">
           <div>
@@ -92,10 +93,10 @@ export function StatCard({
   const t = TONS[tom]
   return (
     <div
-      className={`bg-painel-2/80 backdrop-blur-xl border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
+      className={`bg-painel-2/80 border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
     >
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} ${destaque ? 'opacity-80' : 'opacity-40'} ${t.brilho}`}></div>
-      {destaque && <div className={`absolute -bottom-10 -right-10 w-32 h-32 ${t.suave} blur-3xl rounded-full`}></div>}
+      {destaque && <div className={`absolute -bottom-10 -right-10 w-32 h-32 ${t.suave} brilho scale-150 rounded-full`}></div>}
       <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${tom === 'zinc' ? 'text-zinc-400' : t.texto} mb-2 relative z-10`}>{label}</p>
       <p className={`${destaque ? 'text-5xl tracking-tighter' : 'text-3xl xl:text-4xl tracking-tight'} font-black text-white relative z-10 break-words`}>{valor}</p>
       {progresso !== undefined && (
@@ -243,8 +244,8 @@ export function Modal({
   largura?: string
 }) {
   if (!aberto) return null
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onMouseDown={onFechar}>
+  const janela = (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4 animate-fade-in" onMouseDown={onFechar}>
       <div
         className={`bg-modal border border-white/[0.1] rounded-[2rem] w-full ${largura} shadow-[0_0_80px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col max-h-[90vh]`}
         onMouseDown={(e) => e.stopPropagation()}
@@ -263,6 +264,8 @@ export function Modal({
       </div>
     </div>
   )
+  // Direto no <body>: fica por cima do cabeçalho e do menu (dentro da página ele ficava atrás e o topo sumia)
+  return typeof document === 'undefined' ? janela : createPortal(janela, document.body)
 }
 
 export function Tabs<T extends string>({ abas, ativa, onChange }: { abas: { id: T; label: string }[]; ativa: T; onChange: (id: T) => void }) {

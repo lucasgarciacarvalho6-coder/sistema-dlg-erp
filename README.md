@@ -379,7 +379,7 @@ ERP
 │   ├── ✅ Contratos de escola (importação + revisão) · ✅ Agenda fotográfica mensal · ✅ Histórico de fichas
 │   ├── ✅ Fechamento: escola diário · vendedor semanal · adiantamento semanal dos freelancers · recibos
 │   ├── ✅ Controle de rota · ✅ Vendedores PJ · ✅ Fotógrafos · ✅ Motoristas · ✅ Tarefas avulsas
-│   └── 🟡 Leitura automática do contrato por IA (hoje: anexar + revisar manualmente)
+│   └── ✅ Leitura automática do contrato, grátis no navegador (OCR Tesseract + interpretador de rótulos; a pessoa só confere)
 │
 ├── 06. ÁREA DE VENDAS
 │   ├── ✅ Dashboard (cada vendedora com gráfico de metas diárias e mensais)
@@ -471,7 +471,7 @@ Todas as telas seguem o padrão **"Glassmorphism Premium"**, com os componentes 
 
 ## 14. Limitações conhecidas e próximos passos
 
-- **Leitura automática do contrato por IA:** hoje o contrato é anexado e revisado manualmente.
+- **Leitura automática do contrato:** é grátis e roda no navegador. O OCR usa `tesseract.js` (`lib/erp/leitura-contrato.ts`) e os campos são encontrados pelos rótulos em `lib/erp/contrato-parser.ts`. Lê bem contrato digitado e foto nítida. Letra à mão é lida mal (limite do OCR gratuito). Os rótulos podem ser ajustados ao modelo de contrato da DLG.
 - **Vendas › Contratos (Pedidos):** tela anterior ao processo real, que também cria ordem de produção. Com o fluxo pelo Operacional, é preciso decidir se ela continua.
 - **Lançamento pela equipe:** o colaborador comum só lança produção em nome próprio, porque o RLS bloqueia outros casos. Para a coordenação/RMC lançar pela equipe, é preciso uma regra de supervisor.
 - **Exclusão de colaboradores:** quem tem histórico não pode ser excluído, só **desativado**. É proposital, para proteger o histórico.

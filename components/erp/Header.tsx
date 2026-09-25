@@ -72,7 +72,7 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
   }
 
   return (
-    <header className="h-20 md:h-24 bg-black/40 backdrop-blur-xl border-b border-white/[0.05] flex items-center justify-between px-4 md:px-10 sticky top-0 z-40 print:hidden">
+    <header className="h-20 md:h-24 bg-black/90 border-b border-white/[0.05] flex items-center justify-between px-4 md:px-10 sticky top-0 z-40 print:hidden">
       <div className="flex items-center gap-4 min-w-0">
         <button onClick={onMenu} className="md:hidden p-2 text-zinc-400 hover:text-white">
           <Icon nome="menu" className="w-6 h-6" />
