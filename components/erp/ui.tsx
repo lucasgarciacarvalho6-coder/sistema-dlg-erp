@@ -59,7 +59,7 @@ export function Panel({
   semPadding?: boolean
 }) {
   return (
-    <div className={`bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden ${className}`}>
+    <div className={`bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden ${className}`}>
       {(titulo || acoes) && (
         <div className="p-6 border-b border-white/[0.05] flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-white/[0.01]">
           <div>
@@ -92,7 +92,7 @@ export function StatCard({
   const t = TONS[tom]
   return (
     <div
-      className={`bg-[#050505]/80 backdrop-blur-xl border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
+      className={`bg-painel-2/80 backdrop-blur-xl border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
     >
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} ${destaque ? 'opacity-80' : 'opacity-40'} ${t.brilho}`}></div>
       {destaque && <div className={`absolute -bottom-10 -right-10 w-32 h-32 ${t.suave} blur-3xl rounded-full`}></div>}
@@ -156,7 +156,7 @@ export function BarChart({
         {meta !== undefined && meta > 0 && (
           <div className="absolute left-0 w-full border-t border-dashed border-white/[0.15] z-0" style={{ bottom: `${(meta / max) * 100}%` }}>
             {!compacto && (
-              <span className="absolute -top-3 left-0 text-[9px] text-zinc-400 font-bold tracking-widest bg-[#0a0a0a] px-2 rounded uppercase">
+              <span className="absolute -top-3 left-0 text-[9px] text-zinc-400 font-bold tracking-widest bg-painel px-2 rounded uppercase">
                 Meta diária: {formatar(meta)}
               </span>
             )}
@@ -246,7 +246,7 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in" onMouseDown={onFechar}>
       <div
-        className={`bg-[#0c0f17] border border-white/[0.1] rounded-[2rem] w-full ${largura} shadow-[0_0_80px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col max-h-[90vh]`}
+        className={`bg-modal border border-white/[0.1] rounded-[2rem] w-full ${largura} shadow-[0_0_80px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col max-h-[90vh]`}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="px-8 py-6 border-b border-white/[0.05] flex justify-between items-start bg-black/40">

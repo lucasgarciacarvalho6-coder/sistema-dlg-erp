@@ -97,7 +97,7 @@ export default function AuditoriaPage() {
         ) : (
           <div className="overflow-x-auto custom-scrollbar max-h-[65vh]">
             <table className="w-full text-left text-sm text-zinc-300">
-              <thead className="text-[10px] uppercase tracking-[0.2em] bg-[#0a0a0a] text-zinc-500 border-b border-white/[0.05] sticky top-0">
+              <thead className="text-[10px] uppercase tracking-[0.2em] bg-painel text-zinc-500 border-b border-white/[0.05] sticky top-0">
                 <tr>
                   <th className="px-6 py-4 font-bold">Data / Hora</th>
                   <th className="px-6 py-4 font-bold">Tipo</th>

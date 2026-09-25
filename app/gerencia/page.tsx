@@ -6,7 +6,8 @@ import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { decidirAprovacao, useErp, usePode } from '@/lib/erp/store'
 import { colecao, equipe, mesesDisponiveis, resumo } from '@/lib/erp/metrics'
 import { brl, formatar, iniciais, mesAtual, nomeMes, pct } from '@/lib/erp/format'
-import { GradeSetores, GraficoConsolidado, RankingGeral } from '@/components/erp/PainelSetores'
+import { RankingGeral } from '@/components/erp/PainelSetores'
+import { GradeEvolucao, PlacarAreas } from '@/components/erp/VisaoTV'
 import { Avatar, Badge, PageHeader, Panel, ProgressBar, StatCard, TONS } from '@/components/erp/ui'
 
 export default function GerenciaDashboardPage() {
@@ -53,8 +54,8 @@ export default function GerenciaDashboardPage() {
         <StatCard tom="orange" label="Valor pendente de aprovação" valor={brl(pendentes.reduce((a, p) => a + Number(p.valor || 0), 0))} />
       </div>
 
-      <GraficoConsolidado s={s} mes={mes} />
-      <GradeSetores s={s} mes={mes} />
+      <PlacarAreas s={s} mes={mes} />
+      <GradeEvolucao s={s} mes={mes} />
 
       <Panel titulo="Metas diárias por colaborador" subtitulo="Indicador principal de cada área • hoje e no mês" semPadding>
         <div className="overflow-x-auto custom-scrollbar">

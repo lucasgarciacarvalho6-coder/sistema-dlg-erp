@@ -16,6 +16,7 @@ export default function ContasPagarPage() {
       titulo="Contas a Pagar"
       descricao={`Despesas da operação. Contas a partir de ${brl(VALOR_APROVACAO_CONTA)} vão automaticamente para aprovação da Gerência.`}
       rotuloNovo="Nova conta"
+      filtro={(r) => !r.fechamentoId}
       campos={[
         { chave: 'descricao', label: 'Descrição', tipo: 'texto', obrigatorio: true },
         { chave: 'fornecedor', label: 'Fornecedor', tipo: 'select', opcoes: opcoesColecao('fornecedores', 'nome') },

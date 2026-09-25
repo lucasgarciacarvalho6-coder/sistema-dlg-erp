@@ -23,7 +23,7 @@ export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: strin
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {ranking.map(({ c }, pos) => (
-        <div key={c.id} className="bg-[#050505]/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 relative overflow-hidden hover:border-white/[0.1] transition-all">
+        <div key={c.id} className="bg-painel-2/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl p-6 relative overflow-hidden hover:border-white/[0.1] transition-all">
           <div className="absolute -top-16 -right-16 w-40 h-40 bg-blue-600/10 blur-3xl rounded-full pointer-events-none"></div>
           <div className="flex items-center justify-between gap-4 mb-5 relative z-10">
             <div className="flex items-center gap-4 min-w-0">

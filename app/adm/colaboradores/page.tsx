@@ -121,7 +121,7 @@ export default function ColaboradoresPage() {
         <StatCard label="Total" valor={s.colaboradores.length} detalhe={`${ativos.length} ativos`} tom="blue" />
         {SETORES_IDS.map((x) => (
           <button key={x} onClick={() => setFiltroSetor(filtroSetor === x ? '' : x)} className="text-left">
-            <div className={`bg-[#050505]/80 backdrop-blur-xl border ${filtroSetor === x ? 'border-blue-500/50' : 'border-white/[0.05]'} p-5 rounded-3xl hover:-translate-y-1 transition-all h-full`}>
+            <div className={`bg-painel-2/80 backdrop-blur-xl border ${filtroSetor === x ? 'border-blue-500/50' : 'border-white/[0.05]'} p-5 rounded-3xl hover:-translate-y-1 transition-all h-full`}>
               <p className={`text-[9px] font-bold uppercase tracking-[0.15em] ${TONS[SETORES[x].tom].texto} mb-2`}>{SETORES[x].nome}</p>
               <p className="text-3xl font-black text-white">{ativos.filter((c) => c.setor === x).length}</p>
             </div>

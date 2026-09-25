@@ -4,7 +4,8 @@
 // No backend, estas regras viram triggers/functions do Supabase.
 
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
-import { COMISSAO_ESCOLA_PADRAO, ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
+import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
+import { camposFaltando, lerJSON, type Beneficiario } from './operacional'
 import { addDias, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 
@@ -23,7 +24,8 @@ export function col(d: ErpState, nome: string) {
 }
 
 export function inserir(d: ErpState, nome: string, dados: Omit<Registro, 'id' | 'criadoEm'>): Registro {
-  const r = { ...dados, id: uid(), criadoEm: agora() } as Registro
+  // aceita um id definido antes (ex.: fechamento salvo e enviado na mesma ação)
+  const r = { ...dados, id: typeof dados.id === 'string' && dados.id ? dados.id : uid(), criadoEm: agora() } as Registro
   col(d, nome).unshift(r)
   return r
 }
@@ -110,7 +112,8 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
     })
   },
 
-  // VENDA DE E-BOOK AOS PAIS → Contas a receber (parcelas) + comissão da escola (Financeiro)
+  // VENDA DE E-BOOK AOS PAIS → Contas a receber (parcelas).
+  // (A escola NÃO recebe % sobre a venda: ela recebe a bonificação por ficha no fechamento operacional.)
   vendas_ebooks(d, r, ctx) {
     const data = String(r.data || hoje())
     const valor = Number(r.valor) || 0
@@ -131,24 +134,12 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
         vendaId: r.id,
       })
     }
-    const contrato = col(d, 'contratos').find((c) => c.escola === r.escola)
-    const pctComissao = Number(contrato?.comissaoPct ?? COMISSAO_ESCOLA_PADRAO)
-    inserir(d, 'comissoes', {
-      escola: r.escola,
-      referencia: `${r.pacote} — ${r.aluno}`,
-      baseCalculo: valor,
-      percentual: pctComissao,
-      valor: Math.round(valor * pctComissao) / 100,
-      vencimento: addDias(data, 30),
-      status: 'A pagar',
-      dataPagamento: '',
-    })
     notificar(d, ctx, {
-      setores: ['financeiro', 'adm'],
+      setores: ['cobranca', 'adm'],
       tipo: 'info',
       titulo: 'Venda de e-book registrada',
-      descricao: `${r.pacote} para ${r.responsavel} (${r.escola}). ${parcelas} parcela(s) e comissão gerada.`,
-      link: '/financeiro/comissoes',
+      descricao: `${r.pacote} para ${r.responsavel} (${r.escola}). ${parcelas} parcela(s) em Contas a Receber.`,
+      link: '/cobranca/titulos',
     })
   },
 
@@ -286,6 +277,15 @@ export function pagarConta(d: ErpState, nome: 'contas_pagar' | 'comissoes', id: 
     data,
   })
   auditar(d, ctx, 'EDITAR', `Pagamento registrado (${nome === 'comissoes' ? 'comissão' : 'conta'}): ${r.escola ?? r.descricao}`, 'financeiro')
+  // Fechamento operacional: quando todas as contas dele forem pagas, ele fica "Pago"
+  if (r.fechamentoId) {
+    const doFechamento = col(d, 'contas_pagar').filter((c) => c.fechamentoId === r.fechamentoId)
+    const fech = col(d, 'fechamentos').find((f) => f.id === r.fechamentoId)
+    if (fech && doFechamento.every((c) => c.status === 'Pago')) {
+      fech.status = 'Pago'
+      notificar(d, ctx, { setores: ['operacional', 'adm'], tipo: 'sucesso', titulo: 'Fechamento pago', descricao: `${fech.referencia}: todos os pagamentos foram feitos pelo Financeiro.`, link: '/operacional/fechamento' })
+    }
+  }
 }
 
 export function avancarOrdem(d: ErpState, id: string, ctx: Contexto) {
@@ -307,4 +307,144 @@ export function avancarOrdem(d: ErpState, id: string, ctx: Contexto) {
     })
   }
   auditar(d, ctx, 'EDITAR', `Ordem ${o.escola} avançou para "${o.etapa}"`, 'producao')
+}
+
+// =====================================================================
+// PROCESSO OPERACIONAL (contrato de escola → agenda → visita → fechamento)
+// No Supabase, as mesmas regras estão em docs/supabase/004_operacional.sql.
+// =====================================================================
+
+// Diretora confirmou: contrato sai da conferência e vira visita na Agenda Fotográfica
+export function confirmarContratoEscola(d: ErpState, id: string, ctx: Contexto): string | null {
+  const c = col(d, 'contratos_escola').find((x) => x.id === id)
+  if (!c) return 'Contrato não encontrado.'
+  if (c.status !== 'Em conferência') return 'Este contrato já foi enviado para a agenda.'
+  const faltam = camposFaltando(c)
+  if (faltam.length) return `Complete antes de enviar para a agenda: ${faltam.join(', ')}.`
+  c.status = 'Na agenda'
+  const visita = inserir(d, 'agenda_visitas', {
+    contratoId: c.id,
+    escola: c.escola,
+    cidade: c.cidade,
+    uf: c.uf,
+    endereco: c.endereco,
+    telefone: c.telefone,
+    responsavel: c.responsavel,
+    vendedorId: c.vendedorId,
+    data: c.dataPrevista,
+    fichasPrevistas: c.fichasPrevistas,
+    fichasConfirmadas: 0,
+    fichasFotografadas: 0,
+    equipe: '',
+    carro: '',
+    fotografoIds: '',
+    motoristaId: '',
+    status: 'Agendada',
+  })
+  APOS_CRIAR.agenda_visitas(d, visita, ctx)
+  auditar(d, ctx, 'EDITAR', `Contrato confirmado e enviado para a agenda: ${c.escola}`, 'operacional')
+  return null
+}
+
+APOS_CRIAR.agenda_visitas = (d, v, ctx) => {
+  // A Produção já fica sabendo que haverá fotos dessa escola
+  inserir(d, 'ordens_producao', {
+    escola: v.escola,
+    contratoId: v.contratoId,
+    alunos: v.fichasPrevistas,
+    fotos: 0,
+    etapa: ETAPAS_PRODUCAO[0],
+    responsavelId: '',
+    prazo: addDias(String(v.data || hoje()), 30),
+  })
+  notificar(d, ctx, {
+    setores: ['producao', 'adm', 'gerencia'],
+    tipo: 'info',
+    titulo: 'Nova visita na agenda',
+    descricao: `${v.escola} (${v.cidade}) em ${String(v.data).split('-').reverse().join('/')} — ${v.fichasPrevistas} fichas previstas.`,
+    link: '/operacional/agenda',
+  })
+}
+
+// Histórico de contatos e fichas da visita. Se informar fichas, atualiza as fichas autorizadas.
+export function registrarHistoricoVisita(d: ErpState, visitaId: string, h: { tipo: string; fichas?: number; descricao: string }, ctx: Contexto) {
+  const v = col(d, 'agenda_visitas').find((x) => x.id === visitaId)
+  if (!v) return
+  const antes = Number(v.fichasConfirmadas) || 0
+  inserir(d, 'agenda_historico', {
+    visitaId,
+    data: hoje(),
+    tipo: h.tipo,
+    fichasAntes: h.fichas === undefined ? null : antes,
+    fichasDepois: h.fichas === undefined ? null : h.fichas,
+    descricao: h.descricao,
+    autor: ctx.autorNome,
+  })
+  if (h.fichas !== undefined) v.fichasConfirmadas = h.fichas
+  auditar(d, ctx, 'EDITAR', `Histórico da visita ${v.escola}: ${h.tipo}`, 'operacional')
+}
+
+// Visita realizada: fichas fotografadas entram na meta do Operacional e a Produção é liberada
+export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ctx: Contexto) {
+  const v = col(d, 'agenda_visitas').find((x) => x.id === visitaId)
+  if (!v || v.status !== 'Agendada') return
+  v.status = 'Fotografada'
+  v.fichasFotografadas = fichas
+  lancar(d, ctx, { setor: 'operacional', indicador: 'fichas', colaboradorId: '', quantidade: fichas, descricao: `Visita fotografada: ${v.escola}`, data: String(v.data) })
+  const ordem = col(d, 'ordens_producao').find((o) => o.contratoId === v.contratoId && o.etapa === ETAPAS_PRODUCAO[0])
+  if (ordem) {
+    ordem.fotos = fichas
+    ordem.etapa = ETAPAS_PRODUCAO[1]
+  }
+  inserir(d, 'agenda_historico', { visitaId, data: hoje(), tipo: 'Visita encerrada', fichasAntes: null, fichasDepois: null, descricao: `${fichas} fichas fotografadas.`, autor: ctx.autorNome })
+  notificar(d, ctx, {
+    setores: ['producao', 'adm'],
+    tipo: 'sucesso',
+    titulo: 'Visita fotografada',
+    descricao: `${v.escola}: ${fichas} fichas. As fotos seguem para tratamento na Produção.`,
+    link: '/producao/ordens',
+  })
+  auditar(d, ctx, 'EDITAR', `Visita encerrada: ${v.escola} (${fichas} fichas)`, 'operacional')
+}
+
+// Envia o fechamento: cada beneficiário vira uma conta a pagar no Financeiro (com os dados PIX)
+export function enviarFechamento(d: ErpState, id: string, ctx: Contexto): string | null {
+  const f = col(d, 'fechamentos').find((x) => x.id === id)
+  if (!f) return 'Fechamento não encontrado.'
+  if (f.status !== 'Rascunho') return 'Este fechamento já foi enviado.'
+  const beneficiarios = lerJSON<Beneficiario[]>(f.beneficiarios, [])
+  if (!beneficiarios.length) return 'Nada a pagar neste fechamento.'
+  const semPix = beneficiarios.filter((b) => !b.pixChave.trim()).map((b) => b.nome)
+  if (semPix.length) return `Informe a chave PIX de: ${semPix.join(', ')}.`
+  f.status = 'Enviado ao financeiro'
+  f.enviadoEm = new Date().toISOString()
+  for (const b of beneficiarios) {
+    const conta = inserir(d, 'contas_pagar', {
+      descricao: b.descricao,
+      fornecedor: b.nome,
+      favorecido: b.nome,
+      categoria: b.categoria,
+      valor: b.valor,
+      vencimento: hoje(),
+      status: 'A pagar',
+      dataPagamento: '',
+      pixChave: b.pixChave,
+      pixBanco: b.pixBanco,
+      fechamentoId: f.id,
+    })
+    APOS_CRIAR.contas_pagar(d, conta, ctx)
+  }
+  if (f.tipo === 'escola') {
+    const v = col(d, 'agenda_visitas').find((x) => x.id === f.refId)
+    if (v) v.status = 'Fechamento enviado'
+  }
+  notificar(d, ctx, {
+    setores: ['financeiro', 'adm'],
+    tipo: 'info',
+    titulo: 'Fechamento operacional recebido',
+    descricao: `${f.referencia}: ${beneficiarios.length} pagamento(s) PIX para realizar.`,
+    link: '/financeiro/pagamentos',
+  })
+  auditar(d, ctx, 'EDITAR', `Fechamento enviado ao financeiro: ${f.referencia}`, 'operacional')
+  return null
 }

@@ -11,24 +11,24 @@ export default function FinanceiroDashboardPage() {
   const s = useErp()
   const mes = mesAtual()
   const contas = colecao(s, 'contas_pagar')
-  const comissoes = colecao(s, 'comissoes')
   const aPagar = contas.filter((c) => c.status === 'A pagar' || c.status === 'Aguardando aprovação')
-  const comissoesAPagar = comissoes.filter((c) => c.status === 'A pagar')
+  // Pagamentos que vieram dos fechamentos do Operacional (bonificação escolas, vendedores, freelancers)
+  const operacionaisAPagar = contas.filter((c) => c.fechamentoId && c.status === 'A pagar')
   const vencidas = aPagar.filter((c) => String(c.vencimento) < hoje())
   const fluxo = fluxoCaixa(s, mes)
   const soma = (l: typeof contas) => l.reduce((a, r) => a + Number(r.valor || 0), 0)
-  const proximas = [...aPagar, ...comissoesAPagar].sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento))).slice(0, 6)
+  const proximas = [...aPagar].sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento))).slice(0, 6)
 
   return (
     <SectorDashboard
       setor="financeiro"
       titulo="Dashboard Financeiro"
-      descricao="Comissões a pagar às escolas, contas a pagar, fluxo de caixa e metas da equipe."
+      descricao="Pagamentos operacionais (escolas, vendedores e freelancers), contas a pagar, fluxo de caixa e metas da equipe."
       tituloEquipe="Equipe financeira • metas diárias e mensais"
       antesDaEquipe={
         <div className="space-y-6">
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-            <StatCard tom="cyan" label="Comissões a pagar (escolas)" valor={brl(soma(comissoesAPagar))} detalhe={`${comissoesAPagar.length} repasse(s)`} />
+            <StatCard tom="cyan" label="Pagamentos operacionais" valor={brl(soma(operacionaisAPagar))} detalhe={`${operacionaisAPagar.length} PIX do Operacional`} />
             <StatCard tom="orange" label="Contas a pagar" valor={brl(soma(aPagar))} detalhe={`${vencidas.length} vencida(s)`} />
             <StatCard tom="emerald" label="Entradas no mês" valor={brl(fluxo.totalEntradas)} detalhe="Recebimentos da Cobrança" />
             <StatCard tom={fluxo.saldo >= 0 ? 'blue' : 'red'} label="Saldo do mês" valor={brl(fluxo.saldo)} detalhe={`Saídas: ${brl(fluxo.totalSaidas)}`} />
@@ -46,7 +46,7 @@ export default function FinanceiroDashboardPage() {
                 {proximas.map((c) => (
                   <div key={c.id} className="px-6 py-3.5 flex justify-between items-center gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{String(c.descricao ?? `Comissão • ${c.escola}`)}</p>
+                      <p className="text-sm font-bold text-white truncate">{String(c.favorecido || c.descricao)}</p>
                       <p className="text-[11px] text-zinc-500">{dataBR(String(c.vencimento))} • {brl(Number(c.valor))}</p>
                     </div>
                     <Badge texto={String(c.vencimento) < hoje() ? 'Vencida' : String(c.status)} tom={String(c.vencimento) < hoje() ? 'red' : c.status === 'Aguardando aprovação' ? 'yellow' : 'orange'} />

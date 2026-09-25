@@ -54,6 +54,19 @@ export function mesAnterior(mes: string) {
   return isoData(new Date(a, m - 2, 1)).slice(0, 7)
 }
 
+// Semana de segunda a domingo
+export function inicioSemana(iso: string) {
+  const [a, m, d] = iso.split('-').map(Number)
+  const dia = new Date(a, m - 1, d).getDay() // 0 = domingo
+  return addDias(iso, dia === 0 ? -6 : 1 - dia)
+}
+
+export const fimSemana = (iso: string) => addDias(inicioSemana(iso), 6)
+
+export function rotuloSemana(inicio: string) {
+  return `${dataBR(inicio).slice(0, 5)} a ${dataBR(addDias(inicio, 6)).slice(0, 5)}`
+}
+
 export function iniciais(nome: string) {
   const partes = nome.trim().split(/\s+/)
   return ((partes[0]?.[0] ?? '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase()

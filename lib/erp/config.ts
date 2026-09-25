@@ -72,7 +72,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
   financeiro: {
     id: 'financeiro',
     nome: 'Financeiro',
-    descricao: 'Contas, comissões e fluxo de caixa',
+    descricao: 'Contas, pagamentos operacionais e fluxo de caixa',
     home: '/financeiro',
     tom: 'cyan',
     indicadores: [{ id: 'contas_processadas', label: 'Pagamentos processados', unidade: 'qtd', metaPadrao: { diaria: 5, mensal: 110 } }],
@@ -159,7 +159,8 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Controle Operacional', href: '/operacional/controle', icone: 'cog' },
         { label: 'Contratos de Escola', href: '/operacional/contratos', icone: 'doc' },
         { label: 'Agenda Fotográfica', href: '/operacional/agenda', icone: 'calendar' },
-        { label: 'Tarefas & Pendências', href: '/operacional/tarefas', icone: 'check' },
+        { label: 'Fechamento Operacional', href: '/operacional/fechamento', icone: 'wallet' },
+        { label: 'Tarefas Avulsas', href: '/operacional/tarefas', icone: 'check' },
         { label: 'Histórico', href: '/operacional/historico', icone: 'log' },
       ],
     },
@@ -194,7 +195,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       itens: [
         { label: 'Dashboard Financeiro', href: '/financeiro', icone: 'dashboard' },
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
-        { label: 'Comissões das Escolas', href: '/financeiro/comissoes', icone: 'percent' },
+        { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
         { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-caixa', icone: 'chart' },
         { label: 'Histórico', href: '/financeiro/historico', icone: 'log' },
       ],
@@ -228,4 +229,22 @@ export const ETAPAS_PRODUCAO = [
 export const ETAPAS_LEAD = ['Novo', 'Contato feito', 'Visita agendada', 'Proposta', 'Negociação', 'Convertido', 'Perdido']
 
 export const VALOR_APROVACAO_CONTA = 5000 // contas acima disso exigem aprovação da gerência
-export const COMISSAO_ESCOLA_PADRAO = 10 // % sobre vendas de e-books
+
+// ---------------- Operacional (processo de campo) ----------------
+// Escola recebe bonificação (doação) por aluno fotografado, definida no contrato
+export const BONIFICACAO_ESCOLA_MIN = 8
+export const BONIFICACAO_ESCOLA_MAX = 10
+// Freelancers (fotógrafos e motoristas): diária + alimentação por dia trabalhado
+export const ALIMENTACAO_DIARIA = 80
+export const DIARIA_FOTOGRAFO_MIN = 150
+export const DIARIA_FOTOGRAFO_MAX = 200
+export const DIARIA_MOTORISTA_PADRAO = 200
+
+export const STATUS_CONTRATO_ESCOLA = ['Em conferência', 'Na agenda', 'Cancelado'] as const
+export const STATUS_VISITA = ['Agendada', 'Fotografada', 'Fechamento enviado', 'Cancelada'] as const
+export const STATUS_VENDEDOR_PJ = ['Ativo', 'Em negociação', 'Inativo'] as const
+export const STATUS_FECHAMENTO = ['Rascunho', 'Enviado ao financeiro', 'Pago'] as const
+export const TIPOS_FECHAMENTO = { escola: 'Escola (diário)', vendedor: 'Vendedor (semanal)', freelancer: 'Freelancer (semanal)' } as const
+
+// Categorias das contas geradas pelos fechamentos (aparecem em Financeiro › Pagamentos Operacionais)
+export const CATEGORIAS_OPERACIONAIS = ['Bonificação escola', 'Ajudante', 'Vendedor PJ', 'Freelancer'] as const

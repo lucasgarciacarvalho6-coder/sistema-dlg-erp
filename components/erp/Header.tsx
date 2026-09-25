@@ -7,6 +7,7 @@ import { SETORES } from '@/lib/erp/config'
 import { alterarSenha, avisar, definirFoto, logout, marcarLidas, useErp } from '@/lib/erp/store'
 import { dataHoraBR, iniciais } from '@/lib/erp/format'
 import Icon from './Icon'
+import SeletorTema from './SeletorTema'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from './ui'
 
 const TOM_NOTIF = { info: 'blue', alerta: 'orange', sucesso: 'emerald', aprovacao: 'yellow' } as const
@@ -104,7 +105,7 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
             )}
           </button>
           {notifAberto && (
-            <div className="absolute right-0 mt-3 w-[340px] max-w-[90vw] bg-[#0c0f17] border border-white/[0.1] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] overflow-hidden z-50">
+            <div className="absolute right-0 mt-3 w-[340px] max-w-[90vw] bg-modal border border-white/[0.1] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] overflow-hidden z-50">
               <div className="px-5 py-4 border-b border-white/[0.05] flex justify-between items-center">
                 <span className="text-xs font-bold text-white uppercase tracking-widest">Notificações</span>
                 {naoLidas.length > 0 && (
@@ -143,6 +144,13 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
 
         {/* Perfil */}
         <div className="relative flex items-center gap-5 md:pl-8 md:border-l border-white/[0.05]">
+          {/* Seletor de tema, ao lado do nome */}
+          <div className="hidden lg:block">
+            <SeletorTema />
+          </div>
+          <div className="lg:hidden">
+            <SeletorTema compacto />
+          </div>
           <div className="hidden sm:flex flex-col text-right">
             <span className="text-sm font-bold text-white tracking-wide">{usuario.nome}</span>
             <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
@@ -157,7 +165,7 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
           </button>
           <input ref={inputFoto} type="file" accept="image/*" className="hidden" onChange={(e) => trocarFoto(e.target.files?.[0])} />
           {perfilAberto && (
-            <div className="absolute right-0 top-full mt-3 w-60 bg-[#0c0f17] border border-white/[0.1] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] overflow-hidden z-50 p-2">
+            <div className="absolute right-0 top-full mt-3 w-60 bg-modal border border-white/[0.1] rounded-2xl shadow-[0_0_60px_rgba(0,0,0,0.9)] overflow-hidden z-50 p-2">
               <div className="px-3 py-3 border-b border-white/[0.05] mb-1">
                 <p className="text-xs font-bold text-white">{usuario.nome}</p>
                 <p className="text-[10px] text-zinc-500 truncate">{usuario.email}</p>

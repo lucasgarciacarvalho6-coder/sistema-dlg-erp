@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { SCRIPT_TEMA } from '@/lib/tema-script'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -15,7 +16,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR">
+    // data-theme é definido pelo script antes da pintura (tema salvo no navegador)
+    <html lang="pt-BR" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
+      </head>
       <body className={inter.className}>{children}</body>
     </html>
   )

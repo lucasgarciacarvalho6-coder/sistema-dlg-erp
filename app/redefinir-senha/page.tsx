@@ -27,12 +27,12 @@ export default function RedefinirSenhaPage() {
   }
 
   const campo =
-    'w-full bg-[#0a0a0a] border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-[#0f1115] focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600'
+    'w-full bg-painel border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-campo focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600'
 
   const linkInvalido = MODO === 'supabase' && status === 'pronto' && !sessao
 
   return (
-    <main className="min-h-screen w-full flex items-center justify-center bg-[#050505] text-white p-6 relative overflow-hidden">
+    <main className="min-h-screen w-full flex items-center justify-center bg-painel-2 text-white p-6 relative overflow-hidden">
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="w-full max-w-sm relative z-10">
         <div className="flex flex-col items-center mb-10">
@@ -44,7 +44,7 @@ export default function RedefinirSenhaPage() {
         {MODO === 'demo' ? (
           <p className="text-xs text-zinc-400 text-center">Disponível quando o Supabase estiver configurado.</p>
         ) : linkInvalido ? (
-          <div className="bg-[#1a0f0f] border border-red-900/50 rounded-xl p-4 text-xs text-red-400 leading-relaxed">
+          <div className="bg-erro-fundo border border-red-900/50 rounded-xl p-4 text-xs text-red-400 leading-relaxed">
             Link inválido ou expirado. Abra o link no mesmo navegador em que pediu a recuperação ou solicite um novo na tela de login.
           </div>
         ) : ok ? (

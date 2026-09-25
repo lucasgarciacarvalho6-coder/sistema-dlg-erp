@@ -133,6 +133,9 @@ O front já está integrado e escolhe o modo **automaticamente** pelo `src/.env.
    - **Redirect URLs:** `http://localhost:3000/redefinir-senha`
    - Em produção, adicione também o domínio oficial.
 
+> **Processo operacional (contratos de escola, agenda, fechamentos):** quem rodou o `schema.sql` antes de 25/09/2026
+> deve rodar também [`docs/supabase/004_operacional.sql`](supabase/004_operacional.sql). Ele pode ser rodado mais de uma vez.
+>
 > **Fotos de perfil:** quem rodou o `schema.sql` antes de 24/09/2026 deve rodar também
 > [`docs/supabase/003_fotos_perfil.sql`](supabase/003_fotos_perfil.sql) (bucket `avatares` + função `definir_foto`).
 >

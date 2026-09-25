@@ -19,6 +19,7 @@ import { addDias, hoje, uid } from './format'
 import { colaboradorDoBanco, registroParaBanco } from './adaptador'
 import { carregarDoSupabase, traduzirErro } from './supabase-sync'
 import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
+import { lerJSON } from './operacional'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -649,6 +650,92 @@ export function negociarTitulo(id: string, parcelas: number) {
   }
   mutar((d, ctx) => F.negociarTitulo(d, id, parcelas, ctx))
   return Promise.resolve(null)
+}
+
+// ---------------- Processo operacional (contratos de escola → agenda → fechamento) ----------------
+
+// Diretora confirmou → contrato vai para a Agenda Fotográfica (e a Produção é avisada)
+export async function confirmarContratoEscola(id: string): Promise<string | null> {
+  if (MODO === 'supabase') return gravar(() => sb().rpc('confirmar_contrato_escola', { p_id: id }), 'Contrato enviado para a agenda.')
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.confirmarContratoEscola(d, id, ctx)
+  })
+  avisar(erro ?? 'Contrato enviado para a agenda.', erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Histórico de contatos/fichas. Com `fichas`, atualiza as fichas autorizadas da visita.
+export async function registrarHistoricoVisita(visitaId: string, h: { tipo: string; fichas?: number; descricao: string }): Promise<string | null> {
+  if (MODO === 'supabase') {
+    const v = F.col(carregar(), 'agenda_visitas').find((x) => x.id === visitaId)
+    const autor = carregar().colaboradores.find((c) => c.id === lerSessao()?.colaboradorId)?.nome ?? ''
+    return gravar(() =>
+      sb().from('agenda_historico').insert({
+        visita_id: visitaId,
+        tipo: h.tipo,
+        fichas_antes: h.fichas === undefined ? null : Number(v?.fichasConfirmadas) || 0,
+        fichas_depois: h.fichas ?? null,
+        descricao: h.descricao,
+        autor,
+      }),
+    )
+  }
+  mutar((d, ctx) => F.registrarHistoricoVisita(d, visitaId, h, ctx))
+  return null
+}
+
+// Visita realizada: fichas fotografadas → meta do Operacional + fotos liberadas para a Produção
+export async function encerrarVisita(visitaId: string, fichas: number): Promise<string | null> {
+  if (fichas <= 0) return 'Informe quantas fichas foram fotografadas.'
+  if (MODO === 'supabase') {
+    return gravar(() => sb().from('agenda_visitas').update({ fichas_fotografadas: fichas, status: 'Fotografada' }).eq('id', visitaId), 'Visita encerrada.')
+  }
+  mutar((d, ctx) => F.encerrarVisita(d, visitaId, fichas, ctx))
+  avisar('Visita encerrada.', 'ok')
+  return null
+}
+
+// Fechamento → Financeiro: cada beneficiário vira uma conta a pagar com os dados PIX
+export async function enviarFechamento(id: string): Promise<string | null> {
+  if (MODO === 'supabase') {
+    const f = F.col(carregar(), 'fechamentos').find((x) => x.id === id)
+    const benef = lerJSON<{ nome: string; pixChave: string }[]>(f?.beneficiarios, [])
+    const semPix = benef.filter((b) => !b.pixChave?.trim()).map((b) => b.nome)
+    if (semPix.length) {
+      const msg = `Informe a chave PIX de: ${semPix.join(', ')}.`
+      avisar(msg)
+      return msg
+    }
+    return gravar(() => sb().from('fechamentos').update({ status: 'Enviado ao financeiro' }).eq('id', id), 'Enviado ao financeiro.')
+  }
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.enviarFechamento(d, id, ctx)
+  })
+  avisar(erro ?? 'Enviado ao financeiro.', erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Arquivo do contrato (foto/PDF). Supabase: bucket privado "contratos". Demo: guarda só o nome.
+export async function anexarArquivoContrato(arquivo: File): Promise<{ caminho: string } | { erro: string }> {
+  if (arquivo.size > 10 * 1024 * 1024) return { erro: 'O arquivo precisa ter no máximo 10 MB.' }
+  if (MODO !== 'supabase') return { caminho: arquivo.name }
+  const nome = arquivo.name.normalize('NFD').replace(/[^\w.-]+/g, '_')
+  const caminho = `${uid()}-${nome}`
+  const { error } = await sb().storage.from('contratos').upload(caminho, arquivo, { contentType: arquivo.type || undefined })
+  if (error) return { erro: traduzirErro(error) }
+  return { caminho }
+}
+
+export async function abrirArquivoContrato(caminho: string) {
+  if (MODO !== 'supabase') {
+    avisar('No modo demonstração o arquivo não fica guardado — só o nome.', 'erro')
+    return
+  }
+  const { data, error } = await sb().storage.from('contratos').createSignedUrl(caminho, 300)
+  if (error || !data) avisar(error ? traduzirErro(error) : 'Arquivo não encontrado.')
+  else window.open(data.signedUrl, '_blank')
 }
 
 // ---------------- Permissões / Notificações / Sistema ----------------

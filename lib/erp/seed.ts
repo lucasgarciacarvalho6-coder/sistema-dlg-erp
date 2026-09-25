@@ -5,9 +5,23 @@ import type { Colaborador, ErpState, Setor } from './types'
 import { SETORES } from './config'
 import { addDias, hoje, isoData } from './format'
 import { MATRIZ_PADRAO } from './permissions'
-import { APOS_CRIAR, avancarOrdem, baixarTitulo, col, inserir, negociarTitulo, pagarConta, type Contexto } from './fluxos'
+import {
+  APOS_CRIAR,
+  avancarOrdem,
+  baixarTitulo,
+  col,
+  confirmarContratoEscola,
+  encerrarVisita,
+  enviarFechamento,
+  inserir,
+  negociarTitulo,
+  pagarConta,
+  registrarHistoricoVisita,
+  type Contexto,
+} from './fluxos'
+import { calcularFechamentoEscola } from './operacional'
 
-export const VERSAO_DADOS = 1
+export const VERSAO_DADOS = 2 // v2: processo operacional real (contratos de escola, agenda, fechamentos)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -230,8 +244,174 @@ export function gerarSeed(): ErpState {
   APOS_CRIAR.contas_pagar(s, grande, ctx)
   const pago = col(s, 'contas_pagar').find((c) => c.descricao === 'Impressão de álbuns — lote agosto')
   if (pago) pagarConta(s, 'contas_pagar', pago.id, ctx, addDias(hojeISO, -3))
-  col(s, 'comissoes').slice(-3).forEach((c) => pagarConta(s, 'comissoes', c.id, ctx, addDias(hojeISO, -2)))
   s.lancamentos = s.lancamentos.filter((l) => l.origem !== 'automatico')
+
+  // ---- Operacional: processo real de campo ----
+  const ctxOp: Contexto = { autorId: 'u-op1', autorNome: 'Flávia Alves Roquini', autorSetor: 'operacional', silencioso: true }
+  const vendedoresPJ = (
+    [
+      ['Ahmed Husni Ali Choucair', '(44) 99911-2233', 'Umuarama', 'Ativo', 60, -2],
+      ['Rodrigo Pereira', '(44) 99822-4455', 'Cianorte', 'Ativo', 55, -10],
+      ['Luciana Farias', '(45) 99733-6677', 'Toledo', 'Em negociação', 50, -4],
+      ['Carlos Mendes', '(43) 99644-8899', 'Londrina', 'Inativo', 50, -40],
+    ] as const
+  ).map(([nome, telefone, cidade, status, valorPorFicha, contato]) =>
+    inserir(s, 'pj_vendedores', {
+      nome,
+      telefone,
+      cidade,
+      uf: 'PR',
+      status,
+      valorPorFicha,
+      pixNome: nome,
+      pixChave: telefone.replace(/\D/g, ''),
+      pixBanco: 'Nubank',
+      ultimoContato: addDias(hojeISO, contato),
+      observacao: '',
+    }),
+  )
+  const [ahmed, rodrigo] = vendedoresPJ
+  inserir(s, 'historico_contatos', { pessoaId: ahmed.id, data: addDias(hojeISO, -2), assunto: 'Confirmou 2 escolas novas em Pérola para a próxima semana.', autor: 'Flávia Alves Roquini' })
+  inserir(s, 'historico_contatos', { pessoaId: ahmed.id, data: addDias(hojeISO, -9), assunto: 'Alinhada a rota do Noroeste do PR.', autor: 'Flávia Alves Roquini' })
+  inserir(s, 'historico_contatos', { pessoaId: rodrigo.id, data: addDias(hojeISO, -10), assunto: 'Aguardando retorno de 3 diretoras em Toledo.', autor: 'Flávia Alves Roquini' })
+
+  const freelancers = (
+    [
+      ['Fotógrafo', 'Thiago Martins', 'Umuarama', 'Profissional', 200, 'Ativo'],
+      ['Fotógrafo', 'Lucas Andrade', 'Cianorte', 'Iniciante', 150, 'Ativo'],
+      ['Motorista', 'José Carlos Lima', 'Umuarama', '', 200, 'Ativo'],
+      ['Motorista', 'Márcio Souza', 'Maringá', '', 200, 'Inativo'],
+    ] as const
+  ).map(([tipo, nome, cidade, nivel, diaria, status], i) =>
+    inserir(s, 'freelancers', { tipo, nome, cidade, uf: 'PR', telefone: `(44) 9950${i}-11${i}${i}`, status, nivel, diaria, pixNome: nome, pixChave: `${nome.split(' ')[0].toLowerCase()}@pix.com`, pixBanco: 'Banco do Brasil' }),
+  )
+  const [thiago, lucas, jose] = freelancers
+
+  // Contratos: [escola, cidade, endereço, telefone, diretora, vendedor, fichas, dias até a visita, bonificação, PIX?]
+  const contratosEscola: [string, string, string, string, string, string, number, number, number, boolean][] = [
+    ['PROJETO ESPAÇO CRIANÇA', 'Altônia', 'Rua Ouro Alto, 605 — Jardim Panorama', '(44) 99997-7391', 'Jasmin (Diretora)', ahmed.id, 140, -8, 10, true],
+    ['ESCOLA MUNICIPAL SOL NASCENTE', 'Pérola', 'Av. Brasil, 1200 — Centro', '(44) 3636-1122', 'Marcos (Diretor)', ahmed.id, 120, -5, 8, true],
+    ['CMEI PEQUENO PRÍNCIPE', 'Xambrê', 'Rua das Flores, 88', '(44) 3637-3344', 'Aline (Coord.)', rodrigo.id, 90, -3, 9, true],
+    ['COLÉGIO DOM ATHAMAZIO MERKLE', 'Pérola', 'Rua Paraná, 455', '(44) 3636-9988', 'Irmã Lúcia', ahmed.id, 260, -1, 10, true],
+    ['SANTA TEREZINHA C M E I', 'São José B. Vista', 'Rua São José, 30', '(46) 3232-4455', 'Rosângela (Diretora)', rodrigo.id, 95, 1, 8, true],
+    ['MARIA MAYSRE M PESSUTI EF', 'Catanduvas', 'Av. Central, 900', '(45) 3234-7788', 'Cláudia (Coord.)', ahmed.id, 210, 4, 10, false],
+    ['ESCOLA ESTADUAL VILA RICA', 'Umuarama', 'Rua Vila Rica, 12', '(44) 3622-1010', 'Helena (Diretora)', rodrigo.id, 180, 9, 9, true],
+  ]
+  for (const [escola, cidade, endereco, telefone, responsavel, vendedorId, fichas, dias, bonif, pix] of contratosEscola) {
+    const c = inserir(s, 'contratos_escola', {
+      escola,
+      inep: '',
+      cidade,
+      uf: 'PR',
+      endereco,
+      telefone,
+      responsavel,
+      vendedorId,
+      fichasPrevistas: fichas,
+      dataPrevista: addDias(hojeISO, dias),
+      bonificacaoPorFicha: bonif,
+      pixNome: pix ? `APM ${escola}` : '',
+      pixChave: pix ? `${fichas}${dias < 0 ? 1 : 2}.apm@escola.pr.gov.br` : '',
+      pixBanco: pix ? 'Banco do Brasil' : '',
+      arquivo: `contrato-${escola.toLowerCase().replace(/\W+/g, '-')}.pdf`,
+      observacao: '',
+      status: 'Em conferência',
+    })
+    confirmarContratoEscola(s, c.id, ctxOp)
+  }
+  // Ainda em conferência (um completo aguardando a diretora, um faltando dados)
+  inserir(s, 'contratos_escola', { escola: 'CENTRO EDUCACIONAL ARCO-ÍRIS', inep: '41000110', cidade: 'Toledo', uf: 'PR', endereco: 'Rua Arco-Íris, 77', telefone: '(45) 3252-6600', responsavel: 'Márcia (Diretora)', vendedorId: rodrigo.id, fichasPrevistas: 150, dataPrevista: addDias(hojeISO, 12), bonificacaoPorFicha: 9, pixNome: '', pixChave: '', pixBanco: '', arquivo: 'contrato-arco-iris.jpg', observacao: '', status: 'Em conferência' })
+  inserir(s, 'contratos_escola', { escola: 'ESCOLA RURAL BOA VISTA', inep: '', cidade: 'Iporã', uf: 'PR', endereco: '', telefone: '', responsavel: '', vendedorId: ahmed.id, fichasPrevistas: 60, dataPrevista: '', bonificacaoPorFicha: 0, pixNome: '', pixChave: '', pixBanco: '', arquivo: 'contrato-boa-vista.jpg', observacao: 'Contrato com rasura na data.', status: 'Em conferência' })
+
+  // Equipes, fichas autorizadas (histórico) e visitas já realizadas
+  const visitas = col(s, 'agenda_visitas')
+  const porEscola = (nome: string) => visitas.find((v) => v.escola === nome)!
+  const equipeCompleta = { equipe: 'E1', carro: 'Carro 01', fotografoIds: `${thiago.id},${lucas.id}`, motoristaId: jose.id }
+  for (const [escola, confirmadas, fotografadas] of [
+    ['PROJETO ESPAÇO CRIANÇA', 35, 39],
+    ['ESCOLA MUNICIPAL SOL NASCENTE', 70, 74],
+    ['CMEI PEQUENO PRÍNCIPE', 48, 52],
+    ['COLÉGIO DOM ATHAMAZIO MERKLE', 150, 0],
+    ['MARIA MAYSRE M PESSUTI EF', 90, 0],
+    ['ESCOLA ESTADUAL VILA RICA', 0, 0],
+  ] as [string, number, number][]) {
+    const v = porEscola(escola)
+    Object.assign(v, equipeCompleta)
+    if (confirmadas > 0) {
+      registrarHistoricoVisita(s, v.id, { tipo: 'Atualização de fichas', fichas: Math.round(confirmadas * 0.6), descricao: `Diretora informou ${Math.round(confirmadas * 0.6)} fichas retornadas até o momento.` }, ctxOp)
+      registrarHistoricoVisita(s, v.id, { tipo: 'Atualização de fichas', fichas: confirmadas, descricao: `Coordenação confirmou ${confirmadas} fichas autorizadas pelos pais.` }, ctxOp)
+    }
+    if (fotografadas > 0) encerrarVisita(s, v.id, fotografadas, ctxOp)
+  }
+  registrarHistoricoVisita(s, porEscola('SANTA TEREZINHA C M E I').id, { tipo: 'Contato', descricao: 'Deixado recado com a secretaria; retornar amanhã cedo.' }, ctxOp)
+
+  // Fechamento diário: um já enviado ao financeiro, um em rascunho (o terceiro fica pendente)
+  const montarFechamento = (escola: string, ajudantes: { nome: string; valor: number; pixChave: string; pixBanco: string }[]) => {
+    const v = porEscola(escola)
+    const c = col(s, 'contratos_escola').find((x) => x.id === v.contratoId)!
+    const calc = calcularFechamentoEscola({
+      escola,
+      data: String(v.data),
+      fichasBonificadas: Number(v.fichasFotografadas),
+      valorUnitario: Number(c.bonificacaoPorFicha),
+      pixNome: String(c.pixNome),
+      pixChave: String(c.pixChave),
+      pixBanco: String(c.pixBanco),
+      ajudantes,
+    })
+    return inserir(s, 'fechamentos', {
+      tipo: 'escola',
+      refId: v.id,
+      periodo: String(v.data),
+      referencia: escola,
+      data: v.data,
+      quantidade: v.fichasFotografadas,
+      valorUnitario: c.bonificacaoPorFicha,
+      subtotal: calc.totalEscola,
+      ajudantes: JSON.stringify(ajudantes),
+      beneficiarios: JSON.stringify(calc.beneficiarios),
+      total: calc.total,
+      pixNome: c.pixNome,
+      pixChave: c.pixChave,
+      pixBanco: c.pixBanco,
+      observacao: '',
+      status: 'Rascunho',
+      enviadoEm: '',
+    })
+  }
+  const f1 = montarFechamento('PROJETO ESPAÇO CRIANÇA', [{ nome: 'Débora Silva (ajudante)', valor: 80, pixChave: '44999887766', pixBanco: 'Caixa' }])
+  enviarFechamento(s, f1.id, ctxOp)
+  montarFechamento('ESCOLA MUNICIPAL SOL NASCENTE', [])
+
+  // Produção e tarefas vêm do processo real (contratos de escola do Operacional)
+  s.colecoes.ordens_producao = col(s, 'ordens_producao').filter((o) => col(s, 'contratos_escola').some((c) => c.id === o.contratoId))
+  s.colecoes.tarefas_operacionais = col(s, 'tarefas_operacionais').filter((t) => !t.contratoId)
+  col(s, 'ordens_producao').forEach((o) => {
+    o.responsavelId = o.etapa === 'Tratamento' ? 'u-pr1' : ''
+  })
+  const ordemMaisAntiga = col(s, 'ordens_producao').find((o) => o.escola === 'PROJETO ESPAÇO CRIANÇA')
+  if (ordemMaisAntiga) avancarOrdem(s, ordemMaisAntiga.id, ctxOp) // já em diagramação
+
+  // Rotas dos vendedores
+  const rotaAhmed = inserir(s, 'rotas', { vendedorId: ahmed.id, uf: 'PR', nome: 'Rota Noroeste', status: 'Ativa' })
+  ;[
+    ['Xambrê', -12, 'Sim', 'NÃO', 0, 'Direção não aceitou', 'Já tinham feito fotos.'],
+    ['Pérola', -12, 'Sim', 'SIM', 2, '', 'Diretora fechou para as turmas da manhã.'],
+    ['Altônia', -11, 'Sim', 'SIM', 1, '', ''],
+    ['Ibiporã', -11, 'Sim', 'NÃO', 0, 'Já havia fechado fotos no mês', ''],
+    ['Cianorte', 2, 'Não', '', 0, '', ''],
+    ['Umuarama', 3, 'Não', '', 0, '', ''],
+  ].forEach(([cidade, dias, visitada, fechou, contratos, motivo, observacao], i) =>
+    inserir(s, 'rota_cidades', { rotaId: rotaAhmed.id, cidade, ordem: i + 1, dataVisita: addDias(hojeISO, Number(dias)), visitada, fechou, contratos, motivo, observacao }),
+  )
+  const rotaRodrigo = inserir(s, 'rotas', { vendedorId: rodrigo.id, uf: 'PR', nome: 'Rota Oeste', status: 'Ativa' })
+  ;[
+    ['Toledo', -6, 'Sim', 'SIM', 1, '', 'Retornar para mais 2 escolas.'],
+    ['Cascavel', -5, 'Sim', 'NÃO', 0, 'Diretora de férias', ''],
+    ['Marechal Cândido Rondon', 5, 'Não', '', 0, '', ''],
+  ].forEach(([cidade, dias, visitada, fechou, contratos, motivo, observacao], i) =>
+    inserir(s, 'rota_cidades', { rotaId: rotaRodrigo.id, cidade, ordem: i + 1, dataVisita: addDias(hojeISO, Number(dias)), visitada, fechou, contratos, motivo, observacao }),
+  )
 
   // ---- Produção: qualidade ----
   inserir(s, 'qualidade', { ordem: 'PROJETO ESPAÇO CRIANÇA', tipo: 'Retrabalho', descricao: 'Ajuste de cor em 12 fotos', quantidade: 12, responsavelId: 'u-pr1', data: addDias(hojeISO, -4) })

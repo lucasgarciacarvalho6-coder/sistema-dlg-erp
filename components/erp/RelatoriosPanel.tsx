@@ -113,16 +113,36 @@ const RELATORIOS: Relatorio[] = [
     ], (r) => ({ vencimento: dataBR(String(r.vencimento)) })),
   },
   {
-    id: 'comissoes',
-    titulo: 'Comissões das escolas',
-    descricao: 'Relatório financeiro • repasses',
+    id: 'pagamentos-operacionais',
+    titulo: 'Pagamentos operacionais',
+    descricao: 'Relatório financeiro • escolas, ajudantes, vendedores PJ e freelancers',
     modulo: 'financeiro',
-    gerar: deColecao('comissoes', [
+    gerar: (s) => ({
+      colunas: [
+        { chave: 'favorecido', label: 'Favorecido' },
+        { chave: 'categoria', label: 'Tipo' },
+        { chave: 'descricao', label: 'Referente a' },
+        { chave: 'pixChave', label: 'Chave PIX' },
+        { chave: 'valor', label: 'Valor' },
+        { chave: 'status', label: 'Status' },
+      ],
+      linhas: colecao(s, 'contas_pagar').filter((r) => r.fechamentoId),
+    }),
+  },
+  {
+    id: 'agenda',
+    titulo: 'Agenda fotográfica',
+    descricao: 'Relatório operacional • visitas, fichas e equipes',
+    modulo: 'operacional',
+    gerar: deColecao('agenda_visitas', [
+      { chave: 'data', label: 'Data' },
       { chave: 'escola', label: 'Escola' },
-      { chave: 'referencia', label: 'Referência' },
-      { chave: 'valor', label: 'Valor' },
+      { chave: 'cidade', label: 'Cidade' },
+      { chave: 'fichasPrevistas', label: 'Previstas' },
+      { chave: 'fichasConfirmadas', label: 'Confirmadas' },
+      { chave: 'fichasFotografadas', label: 'Fotografadas' },
       { chave: 'status', label: 'Status' },
-    ]),
+    ], (r) => ({ data: dataBR(String(r.data)) })),
   },
   {
     id: 'aprovacoes',

@@ -182,7 +182,7 @@ src/
 └── .env.example                      # Modelo de variáveis (o .env.local NÃO vai para o Git)
 ```
 
-\* As telas `operacional/controle`, `operacional/contratos` e `operacional/agenda` são as originais do projeto e ainda usam **dados fixos no código**.
+> O Operacional segue o processo real de campo: veja [Processo operacional](#8b-processo-operacional-campo).
 
 ---
 
@@ -192,10 +192,10 @@ src/
 |---|---|---|---|
 | **Administração** | `/adm` | Visão TV, Colaboradores, Matriz de acesso, Metas, Cadastros, Relatórios, Auditoria, Configurações e atalhos para todos os setores | — (visão total) |
 | **Gerência** | `/gerencia` | Painel tático, Metas das equipes, Aprovações, Relatórios e atalhos para todos os setores | Aprovações analisadas |
-| **Operacional** | `/operacional/metas` | Dashboard & metas, Controle operacional, Contratos de escola, Agenda fotográfica, Tarefas & pendências, Histórico | Fichas fotografadas |
+| **Operacional** | `/operacional/metas` | Dashboard & metas, Controle operacional (gestão diária, dashboard, rotas, vendedores PJ, fotógrafos, motoristas), Contratos de escola, Agenda fotográfica, Fechamento operacional, Tarefas avulsas, Histórico | Fichas fotografadas |
 | **Vendas** | `/vendas` | Dashboard das vendedoras, Leads & prospecção, Contratos (pedidos), Tabela de preços, Histórico | Contratos fechados, Escolas visitadas |
 | **Produção** | `/producao` | Dashboard, Ordens de produção, Matéria-prima, Qualidade & perdas, Histórico | Fotos editadas, E-books gerados |
-| **Financeiro** | `/financeiro` | Dashboard, Contas a pagar, Comissões das escolas, Fluxo de caixa, Histórico | Pagamentos processados |
+| **Financeiro** | `/financeiro` | Dashboard, Contas a pagar, Pagamentos operacionais (PIX dos fechamentos), Fluxo de caixa, Histórico | Pagamentos processados |
 | **Cobrança** | `/cobranca` | Dashboard, Vendas de e-books, Contas a receber, Inadimplência, Acordos, Histórico | E-books vendidos, Valor recebido |
 
 **Login.** O sistema identifica o colaborador pelo e-mail, lê o **setor** e redireciona para a rota inicial dele.
@@ -254,8 +254,8 @@ PRODUÇÃO avança a ordem ──► "E-book gerado": meta do editor
                         └─► "Concluído": avisa a Cobrança (e-books liberados)
 
 COBRANÇA vende E-BOOK aos pais ──► meta do cobrador
-                               ├─► N parcelas em Contas a Receber
-                               └─► comissão da escola (Financeiro)
+                               └─► N parcelas em Contas a Receber
+   (a escola não recebe % da venda: recebe a bonificação por ficha no fechamento operacional)
 
 BAIXA de título ──► valor recebido (meta da Cobrança + faturamento do ADM + entrada no caixa)
 TÍTULO atrasado ──► Negociar ──► ACORDO ──► aprovação da Gerência
@@ -272,12 +272,38 @@ Cada setor **cria** a informação, mas não ganha acesso aos dados dos outros. 
 
 ---
 
+## 8b. Processo operacional (campo)
+
+```
+VENDEDOR PJ fecha o contrato (papel)
+   └─► CONTRATOS DE ESCOLA: importar arquivo → revisar campos → "Em conferência"
+         • obrigatórios: escola, cidade, endereço, telefone, diretora, vendedor, fichas, data, bonificação/ficha
+         • PIX da escola pode ser completado depois (não bloqueia)
+   └─► diretora confirma → "Enviar à agenda" ─► AGENDA FOTOGRÁFICA (visita) + ordem na PRODUÇÃO
+         • histórico de contatos: fichas autorizadas pelos pais
+         • equipe, carro, fotógrafos e motorista (freelancers)
+   └─► ENCERRAR VISITA (fichas fotografadas) ─► meta do Operacional + fotos para tratamento na Produção
+   └─► FECHAMENTO OPERACIONAL
+         • escola (diário):   fichas bonificadas × R$/ficha  + ajudantes (valor combinado)
+         • vendedor (semanal): alunos fotografados nas escolas dele × R$ por aluno
+         • freelancer (semanal): dias na agenda × (diária + R$ 80 de alimentação)
+         • salvar rascunho · imprimir recibos · ENVIAR AO FINANCEIRO
+   └─► FINANCEIRO › Pagamentos Operacionais: um PIX por favorecido → "PIX feito" → fechamento "Pago"
+```
+
+- **Gestão diária** (Controle Operacional) lista só as pendências acionáveis: contratos a conferir, PIX faltando, fichas a confirmar, equipes a definir, visitas a encerrar, fechamentos a enviar e vendedores sem contato. Resolvida na origem, a pendência some sozinha.
+- **Cadastros PJ** (sem login): vendedores de contrato (R$ por aluno fotografado, histórico de contatos), fotógrafos (diária de R$ 150 a 200) e motoristas (diária de ~R$ 200).
+- **Controle de rota**: uma rota por vendedor e estado, com as cidades na ordem de visita, o resultado de cada visita e os contratos fechados.
+- **Banco**: tabelas e triggers em `docs/supabase/004_operacional.sql`. Regras no front: `lib/erp/operacional.ts` e `lib/erp/fluxos.ts`.
+
+---
+
 ## 9. Banco de dados (Supabase)
 
 **Ordem de instalação:** siga o guia completo em [`docs/SUPABASE_PROMPT.md`](docs/SUPABASE_PROMPT.md).
 
 1. `docs/supabase/schema.sql`: banco completo. Em instalação nova, basta este.
-2. `docs/supabase/002_realtime_completo.sql` e `003_fotos_perfil.sql`: só para bancos criados com versões anteriores do schema.
+2. `docs/supabase/002_realtime_completo.sql`, `003_fotos_perfil.sql` e `004_operacional.sql`: só para bancos criados com versões anteriores do schema.
 3. Criar o primeiro ADM: *Authentication → Add user* e depois o `insert` em `colaboradores` (no final do schema).
 4. Publicar a Edge Function `admin-colaboradores`, deixando **Verify JWT with legacy secret desligado**, porque a função valida o usuário sozinha.
 5. Preencher o `.env.local` e reiniciar.
@@ -287,10 +313,10 @@ Cada setor **cria** a informação, mas não ganha acesso aos dados dos outros. 
 | Núcleo | `empresas`, `filiais`, `colaboradores`, `permissoes`, `indicadores`, `metas`, `lancamentos` |
 | Cadastros centrais | `escolas`, `produtos`, `fornecedores`, `estoque` |
 | Vendas | `leads`, `contratos` |
-| Operacional | `tarefas_operacionais` |
+| Operacional | `contratos_escola`, `agenda_visitas`, `agenda_historico`, `fechamentos`, `pj_vendedores`, `freelancers`, `historico_contatos`, `rotas`, `rota_cidades`, `tarefas_operacionais` |
 | Produção | `ordens_producao`, `qualidade` |
 | Cobrança | `vendas_ebooks`, `titulos`, `acordos` |
-| Financeiro | `contas_pagar`, `comissoes` |
+| Financeiro | `contas_pagar` (com PIX e origem do fechamento), `comissoes` (legado, sem uso) |
 | Gerência | `aprovacoes` |
 | Sistema | `notificacoes`, `notificacao_leituras`, `auditoria` |
 | Views | `vw_producao_diaria`, `vw_titulos`, `vw_metas_colaborador` (`security_invoker`) |
@@ -344,9 +370,11 @@ ERP
 │   └── ✅ Relatórios gerenciais · ✅ Aprovações
 │
 ├── 05. ÁREA OPERACIONAL
-│   ├── ✅ Dashboard operacional · ✅ Tarefas · ✅ Ordens de serviço · ✅ Pendências · ✅ Histórico
-│   ├── 🟡 Agenda · 🟡 Status das operações · 🟡 Processos (telas originais com dados fixos)
-│   └── ⬜ Atendimentos
+│   ├── ✅ Dashboard (metas diária, semanal e mensal) · ✅ Gestão diária (pendências acionáveis)
+│   ├── ✅ Contratos de escola (importação + revisão) · ✅ Agenda fotográfica mensal · ✅ Histórico de fichas
+│   ├── ✅ Fechamento: escola diário · vendedor semanal · adiantamento semanal dos freelancers · recibos
+│   ├── ✅ Controle de rota · ✅ Vendedores PJ · ✅ Fotógrafos · ✅ Motoristas · ✅ Tarefas avulsas
+│   └── 🟡 Leitura automática do contrato por IA (hoje: anexar + revisar manualmente)
 │
 ├── 06. ÁREA DE VENDAS
 │   ├── ✅ Dashboard (cada vendedora com gráfico de metas diárias e mensais)
@@ -409,7 +437,7 @@ ERP
 | 08 | Vendas | ✅ |
 | 09 | Cobrança | ✅ |
 | 10 | Produção | ✅ |
-| 11 | Operacional | 🟡 3 telas originais ainda com dados fixos |
+| 11 | Operacional | ✅ Processo real de campo (contratos → agenda → fechamento → Financeiro) |
 | 12 | Gerência | ✅ |
 | 13 | Integração entre módulos | ✅ |
 | 14 | Relatórios e dashboards | ✅ |
@@ -438,7 +466,8 @@ Todas as telas seguem o padrão **"Glassmorphism Premium"**, com os componentes 
 
 ## 14. Limitações conhecidas e próximos passos
 
-- **Telas originais do Operacional:** Controle, Contratos e Agenda ainda usam dados fixos. É preciso ligá-las ao núcleo.
+- **Leitura automática do contrato por IA:** hoje o contrato é anexado e revisado manualmente.
+- **Vendas › Contratos (Pedidos):** tela anterior ao processo real, que também cria ordem de produção. Com o fluxo pelo Operacional, é preciso decidir se ela continua.
 - **Lançamento pela equipe:** o colaborador comum só lança produção em nome próprio, porque o RLS bloqueia outros casos. Para a coordenação/RMC lançar pela equipe, é preciso uma regra de supervisor.
 - **Exclusão de colaboradores:** quem tem histórico não pode ser excluído, só **desativado**. É proposital, para proteger o histórico.
 - **Período carregado:** os dashboards carregam os lançamentos dos **últimos 3 meses**.

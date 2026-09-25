@@ -1,13 +1,106 @@
 @import "tailwindcss";
 
+/* =========================================================================
+   TEMAS — escuro (padrão) e claro (cores da logo: azul royal, marinho, dourado)
+   O tema fica em <html data-theme="dark|light"> (seletor no Header; salvo no navegador).
+
+   Como o claro funciona: o Tailwind gera as cores via variáveis (text-white →
+   var(--color-white)). No tema claro redefinimos essas variáveis: "white" vira a
+   tinta azul-marinho, "black" vira o fundo azul-gelo e a escala de cinzas se inverte.
+   Assim todas as telas trocam de tema sem mudar as classes.
+   ========================================================================= */
+
 :root {
-  --background: #000000;
-  --foreground: #ededed;
+  /* superfícies do tema escuro */
+  --t-fundo: #020202;
+  --t-painel: #0a0a0a;
+  --t-painel-2: #050505;
+  --t-modal: #0c0f17;
+  --t-campo: #0f1115;
+  --t-erro-fundo: #1a0f0f;
+  --t-ok-fundo: #0b1a12;
+  --t-scroll: rgba(255, 255, 255, 0.08);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* superfícies do tema claro — azul-gelo, nunca branco puro */
+  --t-fundo: #e8eef8;
+  --t-painel: #f6f8fd;
+  --t-painel-2: #f1f5fc;
+  --t-modal: #f8faff;
+  --t-campo: #ffffff;
+  --t-erro-fundo: #fdeeee;
+  --t-ok-fundo: #eaf7ef;
+  --t-scroll: rgba(13, 27, 62, 0.15);
+
+  /* tinta e fundo base */
+  --color-white: #0d1b3e; /* azul-marinho: texto principal */
+  --color-black: #e8eef8; /* fundo da página */
+
+  /* cinzas invertidos (levemente azulados, combinando com a logo) */
+  --color-zinc-100: #1a2644;
+  --color-zinc-200: #22304f;
+  --color-zinc-300: #334266;
+  --color-zinc-400: #4a5878;
+  --color-zinc-500: #66728f;
+  --color-zinc-600: #8b95ad;
+  --color-zinc-700: #c3cbdb;
+  --color-zinc-800: #d6ddea;
+  --color-zinc-900: #e2e8f2;
+  --color-zinc-950: #eef2f8;
+
+  /* cores de destaque usadas como TEXTO precisam ser mais escuras no fundo claro */
+  --color-blue-200: #1e3a8a;
+  --color-blue-300: #1e3a9e;
+  --color-blue-400: #1d40d8; /* azul royal da logo */
+  --color-blue-950: #dbe6ff;
+  --color-emerald-300: #065f46;
+  --color-emerald-400: #047857;
+  --color-emerald-900: #a7dcc0;
+  --color-red-300: #991b1b;
+  --color-red-400: #c02626;
+  --color-red-900: #f0a5a5;
+  --color-orange-300: #9a3412;
+  --color-orange-400: #c2410c;
+  --color-yellow-300: #854d0e;
+  --color-yellow-400: #a16207;
+  --color-violet-400: #6d28d9;
+  --color-cyan-400: #0e7490;
+}
+
+/* No tema claro, texto sobre fundos coloridos sólidos (botões azuis, avatar,
+   selos) continua branco */
+:root[data-theme='light'] :is(.bg-blue-600, .bg-blue-500, .bg-red-600, .bg-red-500, .bg-emerald-600, .bg-gradient-to-br) {
+  --color-white: #ffffff;
+}
+
+/* Seletor de tema: destaca a opção do tema aplicado no <html> */
+:root:not([data-theme='light']) .seletor-tema[data-opcao-tema='dark'],
+:root[data-theme='light'] .seletor-tema[data-opcao-tema='light'] {
+  background-color: var(--color-blue-600);
+  --color-white: #ffffff;
+  --color-zinc-500: #ffffff;
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.35);
+}
+
+/* Sombras pretas pesadas viram sombras suaves azuladas no claro */
+:root[data-theme='light'] :is(.shadow-2xl, [class*='shadow-[0_0_80px_rgba(0,0,0'], [class*='shadow-[0_0_60px_rgba(0,0,0'], [class*='shadow-[0_0_40px_rgba(0,0,0']) {
+  box-shadow: 0 18px 45px -20px rgba(29, 64, 216, 0.28);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* superfícies temáticas: bg-fundo, bg-painel, bg-painel-2, bg-modal, bg-campo... */
+  --color-fundo: var(--t-fundo);
+  --color-painel: var(--t-painel);
+  --color-painel-2: var(--t-painel-2);
+  --color-modal: var(--t-modal);
+  --color-campo: var(--t-campo);
+  --color-erro-fundo: var(--t-erro-fundo);
+  --color-ok-fundo: var(--t-ok-fundo);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
@@ -26,12 +119,13 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-black);
+  color: var(--color-white);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease;
 }
 
-/* Scrollbar discreta do tema escuro */
+/* Scrollbar discreta */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -40,7 +134,7 @@ body {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--t-scroll);
   border-radius: 999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
@@ -48,15 +142,19 @@ body {
 }
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--t-scroll) transparent;
 }
 
 select option {
-  background: #0a0a0a;
-  color: #fff;
+  background: var(--t-painel);
+  color: var(--color-white);
 }
 
 input[type='date']::-webkit-calendar-picker-indicator {
   filter: invert(1);
   opacity: 0.5;
+}
+:root[data-theme='light'] input[type='date']::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.6;
 }

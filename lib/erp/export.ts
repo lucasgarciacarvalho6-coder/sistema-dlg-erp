@@ -51,3 +51,38 @@ export function exportarPDF(nome: string, colunas: Coluna[], linhas: Linha[]) {
   <script>window.onload=()=>{window.print()}</script></body></html>`)
   janela.document.close()
 }
+
+// Recibos de pagamento (um por beneficiário), prontos para imprimir ou salvar em PDF
+export function imprimirRecibos(
+  titulo: string,
+  empresa: string,
+  itens: { nome: string; valor: number; descricao: string; pixChave: string; pixBanco: string }[],
+) {
+  const janela = window.open('', '_blank')
+  if (!janela) return
+  const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const data = new Date().toLocaleDateString('pt-BR')
+  const recibos = itens
+    .map(
+      (i) => `<section class="recibo">
+      <header><h2>RECIBO</h2><span class="valor">${html(brl(i.valor))}</span></header>
+      <p>Recebi de <strong>${html(empresa)}</strong> a importância de <strong>${html(brl(i.valor))}</strong>, referente a:</p>
+      <p class="ref">${html(i.descricao)}</p>
+      <p>Pagamento via PIX • Chave: <strong>${html(i.pixChave || '—')}</strong> • Banco: ${html(i.pixBanco || '—')}</p>
+      <div class="assinatura"><span>${html(i.nome)}</span></div>
+      <footer>${html(data)}</footer>
+    </section>`,
+    )
+    .join('')
+  janela.document.write(`<html><head><title>${html(titulo)}</title><style>
+    body{font-family:Arial,sans-serif;color:#111;padding:24px}
+    h1{font-size:14px;color:#555;margin:0 0 16px}
+    .recibo{border:1px solid #bbb;border-radius:8px;padding:20px 24px;margin-bottom:18px;page-break-inside:avoid}
+    header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd;padding-bottom:8px;margin-bottom:12px}
+    h2{margin:0;font-size:18px;letter-spacing:2px} .valor{font-size:18px;font-weight:bold}
+    p{font-size:13px;line-height:1.5;margin:6px 0} .ref{background:#f3f5f9;padding:8px 10px;border-radius:6px}
+    .assinatura{margin-top:36px;text-align:center} .assinatura span{display:inline-block;border-top:1px solid #333;padding-top:4px;min-width:320px;font-size:12px}
+    footer{text-align:right;font-size:11px;color:#666;margin-top:10px}
+  </style></head><body><h1>${html(titulo)}</h1>${recibos}<script>window.onload=()=>{window.print()}</script></body></html>`)
+  janela.document.close()
+}

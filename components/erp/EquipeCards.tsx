@@ -4,9 +4,16 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { diaReferencia, diasDeMeta, equipe, resumo } from '@/lib/erp/metrics'
+import { diaReferencia, diasDeMeta, equipe, esperadoAteHoje, resumo, situacaoMeta } from '@/lib/erp/metrics'
 import { formatar, iniciais, mesAtual, pct } from '@/lib/erp/format'
-import { Avatar, Badge, BarChart, EmptyState, ProgressBar, TONS } from './ui'
+import { Avatar, EmptyState, ProgressBar, TONS } from './ui'
+import { PillSituacao, STATUS } from './status'
+
+// Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
+function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
+  const valor = diasRestantes > 0 ? falta / diasRestantes : falta
+  return unidade === 'qtd' ? Math.ceil(valor) : valor
+}
 
 // Card individual: foto, metas do dia e do mês, gráfico diário, metas batidas e quanto falta
 export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colaborador; mes: string; posicao: number }) {
@@ -17,17 +24,13 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
   const dias = diasDeMeta(s, c.setor, principal.id, c.id, mes)
   const faltaMes = Math.max(0, r.meta.mensal - r.mes)
   const atual = mes === mesAtual()
-  const situacao =
-    atual && r.pctDia >= 100
-      ? { texto: 'Meta do dia ✓', tom: 'emerald' as const }
-      : r.pctMes >= 100
-        ? { texto: 'Meta do mês ✓', tom: 'emerald' as const }
-        : r.projecao >= r.meta.mensal
-          ? { texto: 'No ritmo', tom: 'blue' as const }
-          : { texto: 'Abaixo', tom: 'orange' as const }
+  // Mesma régua do placar: comparado com o quanto já deveria estar feito até hoje
+  const situacao = situacaoMeta(r.pctMes, esperadoAteHoje(mes))
+  const [a, m] = mes.split('-').map(Number)
+  const ref = atual ? diaReferencia(mes) : dias.serie.length
 
   return (
-    <div className={`bg-[#050505]/80 backdrop-blur-xl border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all`}>
+    <div className={`bg-painel-2/80 backdrop-blur-xl border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all`}>
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} opacity-70 ${t.brilho}`}></div>
       <div className={`absolute -bottom-14 -right-14 w-40 h-40 ${t.suave} blur-3xl rounded-full pointer-events-none`}></div>
 
@@ -36,8 +39,8 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
         <div className="relative">
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-16 h-16" arredondado="rounded-2xl" textoCls="text-lg" />
           <span
-            className={`absolute -bottom-2 -right-2 min-w-[26px] h-[26px] px-1 rounded-full border-2 border-[#050505] text-[10px] font-black flex items-center justify-center ${
-              posicao <= 3 ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-300'
+            className={`absolute -bottom-2 -right-2 min-w-[26px] h-[26px] px-1 rounded-full border-2 border-painel-2 text-[10px] font-black flex items-center justify-center ${
+              posicao <= 3 ? 'bg-yellow-500 text-[#111111]' : 'bg-zinc-800 text-zinc-300'
             }`}
           >
             {posicao}º
@@ -48,7 +51,7 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
           <p className={`text-[10px] font-bold uppercase tracking-widest ${t.texto}`}>{cfg.nome}</p>
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest truncate">{c.funcao}</p>
         </div>
-        <Badge texto={situacao.texto} tom={situacao.tom} />
+        <PillSituacao situacao={situacao} />
       </div>
 
       {/* Indicador principal */}
@@ -56,7 +59,7 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
         <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">{principal.label}</p>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hoje / meta</p>
+            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hoje / meta {atual && r.pctDia >= 100 && <span className="text-white">✓</span>}</p>
             <p className="text-xl font-black text-white mt-0.5">
               {formatar(r.hoje, principal.unidade)} <span className="text-xs text-zinc-500">/ {formatar(r.meta.diaria, principal.unidade)}</span>
             </p>
@@ -70,8 +73,31 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
             <div className="mt-2"><ProgressBar valor={r.pctMes} tom={cfg.tom} /></div>
           </div>
         </div>
+        {/* Um quadradinho por dia: verde = bateu a meta do dia, cinza = não bateu */}
         <div className="mt-4">
-          <BarChart valores={dias.serie} meta={r.meta.diaria} tom={cfg.tom} altura="h-16" compacto limite={atual ? diaReferencia(mes) : undefined} formatar={(v) => formatar(v, principal.unidade)} />
+          <div className="flex gap-[2px] h-5">
+            {dias.serie.map((v, i) => {
+              const domingo = new Date(a, m - 1, i + 1).getDay() === 0
+              const futuro = i + 1 > ref
+              const bateu = dias.metaDiaria > 0 && v >= dias.metaDiaria
+              return (
+                <div
+                  key={i}
+                  title={domingo ? `Dia ${i + 1}: domingo` : futuro ? `Dia ${i + 1}: ainda não chegou` : `Dia ${i + 1}: ${formatar(v, principal.unidade)} de ${formatar(dias.metaDiaria, principal.unidade)} ${bateu ? '✓' : ''}`}
+                  className={`flex-1 rounded-[3px] ${domingo ? 'bg-transparent' : futuro ? 'bg-white/[0.04]' : bateu ? '' : 'bg-zinc-700'}`}
+                  style={!domingo && !futuro && bateu ? { backgroundColor: STATUS.bom.cor } : undefined}
+                ></div>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-4 mt-2 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: STATUS.bom.cor }}></span> Bateu a meta do dia
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-[3px] bg-zinc-700"></span> Não bateu
+            </span>
+          </div>
         </div>
       </div>
 
@@ -105,7 +131,7 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
         <div className="bg-black/40 border border-white/[0.05] rounded-xl p-2.5 text-center">
           <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">{atual ? 'Por dia' : 'Resultado'}</p>
           <p className="text-sm font-black text-white mt-0.5">
-            {atual ? (faltaMes === 0 ? '—' : formatar(dias.restantes ? faltaMes / dias.restantes : faltaMes, principal.unidade)) : pct(r.pctMes)}
+            {atual ? (faltaMes === 0 ? '—' : formatar(porDia(faltaMes, dias.restantes, principal.unidade), principal.unidade)) : pct(r.pctMes)}
           </p>
         </div>
       </div>
@@ -128,7 +154,7 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
 
   if (todos.length === 0) {
     return (
-      <div className="bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl">
+      <div className="bg-painel/80 backdrop-blur-xl border border-white/[0.05] rounded-3xl">
         <EmptyState titulo="Nenhum colaborador nas áreas" descricao="Cadastre a equipe em Colaboradores. Cada pessoa aparece aqui com foto, metas e gráfico." />
         <div className="pb-8 text-center">
           <Link href="/adm/colaboradores" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">

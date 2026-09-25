@@ -6,6 +6,7 @@ import { MODO, login, solicitarRecuperacao, useUsuario } from '@/lib/erp/store'
 import { rotaInicial } from '@/lib/erp/permissions'
 import { SETORES } from '@/lib/erp/config'
 import { CONTAS_DEMO, SENHA_DEMO } from '@/lib/erp/seed'
+import SeletorTema from '@/components/erp/SeletorTema'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -53,18 +54,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen w-full flex bg-[#030303] text-white font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
+    <main className="min-h-screen w-full flex bg-fundo text-white font-sans selection:bg-blue-600 selection:text-white overflow-hidden">
       
       {/* =========================================
           LADO ESQUERDO: A MARCA E LOGO OFICIAL
           ========================================= */}
-      <div className="relative hidden lg:flex lg:w-[55%] flex-col justify-center items-center p-8 bg-[#020202] overflow-hidden border-r border-zinc-900/50">
+      <div className="relative hidden lg:flex lg:w-[55%] flex-col justify-center items-center p-8 bg-fundo overflow-hidden border-r border-zinc-900/50">
         
         {/* Glow backdrop gigante para destacar a logo */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[150px] pointer-events-none"></div>
 
         {/* Textura de Fundo Escurecida nas Bordas */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000_100%)] pointer-events-none opacity-90"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--color-black)_100%)] pointer-events-none opacity-90"></div>
 
         {/* Logo Oficial Destacada */}
         <div className="relative z-10 flex flex-col items-center text-center space-y-8 w-full max-w-2xl">
@@ -101,7 +102,10 @@ export default function LoginPage() {
       {/* =========================================
           LADO DIREITO: FORMULÁRIO DE ALTA PRECISÃO
           ========================================= */}
-      <div className="w-full lg:w-[45%] flex flex-col justify-center items-center p-8 lg:p-16 relative bg-[#050505]">
+      <div className="w-full lg:w-[45%] flex flex-col justify-center items-center p-8 lg:p-16 relative bg-painel-2">
+        <div className="absolute top-6 right-6 z-20">
+          <SeletorTema />
+        </div>
         
         {/* Glow subtil atrás do form */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[100px] pointer-events-none"></div>
@@ -116,7 +120,7 @@ export default function LoginPage() {
 
           {/* Alerta de Erro Elegante */}
           {errorMessage && (
-            <div className="mb-6 bg-[#1a0f0f] border border-red-900/50 rounded-xl p-4 flex items-start gap-3 shadow-[0_0_20px_rgba(220,38,38,0.1)] transition-all duration-300">
+            <div className="mb-6 bg-erro-fundo border border-red-900/50 rounded-xl p-4 flex items-start gap-3 shadow-[0_0_20px_rgba(220,38,38,0.1)] transition-all duration-300">
               <div className="mt-0.5 bg-red-500/20 p-1 rounded-full text-red-500 shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
               </div>
@@ -138,7 +142,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-[#0f1115] focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600 shadow-inner"
+                  className="w-full bg-painel border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-campo focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600 shadow-inner"
                   placeholder="nome@dlgphotos.com"
                 />
               </div>
@@ -160,7 +164,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#0a0a0a] border border-zinc-800/80 rounded-xl pl-5 pr-12 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-[#0f1115] focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600 shadow-inner"
+                  className="w-full bg-painel border border-zinc-800/80 rounded-xl pl-5 pr-12 py-4 text-white text-sm outline-none transition-all duration-300 focus:border-blue-500 focus:bg-campo focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600 shadow-inner"
                   placeholder="••••••••"
                 />
                 <button
@@ -222,7 +226,7 @@ export default function LoginPage() {
                   key={c.email}
                   type="button"
                   onClick={() => acessoRapido(c.email)}
-                  className={`py-3 px-4 bg-[#0a0a0a] border hover:bg-[#111] text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all active:scale-[0.98] ${
+                  className={`py-3 px-4 bg-painel border hover:bg-campo text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all active:scale-[0.98] ${
                     email === c.email ? 'border-blue-500/60 text-blue-400' : 'border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
                   }`}
                 >
@@ -247,7 +251,7 @@ export default function LoginPage() {
       {/* Recuperação de senha (mock) */}
       {recuperando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onMouseDown={() => setRecuperando(false)}>
-          <div className="bg-[#0c0f17] border border-white/[0.1] rounded-[2rem] w-full max-w-md shadow-[0_0_80px_rgba(0,0,0,0.9)] p-8 space-y-6" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="bg-modal border border-white/[0.1] rounded-[2rem] w-full max-w-md shadow-[0_0_80px_rgba(0,0,0,0.9)] p-8 space-y-6" onMouseDown={(e) => e.stopPropagation()}>
             <div>
               <h3 className="text-xl font-black text-white tracking-tight">Recuperar senha</h3>
               <p className="text-xs text-zinc-500 uppercase tracking-widest mt-2 font-bold">Enviaremos um link para o seu e-mail</p>
@@ -258,7 +262,7 @@ export default function LoginPage() {
               </div>
             ) : (
               <form onSubmit={enviarRecuperacao} className="space-y-4">
-                <input type="email" required value={emailRecuperacao} onChange={(e) => setEmailRecuperacao(e.target.value)} placeholder="nome@dlgphotos.com" className="w-full bg-[#0a0a0a] border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600" />
+                <input type="email" required value={emailRecuperacao} onChange={(e) => setEmailRecuperacao(e.target.value)} placeholder="nome@dlgphotos.com" className="w-full bg-painel border border-zinc-800/80 rounded-xl px-5 py-4 text-white text-sm outline-none focus:border-blue-500 focus:ring-[3px] focus:ring-blue-500/20 placeholder:text-zinc-600" />
                 <button type="submit" className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold uppercase tracking-widest text-sm rounded-xl transition-all">Enviar link</button>
               </form>
             )}

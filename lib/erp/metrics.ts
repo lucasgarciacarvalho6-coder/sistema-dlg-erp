@@ -95,6 +95,29 @@ export function resumo(s: ErpState, setor: Setor, indicadorId: string, mes: stri
   }
 }
 
+// Quanto da meta mensal já deveria estar feito até hoje (% dos dias úteis seg–sáb decorridos).
+// Mês passado = 100%. É a régua do "está no ritmo?" dos painéis.
+export function esperadoAteHoje(mes: string) {
+  const [a, m] = mes.split('-').map(Number)
+  const ref = diaReferencia(mes)
+  let uteis = 0
+  let decorridos = 0
+  for (let d = 1; d <= diasNoMes(mes); d++) {
+    if (new Date(a, m - 1, d).getDay() === 0) continue
+    uteis++
+    if (d <= ref) decorridos++
+  }
+  return uteis ? (decorridos / uteis) * 100 : 0
+}
+
+export type Situacao = 'bom' | 'atencao' | 'critico'
+
+// Compara o realizado com o esperado para a data: ≥100% do esperado = no ritmo
+export function situacaoMeta(pctMes: number, esperado: number): Situacao {
+  if (esperado <= 0 || pctMes >= esperado) return 'bom'
+  return pctMes >= esperado * 0.85 ? 'atencao' : 'critico'
+}
+
 // Dias úteis (seg–sáb) do mês: quantos já passaram, em quantos a meta diária foi batida e quantos faltam
 export function diasDeMeta(s: ErpState, setor: Setor, indicadorId: string, colaboradorId: string, mes: string) {
   const colab = s.colaboradores.find((c) => c.id === colaboradorId)
