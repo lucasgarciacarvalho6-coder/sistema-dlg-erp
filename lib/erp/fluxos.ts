@@ -5,7 +5,7 @@
 
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
-import { camposFaltando, lerJSON, type Beneficiario } from './operacional'
+import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
 import { addDias, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 
@@ -390,7 +390,8 @@ export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ct
   if (!v || v.status !== 'Agendada') return
   v.status = 'Fotografada'
   v.fichasFotografadas = fichas
-  lancar(d, ctx, { setor: 'operacional', indicador: 'fichas', colaboradorId: '', quantidade: fichas, descricao: `Visita fotografada: ${v.escola}`, data: String(v.data) })
+  // As fichas contam na meta da RMC (dona dos contratos do Operacional)
+  lancar(d, ctx, { setor: 'operacional', indicador: 'fichas', colaboradorId: responsavelOperacional(d)?.id ?? '', quantidade: fichas, descricao: `Visita fotografada: ${v.escola}`, data: String(v.data) })
   const ordem = col(d, 'ordens_producao').find((o) => o.contratoId === v.contratoId && o.etapa === ETAPAS_PRODUCAO[0])
   if (ordem) {
     ordem.fotos = fichas

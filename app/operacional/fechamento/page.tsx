@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { Registro, Tom } from '@/lib/erp/types'
-import { ALIMENTACAO_DIARIA } from '@/lib/erp/config'
+import { parametros } from '@/lib/erp/parametros'
 import { atualizarRegistro, criarRegistro, enviarFechamento, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import {
@@ -34,6 +34,7 @@ function StatusFechamento({ f }: { f?: Registro }) {
 
 export default function FechamentoOperacionalPage() {
   const s = useErp()
+  const par = parametros(s)
   const podeFazer = usePode()
   const pEditar = podeFazer('operacional', 'editar')
   const [aba, setAba] = useState<Aba>('escolas')
@@ -188,7 +189,7 @@ export default function FechamentoOperacionalPage() {
       )}
 
       {aba === 'freelancers' && (
-        <Panel semPadding titulo="Adiantamentos semanais dos freelancers" subtitulo={`Diária + R$ ${ALIMENTACAO_DIARIA} de alimentação por dia trabalhado (dias vêm da agenda)`} acoes={seletorSemana}>
+        <Panel semPadding titulo="Adiantamentos semanais dos freelancers" subtitulo={`Diária + R$ ${par.alimentacaoDiaria} de alimentação por dia trabalhado (dias vêm da agenda)`} acoes={seletorSemana}>
           {(() => {
             const linhas = colecao(s, 'freelancers')
               .map((fr) => ({ fr, dias: diasFreelancerSemana(s, fr.id, semana), f: fechamentoExistente(s, 'freelancer', fr.id, semana) }))
@@ -201,7 +202,7 @@ export default function FechamentoOperacionalPage() {
                   <tbody className="divide-y divide-white/[0.02]">
                     {linhas.map(({ fr, dias, f }) => {
                       const qtd = n(f?.quantidade ?? dias.length)
-                      const dia = n(f?.valorUnitario ?? valorDiaFreelancer(n(fr.diaria)))
+                      const dia = n(f?.valorUnitario ?? valorDiaFreelancer(n(fr.diaria), par.alimentacaoDiaria))
                       return (
                         <tr key={fr.id} className="hover:bg-white/[0.02]">
                           <td className="px-6 py-4 text-white font-bold">{t(fr.nome)}</td>
@@ -396,17 +397,18 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
 // ---------------------------------------------------------------------------
 function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 'freelancer'; pessoa: Registro; semana: string; onFechar: () => void }) {
   const s = useErp()
+  const par = parametros(s)
   const existente = fechamentoExistente(s, tipo, pessoa.id, semana)
   const calcVend = tipo === 'vendedor' ? fichasVendedorSemana(s, pessoa.id, semana) : null
   const dias = tipo === 'freelancer' ? diasFreelancerSemana(s, pessoa.id, semana) : []
   const [qtd, setQtd] = useState(String(existente?.quantidade ?? (tipo === 'vendedor' ? calcVend?.fichas : dias.length) ?? 0))
-  const [diaria, setDiaria] = useState(String(tipo === 'freelancer' ? (existente ? n(existente.valorUnitario) - ALIMENTACAO_DIARIA : n(pessoa.diaria)) : 0))
+  const [diaria, setDiaria] = useState(String(tipo === 'freelancer' ? (existente ? n(existente.valorUnitario) - par.alimentacaoDiaria : n(pessoa.diaria)) : 0))
   const [valorAluno, setValorAluno] = useState(String(existente?.valorUnitario ?? pessoa.valorPorFicha ?? 0))
   const [pix, setPix] = useState({ pixNome: t(existente?.pixNome ?? pessoa.pixNome ?? pessoa.nome), pixChave: t(existente?.pixChave ?? pessoa.pixChave), pixBanco: t(existente?.pixBanco ?? pessoa.pixBanco) })
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
 
-  const unit = tipo === 'vendedor' ? n(valorAluno) : valorDiaFreelancer(n(diaria))
+  const unit = tipo === 'vendedor' ? n(valorAluno) : valorDiaFreelancer(n(diaria), par.alimentacaoDiaria)
   const total = Math.round(n(qtd) * unit * 100) / 100
   const beneficiarios: Beneficiario[] =
     total > 0
@@ -506,7 +508,7 @@ function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 
               </div>
               <div>
                 <p className={labelCls}>Alimentação / dia</p>
-                <p className="text-lg font-black text-white mt-3">{brl(ALIMENTACAO_DIARIA)}</p>
+                <p className="text-lg font-black text-white mt-3">{brl(par.alimentacaoDiaria)}</p>
               </div>
             </div>
           </>
@@ -523,7 +525,7 @@ function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 
       <div className="flex justify-between items-center bg-black/40 border border-white/[0.05] p-5 rounded-2xl">
         <p className="text-xs text-zinc-400">
           {num(n(qtd))} × {brl(unit)}
-          {tipo === 'freelancer' && <span className="text-zinc-500"> (diária {brl(n(diaria))} + alimentação {brl(ALIMENTACAO_DIARIA)})</span>}
+          {tipo === 'freelancer' && <span className="text-zinc-500"> (diária {brl(n(diaria))} + alimentação {brl(par.alimentacaoDiaria)})</span>}
         </p>
         <p className="text-2xl font-black text-emerald-400">{brl(total)}</p>
       </div>

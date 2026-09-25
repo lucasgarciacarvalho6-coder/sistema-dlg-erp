@@ -6,7 +6,6 @@
 // freelancers semanal) → enviado ao Financeiro, que paga.
 
 import type { ErpState, Registro } from './types'
-import { ALIMENTACAO_DIARIA } from './config'
 import { addDias, dataBR, hoje, inicioSemana } from './format'
 import { colecao } from './metrics'
 
@@ -65,6 +64,13 @@ export function contratoDaVisita(s: ErpState, visita: Registro) {
 }
 
 export const fotografosDa = (visita: Registro) => t(visita.fotografoIds).split(',').filter(Boolean)
+
+// Dona da meta do Operacional: todos os contratos/fichas ficam com a coordenação (RMC).
+// Critério: colaborador ativo do Operacional com função RMC/Coordenação; senão, o primeiro ativo.
+export function responsavelOperacional(s: ErpState) {
+  const time = s.colaboradores.filter((c) => c.setor === 'operacional' && c.status === 'ATIVO')
+  return time.find((c) => /rmc|coorden/i.test(c.funcao)) ?? time[0]
+}
 
 export const nomePJ = (s: ErpState, id: unknown) =>
   [...colecao(s, 'pj_vendedores'), ...colecao(s, 'freelancers')].find((p) => p.id === id)?.nome ?? '—'
@@ -133,7 +139,7 @@ export function diasFreelancerSemana(s: ErpState, freelancerId: string, semanaIn
   return [...datas].sort()
 }
 
-export const valorDiaFreelancer = (diaria: number) => diaria + ALIMENTACAO_DIARIA
+export const valorDiaFreelancer = (diaria: number, alimentacao: number) => diaria + alimentacao
 
 // Semanas (segunda-feira) que tiveram visitas fotografadas — base para os fechamentos semanais
 export function semanasComVisitas(s: ErpState) {

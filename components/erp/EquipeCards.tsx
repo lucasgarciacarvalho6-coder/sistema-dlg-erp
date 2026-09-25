@@ -4,10 +4,11 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { diaReferencia, diasDeMeta, equipe, esperadoAteHoje, resumo, situacaoMeta } from '@/lib/erp/metrics'
-import { formatar, iniciais, mesAtual, pct } from '@/lib/erp/format'
-import { Avatar, EmptyState, ProgressBar, TONS } from './ui'
+import { diasDeMeta, equipeComMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
+import { formatar, iniciais, mesAtual } from '@/lib/erp/format'
+import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
+import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
 function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
@@ -15,22 +16,31 @@ function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
   return unidade === 'qtd' ? Math.ceil(valor) : valor
 }
 
-// Card individual: foto, metas do dia e do mês, gráfico diário, metas batidas e quanto falta
-export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colaborador; mes: string; posicao: number }) {
+// Card individual (mesmo visual de antes, com as informações do Painel Executivo antigo):
+// meta diária calculada, dias úteis, média, projeção, quanto falta, barras por dia útil e anel.
+// Clicar no card abre o painel completo da pessoa.
+export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; c: Colaborador; mes: string; posicao: number; onAbrir?: () => void }) {
   const cfg = SETORES[c.setor]
   const t = TONS[cfg.tom]
   const [principal, ...outros] = cfg.indicadores
   const r = resumo(s, c.setor, principal.id, mes, c.id)
   const dias = diasDeMeta(s, c.setor, principal.id, c.id, mes)
-  const faltaMes = Math.max(0, r.meta.mensal - r.mes)
   const atual = mes === mesAtual()
-  // Mesma régua do placar: comparado com o quanto já deveria estar feito até hoje
-  const situacao = situacaoMeta(r.pctMes, esperadoAteHoje(mes))
-  const [a, m] = mes.split('-').map(Number)
-  const ref = atual ? diaReferencia(mes) : dias.serie.length
+  const f = (v: number) => formatar(v, principal.unidade)
+  const dec = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  // Mesma régua do placar: ritmo da meta (bom), acima do piso (atenção) ou abaixo do piso (crítico)
+  const situacao = situacaoResumo(r, mes)
+  const temPiso = r.piso > 0
+  const mini = 'bg-black/40 border border-white/[0.05] rounded-xl px-2 py-2 text-center'
 
   return (
-    <div className={`bg-painel-2/80 backdrop-blur-xl border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all`}>
+    <div
+      role={onAbrir ? 'button' : undefined}
+      tabIndex={onAbrir ? 0 : undefined}
+      onClick={onAbrir}
+      onKeyDown={(e) => onAbrir && (e.key === 'Enter' || e.key === ' ') && onAbrir()}
+      className={`bg-painel-2/80 backdrop-blur-xl border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all ${onAbrir ? 'cursor-pointer hover:border-blue-500/40' : ''}`}
+    >
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} opacity-70 ${t.brilho}`}></div>
       <div className={`absolute -bottom-14 -right-14 w-40 h-40 ${t.suave} blur-3xl rounded-full pointer-events-none`}></div>
 
@@ -47,58 +57,80 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-base font-black text-white truncate">{c.nome}</p>
+          <p className="text-base font-black text-white leading-tight line-clamp-2" title={c.nome}>{c.nome}</p>
           <p className={`text-[10px] font-bold uppercase tracking-widest ${t.texto}`}>{cfg.nome}</p>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest truncate">{c.funcao}</p>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-widest truncate" title={c.funcao}>{c.funcao}</p>
+          <div className="mt-1.5"><PillSituacao situacao={situacao} /></div>
         </div>
-        <PillSituacao situacao={situacao} />
       </div>
 
-      {/* Indicador principal */}
-      <div className="mt-5 relative z-10">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">{principal.label}</p>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hoje / meta {atual && r.pctDia >= 100 && <span className="text-white">✓</span>}</p>
-            <p className="text-xl font-black text-white mt-0.5">
-              {formatar(r.hoje, principal.unidade)} <span className="text-xs text-zinc-500">/ {formatar(r.meta.diaria, principal.unidade)}</span>
-            </p>
-            <div className="mt-2"><ProgressBar valor={r.pctDia} tom={cfg.tom} /></div>
-          </div>
-          <div>
-            <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Mês / meta</p>
-            <p className="text-xl font-black text-white mt-0.5">
-              {formatar(r.mes, principal.unidade)} <span className="text-xs text-zinc-500">/ {formatar(r.meta.mensal, principal.unidade)}</span>
-            </p>
-            <div className="mt-2"><ProgressBar valor={r.pctMes} tom={cfg.tom} /></div>
-          </div>
+      {/* Meta diária • piso diário • dias úteis • média • projeção */}
+      <div className={`grid gap-1.5 mt-5 relative z-10 ${temPiso ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        <div className={mini}>
+          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Meta/dia</p>
+          <p className="text-xs font-black text-white mt-0.5">{dec(r.meta.diaria)}</p>
         </div>
-        {/* Um quadradinho por dia: verde = bateu a meta do dia, cinza = não bateu */}
-        <div className="mt-4">
-          <div className="flex gap-[2px] h-5">
-            {dias.serie.map((v, i) => {
-              const domingo = new Date(a, m - 1, i + 1).getDay() === 0
-              const futuro = i + 1 > ref
-              const bateu = dias.metaDiaria > 0 && v >= dias.metaDiaria
-              return (
-                <div
-                  key={i}
-                  title={domingo ? `Dia ${i + 1}: domingo` : futuro ? `Dia ${i + 1}: ainda não chegou` : `Dia ${i + 1}: ${formatar(v, principal.unidade)} de ${formatar(dias.metaDiaria, principal.unidade)} ${bateu ? '✓' : ''}`}
-                  className={`flex-1 rounded-[3px] ${domingo ? 'bg-transparent' : futuro ? 'bg-white/[0.04]' : bateu ? '' : 'bg-zinc-700'}`}
-                  style={!domingo && !futuro && bateu ? { backgroundColor: STATUS.bom.cor } : undefined}
-                ></div>
-              )
-            })}
+        {temPiso && (
+          <div className={mini} title={`Piso do mês: ${f(r.piso)} (mínimo para não dar prejuízo)`}>
+            <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Piso/dia</p>
+            <p className="text-xs font-black mt-0.5" style={{ color: STATUS.atencao.cor }}>{dec(r.pisoDiario)}</p>
           </div>
-          <div className="flex items-center gap-4 mt-2 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: STATUS.bom.cor }}></span> Bateu a meta do dia
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-[3px] bg-zinc-700"></span> Não bateu
-            </span>
-          </div>
+        )}
+        <div className={mini}>
+          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Dias</p>
+          <p className="text-xs font-black text-white mt-0.5">{r.diasDecorridos}/{r.diasUteis}</p>
         </div>
+        <div className={mini}>
+          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Média</p>
+          <p className="text-xs font-black text-white mt-0.5">{dec(r.mediaDiaria)}</p>
+        </div>
+        <div className={mini}>
+          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Projeção</p>
+          <p className="text-xs font-black text-white mt-0.5">{f(r.projecao)}</p>
+        </div>
+      </div>
+
+      {/* Realizado do mês + quanto falta */}
+      <div className="mt-4 relative z-10">
+        <div className="flex justify-between items-end">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{principal.label}</p>
+          <p className="text-[10px] font-bold text-zinc-400">
+            Hoje <span className="text-white">{f(r.hoje)}</span> {atual && r.pctDia >= 100 && '✓'}
+          </p>
+        </div>
+        <p className="text-xl font-black text-white mt-0.5">
+          {f(r.mes)} <span className="text-xs text-zinc-500">/ {f(r.meta.mensal)}</span>
+        </p>
+        <div className="mt-2 relative">
+          <ProgressBar valor={r.pctMes} tom={cfg.tom} />
+          {temPiso && r.meta.mensal > 0 && (
+            <div className="absolute -inset-y-1 w-0.5 rounded" style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 1px)`, backgroundColor: STATUS.atencao.cor }} title={`Piso ${f(r.piso)}`}></div>
+          )}
+        </div>
+        <p className={`mt-2 text-[11px] font-bold ${r.faltaPiso > 0 ? 'text-red-400' : r.falta > 0 ? 'text-yellow-400' : 'text-emerald-400'}`}>
+          {r.faltaPiso > 0
+            ? `⚠ Faltam ${f(r.faltaPiso)} p/ piso • ${f(r.falta)} p/ meta`
+            : r.falta > 0
+              ? `${temPiso ? '✓ Piso batido • f' : '⚠ F'}altam ${f(r.falta)} p/ meta`
+              : '🎯 Meta do mês batida'}
+          {atual && r.falta > 0 && dias.restantes > 0 && (
+            <span className="text-zinc-500 font-medium" title="Ritmo necessário até o fim do mês para bater a meta mensal">
+              {' '}• precisa {f(porDia(r.falta, dias.restantes + 1, principal.unidade))}/dia
+            </span>
+          )}
+        </p>
+      </div>
+
+      {/* Barras por dia útil + anel da meta do mês */}
+      <div className="mt-3 grid grid-cols-[1fr_auto] gap-3 items-center relative z-10">
+        <GraficoDiasUteis uteis={dias.uteis} serie={dias.serie} decorridos={dias.decorridos} metaDiaria={dias.metaDiaria} pisoDiario={dias.pisoDiario} formatar={f} altura="h-24" compacto />
+        <Anel valor={r.pctMes} cor={STATUS[situacao].cor} rotulo="do mês" tamanho="w-16 h-16" textoCls="text-sm" />
+      </div>
+      <div className="flex items-center gap-3 mt-2 text-[9px] font-bold uppercase tracking-widest text-zinc-500 relative z-10">
+        <LegendaDias comPiso={temPiso} curto className="gap-2" />
+        <span className="ml-auto normal-case tracking-normal text-zinc-400 whitespace-nowrap">
+          metas batidas <strong className="text-white">{dias.batidas}/{dias.decorridos}</strong>
+        </span>
       </div>
 
       {/* Indicadores secundários (ex.: visitas em Vendas, valor recebido em Cobrança) */}
@@ -115,26 +147,7 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
         )
       })}
 
-      {/* Metas batidas e a bater */}
-      <div className="grid grid-cols-3 gap-2 mt-5 relative z-10">
-        <div className="bg-black/40 border border-white/[0.05] rounded-xl p-2.5 text-center">
-          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Metas batidas</p>
-          <p className="text-sm font-black text-emerald-400 mt-0.5">
-            {dias.batidas}
-            <span className="text-zinc-500 text-[10px]">/{dias.decorridos} dias</span>
-          </p>
-        </div>
-        <div className="bg-black/40 border border-white/[0.05] rounded-xl p-2.5 text-center">
-          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">A bater no mês</p>
-          <p className={`text-sm font-black mt-0.5 ${faltaMes === 0 ? 'text-emerald-400' : 'text-orange-400'}`}>{faltaMes === 0 ? 'Batida ✓' : formatar(faltaMes, principal.unidade)}</p>
-        </div>
-        <div className="bg-black/40 border border-white/[0.05] rounded-xl p-2.5 text-center">
-          <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">{atual ? 'Por dia' : 'Resultado'}</p>
-          <p className="text-sm font-black text-white mt-0.5">
-            {atual ? (faltaMes === 0 ? '—' : formatar(porDia(faltaMes, dias.restantes, principal.unidade), principal.unidade)) : pct(r.pctMes)}
-          </p>
-        </div>
-      </div>
+      {onAbrir && <p className="mt-3 text-right text-[9px] font-bold uppercase tracking-widest text-blue-400 relative z-10">Ver painel completo ↗</p>}
     </div>
   )
 }
@@ -142,10 +155,11 @@ export function CardColaborador({ s, c, mes, posicao }: { s: ErpState; c: Colabo
 // Grade com todos os colaboradores das áreas produtivas, filtrável por setor
 export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
   const [filtro, setFiltro] = useState<Setor | ''>('')
+  const [aberto, setAberto] = useState<Colaborador | null>(null) // painel completo ao clicar no card
 
   const todos = useMemo(
     () =>
-      SETORES_PRODUTIVOS.flatMap((setor) => equipe(s, setor))
+      SETORES_PRODUTIVOS.flatMap((setor) => equipeComMeta(s, setor, mes))
         .map((c) => ({ c, pct: resumo(s, c.setor, SETORES[c.setor].indicadores[0].id, mes, c.id).pctMes }))
         .sort((a, b) => b.pct - a.pct),
     [s, mes],
@@ -195,9 +209,20 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
         {lista.map(({ c }) => (
-          <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={todos.findIndex((t) => t.c.id === c.id) + 1} />
+          <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={todos.findIndex((t) => t.c.id === c.id) + 1} onAbrir={() => setAberto(c)} />
         ))}
       </div>
+
+      <Modal
+        aberto={!!aberto}
+        titulo={aberto ? `Painel • ${aberto.nome}` : ''}
+        subtitulo={aberto ? `${SETORES[aberto.setor].nome} • ${aberto.funcao}` : ''}
+        onFechar={() => setAberto(null)}
+        largura="max-w-6xl"
+        rodape={<button onClick={() => setAberto(null)} className={btnSecundario}>Fechar</button>}
+      >
+        {aberto && <PainelMeta s={s} colaborador={aberto} indicadorId={SETORES[aberto.setor].indicadores[0].id} mes={mes} />}
+      </Modal>
     </div>
   )
 }

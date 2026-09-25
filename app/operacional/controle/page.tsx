@@ -3,15 +3,18 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
-import { DIARIA_FOTOGRAFO_MAX, DIARIA_FOTOGRAFO_MIN, DIARIA_MOTORISTA_PADRAO, STATUS_VENDEDOR_PJ } from '@/lib/erp/config'
+import { STATUS_VENDEDOR_PJ } from '@/lib/erp/config'
+import { parametros } from '@/lib/erp/parametros'
 import { atualizarRegistro, criarRegistro, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao, diaReferencia, esperadoAteHoje, resumo, serieMes, somar } from '@/lib/erp/metrics'
-import { nomePJ, pendenciasDoDia } from '@/lib/erp/operacional'
+import { nomePJ, pendenciasDoDia, responsavelOperacional } from '@/lib/erp/operacional'
+import { ehDiaUtil } from '@/lib/erp/calendario'
+import PainelMeta from '@/components/erp/PainelMeta'
 import { addDias, dataBR, hoje, inicioSemana, mesAtual, nomeMes, num, pct, rotuloSemana } from '@/lib/erp/format'
 import CrudPage, { type Campo } from '@/components/erp/CrudPage'
 import Icon from '@/components/erp/Icon'
 import { PillSituacao } from '@/components/erp/status'
-import { situacaoMeta } from '@/lib/erp/metrics'
+import { situacaoResumo } from '@/lib/erp/metrics'
 import { BarChart, Badge, EmptyState, Modal, PageHeader, Panel, ProgressBar, StatCard, Tabs, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
 type Aba = 'gestao' | 'dashboard' | 'rota' | 'vendedores' | 'fotografos' | 'motoristas'
@@ -110,7 +113,8 @@ function DashboardOperacional() {
   const r = resumo(s, 'operacional', 'fichas', mes)
   const semana = inicioSemana(hoje())
   const feitoSemana = [0, 1, 2, 3, 4, 5, 6].reduce((a, i) => a + somar(s.lancamentos, { setor: 'operacional', indicador: 'fichas', data: addDias(semana, i) }), 0)
-  const metaSemana = r.meta.diaria * 6 // seg a sáb
+  const uteisSemana = [0, 1, 2, 3, 4, 5, 6].filter((i) => ehDiaUtil(addDias(semana, i))).length
+  const metaSemana = r.meta.diaria * uteisSemana // seg a sex, sem feriados
   const esperado = esperadoAteHoje(mes)
   const visitasSemana = colecao(s, 'agenda_visitas').filter((v) => String(v.data) >= semana && String(v.data) <= addDias(semana, 6) && v.status !== 'Cancelada')
   const rotas = colecao(s, 'rotas').filter((x) => x.status === 'Ativa')
@@ -137,13 +141,15 @@ function DashboardOperacional() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Meta da coordenação (RMC): todas as fichas das visitas contam para ela */}
+      <PainelMeta s={s} colaborador={responsavelOperacional(s)} indicadorId="fichas" mes={mes} />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {bloco('Meta diária • hoje', r.hoje, r.meta.diaria, 'Fichas fotografadas hoje')}
-        {bloco('Meta semanal', feitoSemana, metaSemana, `Semana ${rotuloSemana(semana)} • ${visitasSemana.length} visita(s)`)}
+        {bloco('Meta semanal', feitoSemana, metaSemana, `Semana ${rotuloSemana(semana)} • ${uteisSemana} dias úteis • ${visitasSemana.length} visita(s)`)}
         {bloco(`Meta mensal • ${nomeMes(mes)}`, r.mes, r.meta.mensal, `Projeção do mês: ${num(r.projecao)} fichas`)}
       </div>
       <div className="flex items-center gap-3">
-        <PillSituacao situacao={situacaoMeta(r.pctMes, esperado)} />
+        <PillSituacao situacao={situacaoResumo(r, mes)} />
         <span className="text-xs text-zinc-400">
           Hoje deveria estar em {pct(esperado)} da meta do mês • está em {pct(r.pctMes)} • necessário {num(r.necessarioDia)} fichas/dia
         </span>
@@ -390,6 +396,7 @@ function HistoricoContatos({ pessoa, onFechar }: { pessoa: Registro; onFechar: (
 // ---------------------------------------------------------------------------
 function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
   const fotografo = tipo === 'Fotógrafo'
+  const par = parametros(useErp()) // valores editáveis em ADM › Configurações
   return (
     <div className="animate-fade-in">
       <CrudPage
@@ -402,8 +409,8 @@ function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
         titulo={fotografo ? 'Fotógrafos' : 'Motoristas'}
         descricao={
           fotografo
-            ? `Diária entre R$ ${DIARIA_FOTOGRAFO_MIN} e R$ ${DIARIA_FOTOGRAFO_MAX} (iniciante ou profissional) + R$ 80 de alimentação por dia trabalhado`
-            : `Diária em média R$ ${DIARIA_MOTORISTA_PADRAO} + R$ 80 de alimentação • pode incluir sábado e domingo conforme a viagem`
+            ? `Diária entre R$ ${par.diariaFotografoMin} e R$ ${par.diariaFotografoMax} (iniciante ou profissional) + R$ ${par.alimentacaoDiaria} de alimentação por dia trabalhado`
+            : `Diária em média R$ ${par.diariaMotorista} + R$ ${par.alimentacaoDiaria} de alimentação • pode incluir sábado e domingo conforme a viagem`
         }
         rotuloNovo={fotografo ? 'Novo fotógrafo' : 'Novo motorista'}
         filtro={(r) => r.tipo === tipo}
@@ -413,7 +420,7 @@ function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
           { chave: 'uf', label: 'UF', tipo: 'texto', padrao: () => 'PR', tabela: false },
           { chave: 'telefone', label: 'Contato', tipo: 'telefone' },
           ...(fotografo ? [{ chave: 'nivel', label: 'Nível', tipo: 'select' as const, opcoes: ['Iniciante', 'Profissional'] }] : []),
-          { chave: 'diaria', label: 'Diária', tipo: 'moeda', obrigatorio: true, padrao: () => (fotografo ? DIARIA_FOTOGRAFO_MIN : DIARIA_MOTORISTA_PADRAO) },
+          { chave: 'diaria', label: 'Diária', tipo: 'moeda', obrigatorio: true, padrao: () => (fotografo ? par.diariaFotografoMin : par.diariaMotorista) },
           { chave: 'status', label: 'Situação', tipo: 'select', opcoes: ['Ativo', 'Inativo'], obrigatorio: true, tabela: false },
           ...PIX,
           { chave: 'tipo', label: 'Tipo', tipo: 'texto', tabela: false, formulario: false, padrao: () => tipo },

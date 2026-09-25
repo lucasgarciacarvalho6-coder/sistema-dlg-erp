@@ -225,7 +225,11 @@ A mesma regra existe em três lugares:
 
 ## 7. Metas e dashboards
 
-- Cada colaborador tem **meta diária** e **meta mensal** por indicador do seu setor. O padrão vem de `lib/erp/config.ts`, e o ADM ou a Gerência ajustam em **Metas**.
+- Cada colaborador tem, por indicador do seu setor e **por mês**, uma **meta** e um **piso** (o mínimo que precisa ser feito para não dar prejuízo). O ADM ou a Gerência digitam só os valores mensais em **Metas** (com seletor de mês). Um mês sem meta própria usa a do último mês definido; sem nenhuma, vale o padrão de `lib/erp/config.ts`.
+- **Meta diária** = meta mensal ÷ dias úteis do mês, e **piso diário** = piso ÷ dias úteis. Dias úteis são de segunda a sexta, sem feriados nacionais (`lib/erp/calendario.ts`). Ex.: 1.200 ÷ 21 = 57,14.
+- **Situação** (cor): no ritmo da meta = verde; acima do ritmo do piso = amarelo; abaixo do piso = vermelho (prejuízo). Nos gráficos por dia útil vale o mesmo: verde bateu a meta do dia, amarelo passou do piso, vermelho ficou abaixo do piso.
+- No **Operacional**, todas as fichas fotografadas contam para a coordenação (RMC). Os fotógrafos ficam com meta 0 e não aparecem nos cards.
+- **Parâmetros do negócio** (bonificação à escola, diárias, alimentação) são editáveis em **ADM › Configurações** (`PARAMETROS` em `lib/erp/config.ts`, lidos por `lib/erp/parametros.ts`).
 - **Meta do setor** = soma das metas individuais dos colaboradores ativos.
 - A **produção** é registrada por **lançamentos**, que podem ser manuais ("Registrar produção") ou automáticos, gerados pelos fluxos.
 - Cada dashboard de setor mostra:
@@ -304,6 +308,7 @@ VENDEDOR PJ fecha o contrato (papel)
 
 1. `docs/supabase/schema.sql`: banco completo. Em instalação nova, basta este.
 2. `docs/supabase/002_realtime_completo.sql`, `003_fotos_perfil.sql` e `004_operacional.sql`: só para bancos criados com versões anteriores do schema.
+   - `docs/supabase/005_metas_piso_dias_uteis.sql`: rodar **sempre** depois do schema (novo ou antigo). Traz metas por mês com piso, dias úteis, fichas na RMC e parâmetros editáveis.
 3. Criar o primeiro ADM: *Authentication → Add user* e depois o `insert` em `colaboradores` (no final do schema).
 4. Publicar a Edge Function `admin-colaboradores`, deixando **Verify JWT with legacy secret desligado**, porque a função valida o usuário sozinha.
 5. Preencher o `.env.local` e reiniciar.

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
-import { BONIFICACAO_ESCOLA_MAX, BONIFICACAO_ESCOLA_MIN } from '@/lib/erp/config'
+import { parametros } from '@/lib/erp/parametros'
 import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, confirmarContratoEscola, criarRegistro, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, nomePJ, pixCompleto } from '@/lib/erp/operacional'
@@ -35,6 +35,11 @@ const NUMERICOS = ['fichasPrevistas', 'bonificacaoPorFicha']
 
 export default function ContratosEscolaPage() {
   const s = useErp()
+  const par = parametros(s)
+  const bonMin = par.bonificacaoEscolaMin
+  const bonMax = par.bonificacaoEscolaMax
+  // atalhos de valor: de 1 em 1 se a faixa for curta, senão só mínimo e máximo
+  const atalhosBonificacao = bonMax - bonMin <= 4 ? Array.from({ length: Math.floor(bonMax - bonMin) + 1 }, (_, i) => bonMin + i) : [bonMin, bonMax]
   const podeFazer = usePode()
   const [aba, setAba] = useState<Aba>('conferencia')
   const [busca, setBusca] = useState('')
@@ -351,13 +356,13 @@ export default function ContratosEscolaPage() {
                   </label>
                   <div className="flex gap-2">
                     <input type="number" step="0.5" min={0} value={form.bonificacaoPorFicha} onChange={(e) => setForm({ ...form, bonificacaoPorFicha: e.target.value })} className={inputCls} />
-                    {Array.from({ length: BONIFICACAO_ESCOLA_MAX - BONIFICACAO_ESCOLA_MIN + 1 }, (_, i) => BONIFICACAO_ESCOLA_MIN + i).map((v) => (
+                    {atalhosBonificacao.map((v) => (
                       <button key={v} type="button" onClick={() => setForm({ ...form, bonificacaoPorFicha: String(v) })} className={`px-3 rounded-xl text-xs font-bold border ${Number(form.bonificacaoPorFicha) === v ? 'border-blue-500/50 bg-blue-500/10 text-blue-400' : 'border-white/[0.05] text-zinc-400 hover:text-white'}`}>
                         {v}
                       </button>
                     ))}
                   </div>
-                  <p className="text-[10px] text-zinc-500">Doação à escola por aluno fotografado (entre R$ {BONIFICACAO_ESCOLA_MIN} e R$ {BONIFICACAO_ESCOLA_MAX}).</p>
+                  <p className="text-[10px] text-zinc-500">Doação à escola por aluno fotografado (entre R$ {bonMin} e R$ {bonMax} • faixa editável em ADM › Configurações).</p>
                 </div>
                 <div className="md:col-span-2">{campo('observacao', 'Observação')}</div>
               </div>

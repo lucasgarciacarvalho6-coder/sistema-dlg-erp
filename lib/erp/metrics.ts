@@ -1,6 +1,7 @@
 import type { Colaborador, ErpState, Lancamento, Meta, Registro, Setor } from './types'
 import { SETORES } from './config'
 import { diasNoMes, hoje, mesAtual } from './format'
+import { diasUteisAte, diasUteisDoMes, ehDiaUtil, metaDiariaDoMes, totalDiasUteis } from './calendario'
 
 export interface FiltroLanc {
   setor?: Setor
@@ -35,36 +36,72 @@ export function serieMes(lanc: Lancamento[], f: Omit<FiltroLanc, 'mes' | 'data'>
   return serie
 }
 
-export function metaColaborador(c: Colaborador, indicadorId: string): Meta {
-  const padrao = SETORES[c.setor].indicadores.find((i) => i.id === indicadorId)?.metaPadrao
-  return c.metas[indicadorId] ?? padrao ?? { diaria: 0, mensal: 0 }
+// De onde vem a meta do mês: definida para o próprio mês, herdada do último mês definido,
+// meta padrão do colaborador ou padrão do setor. Nada é fixo: cada mês pode ter meta e piso diferentes.
+export type OrigemMeta = { tipo: 'mes' } | { tipo: 'herdada'; mes: string } | { tipo: 'colaborador' } | { tipo: 'setor' }
+
+export function metaDefinida(c: Colaborador, indicadorId: string, mes: string): { meta: Meta; origem: OrigemMeta } {
+  const meses = Object.keys(c.metasMes ?? {})
+    .filter((m) => m <= mes && c.metasMes![m][indicadorId])
+    .sort()
+  const ultimo = meses[meses.length - 1]
+  if (ultimo) return { meta: c.metasMes![ultimo][indicadorId], origem: ultimo === mes ? { tipo: 'mes' } : { tipo: 'herdada', mes: ultimo } }
+  if (c.metas[indicadorId]) return { meta: c.metas[indicadorId], origem: { tipo: 'colaborador' } }
+  const padrao = SETORES[c.setor].indicadores.find((i) => i.id === indicadorId)?.metaPadrao ?? { mensal: 0, diaria: 0 }
+  return { meta: padrao, origem: { tipo: 'setor' } }
 }
+
+// Meta do colaborador no mês. A DIÁRIA é sempre derivada da mensal:
+// mensal ÷ dias úteis do mês (seg–sex, sem feriados) — ex.: 1.200 ÷ 21 = 57,14. O piso segue a mesma conta.
+export function metaColaborador(c: Colaborador, indicadorId: string, mes: string = mesAtual()): Meta {
+  const { meta } = metaDefinida(c, indicadorId, mes)
+  const mensal = meta.mensal ?? 0
+  return { mensal, diaria: metaDiariaDoMes(mensal, mes), piso: Math.min(meta.piso ?? 0, mensal || Infinity) }
+}
+
+export const pisoDiario = (m: Meta, mes: string) => metaDiariaDoMes(m.piso ?? 0, mes)
 
 export function equipe(s: ErpState, setor: Setor) {
   return s.colaboradores.filter((c) => c.setor === setor && c.status === 'ATIVO')
 }
 
+// Quem tem meta no indicador principal do setor (aparece nos cards de metas individuais).
+// Ex.: no Operacional só a coordenação (RMC) tem meta de fichas; fotógrafos ficam com meta 0.
+export function equipeComMeta(s: ErpState, setor: Setor, mes: string = mesAtual()) {
+  const principal = SETORES[setor].indicadores[0].id
+  return equipe(s, setor).filter((c) => metaColaborador(c, principal, mes).mensal > 0)
+}
+
 // Meta do setor = soma das metas individuais dos colaboradores ativos
-export function metaSetor(s: ErpState, setor: Setor, indicadorId: string): Meta {
+export function metaSetor(s: ErpState, setor: Setor, indicadorId: string, mes: string = mesAtual()): Meta {
   return equipe(s, setor).reduce(
     (acc, c) => {
-      const m = metaColaborador(c, indicadorId)
-      return { diaria: acc.diaria + m.diaria, mensal: acc.mensal + m.mensal }
+      const m = metaColaborador(c, indicadorId, mes)
+      return { diaria: acc.diaria + m.diaria, mensal: acc.mensal + m.mensal, piso: (acc.piso ?? 0) + (m.piso ?? 0) }
     },
-    { diaria: 0, mensal: 0 },
+    { diaria: 0, mensal: 0, piso: 0 } as Meta,
   )
 }
 
 export const progresso = (valor: number, meta: number) => (meta > 0 ? (valor / meta) * 100 : 0)
 
-// Dia de referência para projeções: hoje (mês corrente) ou último dia (meses passados)
+// Dia do calendário de referência: hoje (mês corrente) ou último dia (meses passados).
+// Usado para saber até onde desenhar os gráficos.
 export function diaReferencia(mes: string) {
   return mes === mesAtual() ? Number(hoje().slice(8, 10)) : diasNoMes(mes)
 }
 
+// Dias úteis: total do mês e decorridos até hoje (inclusive). Ex.: setembro/2026 → 18 de 21 no dia 25.
+export function diasUteisMes(mes: string) {
+  const total = totalDiasUteis(mes)
+  const decorridos = mes === mesAtual() ? diasUteisAte(mes, hoje()) : mes < mesAtual() ? total : 0
+  return { total, decorridos, restantes: Math.max(0, total - decorridos) }
+}
+
+// Projeção = média por dia útil decorrido × dias úteis do mês (mesma conta do sistema antigo)
 export function projecao(valorMes: number, mes: string) {
-  const dia = diaReferencia(mes)
-  return dia > 0 ? (valorMes / dia) * diasNoMes(mes) : 0
+  const { total, decorridos } = diasUteisMes(mes)
+  return decorridos > 0 ? (valorMes / decorridos) * total : 0
 }
 
 export interface ResumoIndicador {
@@ -75,6 +112,13 @@ export interface ResumoIndicador {
   pctMes: number
   projecao: number
   necessarioDia: number
+  mediaDiaria: number
+  diasDecorridos: number
+  diasUteis: number
+  falta: number
+  piso: number // piso do mês (0 = sem piso)
+  pisoDiario: number
+  faltaPiso: number
 }
 
 export function resumo(s: ErpState, setor: Setor, indicadorId: string, mes: string, colaboradorId?: string): ResumoIndicador {
@@ -82,8 +126,11 @@ export function resumo(s: ErpState, setor: Setor, indicadorId: string, mes: stri
   const valorHoje = somar(s.lancamentos, { ...f, data: hoje() })
   const valorMes = somar(s.lancamentos, { ...f, mes })
   const colab = colaboradorId ? s.colaboradores.find((c) => c.id === colaboradorId) : undefined
-  const meta = colab ? metaColaborador(colab, indicadorId) : metaSetor(s, setor, indicadorId)
-  const diasRestantes = diasNoMes(mes) - diaReferencia(mes) + 1
+  const meta = colab ? metaColaborador(colab, indicadorId, mes) : metaSetor(s, setor, indicadorId, mes)
+  const dias = diasUteisMes(mes)
+  const falta = Math.max(0, meta.mensal - valorMes)
+  // dias que ainda dá para produzir: os que faltam + hoje, se hoje for útil
+  const aindaDa = dias.restantes + (mes === mesAtual() && ehDiaUtil(hoje()) ? 1 : 0)
   return {
     hoje: valorHoje,
     mes: valorMes,
@@ -91,23 +138,22 @@ export function resumo(s: ErpState, setor: Setor, indicadorId: string, mes: stri
     pctDia: progresso(valorHoje, meta.diaria),
     pctMes: progresso(valorMes, meta.mensal),
     projecao: projecao(valorMes, mes),
-    necessarioDia: mes === mesAtual() && diasRestantes > 0 ? Math.max(0, (meta.mensal - valorMes) / diasRestantes) : 0,
+    necessarioDia: mes === mesAtual() && aindaDa > 0 ? falta / aindaDa : 0,
+    mediaDiaria: dias.decorridos > 0 ? valorMes / dias.decorridos : 0,
+    diasDecorridos: dias.decorridos,
+    diasUteis: dias.total,
+    falta,
+    piso: meta.piso ?? 0,
+    pisoDiario: pisoDiario(meta, mes),
+    faltaPiso: Math.max(0, (meta.piso ?? 0) - valorMes),
   }
 }
 
-// Quanto da meta mensal já deveria estar feito até hoje (% dos dias úteis seg–sáb decorridos).
+// Quanto da meta mensal já deveria estar feito até hoje (% dos dias úteis decorridos).
 // Mês passado = 100%. É a régua do "está no ritmo?" dos painéis.
 export function esperadoAteHoje(mes: string) {
-  const [a, m] = mes.split('-').map(Number)
-  const ref = diaReferencia(mes)
-  let uteis = 0
-  let decorridos = 0
-  for (let d = 1; d <= diasNoMes(mes); d++) {
-    if (new Date(a, m - 1, d).getDay() === 0) continue
-    uteis++
-    if (d <= ref) decorridos++
-  }
-  return uteis ? (decorridos / uteis) * 100 : 0
+  const { total, decorridos } = diasUteisMes(mes)
+  return total ? (decorridos / total) * 100 : 0
 }
 
 export type Situacao = 'bom' | 'atencao' | 'critico'
@@ -118,24 +164,30 @@ export function situacaoMeta(pctMes: number, esperado: number): Situacao {
   return pctMes >= esperado * 0.85 ? 'atencao' : 'critico'
 }
 
-// Dias úteis (seg–sáb) do mês: quantos já passaram, em quantos a meta diária foi batida e quantos faltam
+// Situação considerando o PISO (quando definido):
+//   no ritmo da meta = bom • acima do ritmo do piso = atenção • abaixo do piso = crítico (prejuízo)
+// Sem piso, usa a régua antiga (85% do esperado).
+export function situacaoResumo(r: ResumoIndicador, mes: string): Situacao {
+  const esperado = esperadoAteHoje(mes)
+  if (esperado <= 0 || r.meta.mensal <= 0) return 'bom'
+  if (r.piso > 0) {
+    if (r.pctMes >= esperado) return 'bom'
+    return r.mes >= (r.piso * esperado) / 100 ? 'atencao' : 'critico'
+  }
+  return situacaoMeta(r.pctMes, esperado)
+}
+
+// Dias úteis do mês: quantos já passaram, em quantos a meta diária foi batida e quantos faltam
 export function diasDeMeta(s: ErpState, setor: Setor, indicadorId: string, colaboradorId: string, mes: string) {
   const colab = s.colaboradores.find((c) => c.id === colaboradorId)
-  const meta = colab ? metaColaborador(colab, indicadorId).diaria : 0
+  const m = colab ? metaColaborador(colab, indicadorId, mes) : undefined
+  const meta = m?.diaria ?? 0
   const serie = serieMes(s.lancamentos, { setor, indicador: indicadorId, colaboradorId }, mes)
-  const [a, m] = mes.split('-').map(Number)
-  const ref = diaReferencia(mes)
-  let decorridos = 0
+  const dias = diasUteisMes(mes)
+  const uteis = diasUteisDoMes(mes)
   let batidas = 0
-  let restantes = 0
-  serie.forEach((v, i) => {
-    if (new Date(a, m - 1, i + 1).getDay() === 0) return // domingo
-    if (i + 1 <= ref) {
-      decorridos++
-      if (meta > 0 && v >= meta) batidas++
-    } else restantes++
-  })
-  return { decorridos, batidas, restantes, serie, metaDiaria: meta }
+  for (const d of uteis.slice(0, dias.decorridos)) if (meta > 0 && serie[Number(d.slice(8)) - 1] >= meta) batidas++
+  return { decorridos: dias.decorridos, batidas, restantes: dias.restantes, serie, metaDiaria: meta, pisoDiario: m ? pisoDiario(m, mes) : 0, uteis }
 }
 
 export function mesesDisponiveis(s: ErpState) {

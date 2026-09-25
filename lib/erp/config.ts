@@ -231,6 +231,7 @@ export const ETAPAS_LEAD = ['Novo', 'Contato feito', 'Visita agendada', 'Propost
 export const VALOR_APROVACAO_CONTA = 5000 // contas acima disso exigem aprovação da gerência
 
 // ---------------- Operacional (processo de campo) ----------------
+// Valores PADRÃO. Os que valem de verdade são os PARAMETROS abaixo, editáveis em ADM › Configurações.
 // Escola recebe bonificação (doação) por aluno fotografado, definida no contrato
 export const BONIFICACAO_ESCOLA_MIN = 8
 export const BONIFICACAO_ESCOLA_MAX = 10
@@ -239,6 +240,23 @@ export const ALIMENTACAO_DIARIA = 80
 export const DIARIA_FOTOGRAFO_MIN = 150
 export const DIARIA_FOTOGRAFO_MAX = 200
 export const DIARIA_MOTORISTA_PADRAO = 200
+
+// Parâmetros editáveis pelo ADM (nada é fixo: mudam conforme a negociação/temporada)
+export interface DefParametro {
+  chave: string
+  grupo: string
+  label: string
+  ajuda: string
+  padrao: number
+}
+export const PARAMETROS: DefParametro[] = [
+  { chave: 'bonificacaoEscolaMin', grupo: 'Operacional • Escolas', label: 'Bonificação à escola — mínimo (R$)', ajuda: 'Por aluno fotografado, escolhida no contrato', padrao: BONIFICACAO_ESCOLA_MIN },
+  { chave: 'bonificacaoEscolaMax', grupo: 'Operacional • Escolas', label: 'Bonificação à escola — máximo (R$)', ajuda: 'Por aluno fotografado, escolhida no contrato', padrao: BONIFICACAO_ESCOLA_MAX },
+  { chave: 'alimentacaoDiaria', grupo: 'Operacional • Freelancers', label: 'Alimentação por dia trabalhado (R$)', ajuda: 'Somada à diária no adiantamento semanal', padrao: ALIMENTACAO_DIARIA },
+  { chave: 'diariaFotografoMin', grupo: 'Operacional • Freelancers', label: 'Diária do fotógrafo — mínimo (R$)', ajuda: 'Iniciante', padrao: DIARIA_FOTOGRAFO_MIN },
+  { chave: 'diariaFotografoMax', grupo: 'Operacional • Freelancers', label: 'Diária do fotógrafo — máximo (R$)', ajuda: 'Profissional', padrao: DIARIA_FOTOGRAFO_MAX },
+  { chave: 'diariaMotorista', grupo: 'Operacional • Freelancers', label: 'Diária do motorista (R$)', ajuda: 'Valor sugerido no cadastro', padrao: DIARIA_MOTORISTA_PADRAO },
+]
 
 export const STATUS_CONTRATO_ESCOLA = ['Em conferência', 'Na agenda', 'Cancelado'] as const
 export const STATUS_VISITA = ['Agendada', 'Fotografada', 'Fechamento enviado', 'Cancelada'] as const

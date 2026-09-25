@@ -105,6 +105,7 @@ export async function carregarDoSupabase(usuarioId: string): Promise<{ estado: E
             telefone: String(emp.telefone ?? ''),
             cidade: String(emp.cidade ?? ''),
             uf: String(emp.uf ?? ''),
+            parametros: emp.parametros && typeof emp.parametros === 'object' ? (emp.parametros as Record<string, number>) : {},
           }
         : base.empresa,
       colaboradores: colabs,

@@ -9,11 +9,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { colecao, diaReferencia, equipe, esperadoAteHoje, resumo, serieMes, situacaoMeta, somar } from '@/lib/erp/metrics'
+import { colecao, diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { CardColaborador } from './EquipeCards'
 import Icon from './Icon'
 import { LegendaSituacao, PillSituacao, STATUS } from './status'
+import { ehDiaUtil } from '@/lib/erp/calendario'
 
 
 // Cores do gráfico via variáveis de tema (mudam sozinhas no tema claro)
@@ -45,7 +46,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
           const cfg = SETORES[setor]
           const ind = cfg.indicadores[0]
           const r = resumo(s, setor, ind.id, mes)
-          const sit = situacaoMeta(r.pctMes, esperado)
+          const sit = situacaoResumo(r, mes)
           const semMeta = r.meta.mensal <= 0
           return (
             <div key={setor} className={`grid grid-cols-12 items-center gap-4 ${grande ? 'px-8 py-3.5' : 'px-6 py-5'}`}>
@@ -65,10 +66,18 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
                         style={{ width: `${Math.min(100, r.pctMes)}%`, backgroundColor: STATUS[sit].cor }}
                       ></div>
                       <div className="absolute -inset-y-1.5 w-0.5 bg-white rounded" style={{ left: `calc(${Math.min(100, esperado)}% - 1px)` }}></div>
+                      {r.piso > 0 && (
+                        <div
+                          className="absolute -top-1.5 w-0 h-0 border-x-[5px] border-x-transparent border-t-[6px]"
+                          style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 5px)`, borderTopColor: STATUS.atencao.cor }}
+                          title={`Piso do mês: ${formatar(r.piso, ind.unidade)}`}
+                        ></div>
+                      )}
                     </div>
                     <div className="flex justify-between mt-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                       <span>
                         Feito: <span className="text-white">{formatar(r.mes, ind.unidade)}</span> de {formatar(r.meta.mensal, ind.unidade)}
+                        {r.piso > 0 && <span style={{ color: STATUS.atencao.cor }}> • piso {formatar(r.piso, ind.unidade)}</span>}
                       </span>
                       <span>
                         {atual ? (
@@ -101,8 +110,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
 // ---------------------------------------------------------------------------
 function acumulados(s: ErpState, setor: Setor, indicadorId: string, mes: string, metaMensal: number) {
   const diaria = serieMes(s.lancamentos, { setor, indicador: indicadorId }, mes)
-  const [a, m] = mes.split('-').map(Number)
-  const uteis = diaria.map((_, i) => new Date(a, m - 1, i + 1).getDay() !== 0)
+  const uteis = diaria.map((_, i) => ehDiaUtil(`${mes}-${String(i + 1).padStart(2, '0')}`))
   const totalUteis = uteis.filter(Boolean).length || 1
   let soma = 0
   let uteisAte = 0
@@ -117,8 +125,7 @@ export function EvolucaoSetor({ s, setor, mes, grande = false }: { s: ErpState; 
   const cfg = SETORES[setor]
   const ind = cfg.indicadores[0]
   const r = resumo(s, setor, ind.id, mes)
-  const esperado = esperadoAteHoje(mes)
-  const sit = situacaoMeta(r.pctMes, esperado)
+  const sit = situacaoResumo(r, mes)
   const cor = STATUS[sit].cor
   const pontos = acumulados(s, setor, ind.id, mes, r.meta.mensal)
   const ultimoDia = mes === mesAtual() ? diaReferencia(mes) : pontos.length
@@ -306,7 +313,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
 
   const pessoas: Colaborador[] = useMemo(
     () =>
-      SETORES_PRODUTIVOS.flatMap((setor) => equipe(s, setor))
+      SETORES_PRODUTIVOS.flatMap((setor) => equipeComMeta(s, setor, mes))
         .map((c) => ({ c, p: resumo(s, c.setor, SETORES[c.setor].indicadores[0].id, mes, c.id).pctMes }))
         .sort((a, b) => b.p - a.p)
         .map((x) => x.c),

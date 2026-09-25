@@ -28,7 +28,11 @@ export type Tom = 'blue' | 'emerald' | 'orange' | 'red' | 'violet' | 'yellow' | 
 export interface Meta {
   diaria: number
   mensal: number
+  piso?: number // PISO do mês: mínimo que precisa ser feito para não dar prejuízo (piso diário = piso ÷ dias úteis)
 }
+
+// Parâmetros do negócio editáveis pelo ADM (bonificação, diárias, alimentação...). Ver PARAMETROS em config.ts
+export type Parametros = Record<string, number>
 
 export interface Colaborador {
   id: string
@@ -42,7 +46,8 @@ export interface Colaborador {
   perfil: Perfil
   status: 'ATIVO' | 'INATIVO'
   dataAdmissao: string
-  metas: Record<string, Meta> // chave = id do indicador do setor
+  metas: Record<string, Meta> // meta padrão (vale para qualquer mês sem meta própria); chave = id do indicador
+  metasMes?: Record<string, Record<string, Meta>> // metas de um mês específico: 'YYYY-MM' → indicador → meta
   foto?: string // URL da foto de perfil (Supabase Storage) ou data URL (modo demo)
   criadoEm: string
 }
@@ -106,6 +111,7 @@ export interface Empresa {
   telefone: string
   cidade: string
   uf: string
+  parametros?: Parametros
 }
 
 export interface ErpState {

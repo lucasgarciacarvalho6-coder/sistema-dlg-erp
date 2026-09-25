@@ -78,7 +78,14 @@ const txt = (v: unknown) => (v === null || v === undefined ? '' : String(v))
 
 export function colaboradorDoBanco(l: Linha, metas: Linha[]): Colaborador {
   const minhas: Record<string, Meta> = {}
-  for (const m of metas) if (m.colaborador_id === l.id) minhas[txt(m.indicador_id)] = { diaria: Number(m.diaria), mensal: Number(m.mensal) }
+  const porMes: Record<string, Record<string, Meta>> = {}
+  for (const m of metas) {
+    if (m.colaborador_id !== l.id) continue
+    const meta = { diaria: Number(m.diaria), mensal: Number(m.mensal), piso: Number(m.piso ?? 0) }
+    const mes = txt(m.mes)
+    if (!mes || mes === '*') minhas[txt(m.indicador_id)] = meta // meta padrão
+    else (porMes[mes] ??= {})[txt(m.indicador_id)] = meta // meta de um mês específico
+  }
   return {
     id: txt(l.id),
     nome: txt(l.nome),
@@ -92,6 +99,7 @@ export function colaboradorDoBanco(l: Linha, metas: Linha[]): Colaborador {
     status: l.status as Colaborador['status'],
     dataAdmissao: txt(l.data_admissao),
     metas: minhas,
+    metasMes: porMes,
     foto: txt(l.foto_url),
     criadoEm: txt(l.created_at),
   }

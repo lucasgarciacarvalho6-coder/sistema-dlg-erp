@@ -20,8 +20,10 @@ import {
   type Contexto,
 } from './fluxos'
 import { calcularFechamentoEscola } from './operacional'
+import { ehDiaUtil } from './calendario'
+import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 2 // v2: processo operacional real (contratos de escola, agenda, fechamentos)
+export const VERSAO_DADOS = 4 // v4: metas com PISO e metas por mês; fichas do Operacional todas na RMC
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -95,7 +97,12 @@ export function gerarSeed(): ErpState {
     perfil: setor === 'adm' ? 'ADM' : setor === 'gerencia' ? 'GERENTE' : 'COLABORADOR',
     status: 'ATIVO',
     dataAdmissao: '2025-02-01',
-    metas: {},
+    // Meta padrão com PISO (mínimo p/ não dar prejuízo) = 80% da meta. Operacional: meta de fichas
+    // toda da coordenação (RMC, 1.200 com piso 1.000); fotógrafos não têm meta
+    metas:
+      setor === 'operacional'
+        ? { fichas: id === 'u-op1' ? { mensal: 1200, diaria: 0, piso: 1000 } : { mensal: 0, diaria: 0, piso: 0 } }
+        : Object.fromEntries(SETORES[setor].indicadores.map((ind) => [ind.id, { mensal: ind.metaPadrao.mensal, diaria: 0, piso: Math.round(ind.metaPadrao.mensal * 0.8) }])),
     criadoEm: criado,
   }))
 
@@ -105,12 +112,13 @@ export function gerarSeed(): ErpState {
   const agora = new Date()
   const inicio = isoData(new Date(agora.getFullYear(), agora.getMonth() - 1, 1))
   for (let dia = inicio; dia <= hojeISO; dia = addDias(dia, 1)) {
-    const [a, m, d] = dia.split('-').map(Number)
-    if (new Date(a, m - 1, d).getDay() === 0) continue // domingo
+    if (!ehDiaUtil(dia)) continue // fim de semana / feriado
     const fatorDia = dia === hojeISO ? 0.55 : 1
     for (const c of s.colaboradores) {
       for (const ind of SETORES[c.setor].indicadores) {
-        const base = ind.metaPadrao.diaria * (0.45 + r() * 0.7) * fatorDia * (c.id === 'u-ven3' ? 1.2 : 1)
+        const diaria = metaColaborador(c, ind.id, dia.slice(0, 7)).diaria
+        if (diaria <= 0) continue // sem meta nesse indicador (ex.: fotógrafos)
+        const base = diaria * (0.45 + r() * 0.7) * fatorDia * (c.id === 'u-ven3' ? 1.2 : 1)
         let qtd = base < 3 ? Math.floor(base + r()) : Math.round(base)
         if (ind.unidade === 'brl') qtd = Math.round(base / 10) * 10
         if (qtd > 0) {

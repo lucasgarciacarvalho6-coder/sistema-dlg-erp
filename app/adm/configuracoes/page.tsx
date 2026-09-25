@@ -1,7 +1,9 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { MODO, exportarBackup, importarBackup, restaurarDemo, salvarEmpresa, useErp, usePode } from '@/lib/erp/store'
+import { MODO, exportarBackup, importarBackup, restaurarDemo, salvarEmpresa, salvarParametros, useErp, usePode } from '@/lib/erp/store'
+import { PARAMETROS } from '@/lib/erp/config'
+import { parametros } from '@/lib/erp/parametros'
 import Icon from '@/components/erp/Icon'
 import { Badge, Modal, PageHeader, Panel, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
@@ -37,7 +39,7 @@ export default function ConfiguracoesPage() {
     setMsg(erro ?? 'Backup importado com sucesso.')
   }
 
-  const campo = (chave: keyof typeof empresa, label: string) => (
+  const campo = (chave: Exclude<keyof typeof empresa, 'parametros'>, label: string) => (
     <div className="space-y-2">
       <label className={labelCls}>{label}</label>
       <input disabled={!editavel} value={empresa[chave]} onChange={(e) => setEmpresa({ ...empresa, [chave]: e.target.value })} className={`${inputCls} disabled:opacity-60`} />
@@ -113,6 +115,8 @@ export default function ConfiguracoesPage() {
         </div>
       </div>
 
+      <PainelParametros editavel={editavel} />
+
       <Panel titulo="Integrações externas" semPadding>
         <div className="divide-y divide-white/[0.03]">
           {INTEGRACOES.map((i) => (
@@ -152,5 +156,60 @@ export default function ConfiguracoesPage() {
         <p className="text-sm text-zinc-300">Recomendado baixar um backup antes. Esta ação não pode ser desfeita.</p>
       </Modal>
     </div>
+  )
+}
+
+// Parâmetros do negócio: nada é fixo — o ADM ajusta conforme a temporada/negociação
+function PainelParametros({ editavel }: { editavel: boolean }) {
+  const s = useErp()
+  const atuais = parametros(s) as unknown as Record<string, number>
+  const [valores, setValores] = useState<Record<string, string>>(() => Object.fromEntries(PARAMETROS.map((p) => [p.chave, String(atuais[p.chave])])))
+  const [erro, setErro] = useState('')
+  const [salvo, setSalvo] = useState(false)
+  const grupos = [...new Set(PARAMETROS.map((p) => p.grupo))]
+
+  const salvar = async () => {
+    const num = Object.fromEntries(PARAMETROS.map((p) => [p.chave, Number(String(valores[p.chave]).replace(',', '.'))]))
+    if (Object.values(num).some((v) => !Number.isFinite(v) || v < 0)) return setErro('Informe valores numéricos (zero ou maiores).')
+    if (num.bonificacaoEscolaMin > num.bonificacaoEscolaMax) return setErro('A bonificação mínima não pode ser maior que a máxima.')
+    if (num.diariaFotografoMin > num.diariaFotografoMax) return setErro('A diária mínima do fotógrafo não pode ser maior que a máxima.')
+    setErro('')
+    if (await salvarParametros(num)) return
+    setSalvo(true)
+    setTimeout(() => setSalvo(false), 2000)
+  }
+
+  return (
+    <Panel
+      titulo="Parâmetros do negócio"
+      subtitulo="Valores usados nos contratos e fechamentos do Operacional. Alterar aqui vale para os próximos lançamentos (os já enviados não mudam)."
+      acoes={editavel ? <button onClick={salvar} className={btnPrimario}>{salvo ? 'Salvo ✓' : 'Salvar parâmetros'}</button> : undefined}
+    >
+      <div className="space-y-6">
+        {grupos.map((g) => (
+          <div key={g}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-400 mb-3">{g}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {PARAMETROS.filter((p) => p.grupo === g).map((p) => (
+                <div key={p.chave} className="space-y-2">
+                  <label className={labelCls}>{p.label}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.5"
+                    disabled={!editavel}
+                    value={valores[p.chave]}
+                    onChange={(e) => setValores({ ...valores, [p.chave]: e.target.value })}
+                    className={`${inputCls} disabled:opacity-60`}
+                  />
+                  <p className="text-[10px] text-zinc-500">{p.ajuda} • padrão R$ {p.padrao}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
+      </div>
+    </Panel>
   )
 }

@@ -483,16 +483,17 @@ export async function excluirColaborador(id: string): Promise<string | null> {
   return null
 }
 
-export async function definirMetas(colaboradorId: string, metas: Record<string, Meta>): Promise<string | null> {
+// Metas de um MÊS ('YYYY-MM'). Os meses seguintes herdam essa meta até o ADM definir outra.
+export async function definirMetas(colaboradorId: string, metas: Record<string, Meta>, mes: string): Promise<string | null> {
   if (MODO === 'supabase') {
-    const linhas = Object.entries(metas).map(([indicador_id, m]) => ({ colaborador_id: colaboradorId, indicador_id, diaria: m.diaria, mensal: m.mensal }))
-    return gravar(() => sb().from('metas').upsert(linhas, { onConflict: 'colaborador_id,indicador_id' }))
+    const linhas = Object.entries(metas).map(([indicador_id, m]) => ({ colaborador_id: colaboradorId, indicador_id, mes, diaria: m.diaria, mensal: m.mensal, piso: m.piso ?? 0 }))
+    return gravar(() => sb().from('metas').upsert(linhas, { onConflict: 'colaborador_id,indicador_id,mes' }), 'Metas salvas.')
   }
   mutar((d, ctx) => {
     const c = d.colaboradores.find((x) => x.id === colaboradorId)
     if (!c) return
-    c.metas = { ...c.metas, ...metas }
-    F.auditar(d, ctx, 'EDITAR', `Metas atualizadas: ${c.nome}`, c.setor)
+    c.metasMes = { ...(c.metasMes ?? {}), [mes]: { ...(c.metasMes?.[mes] ?? {}), ...metas } }
+    F.auditar(d, ctx, 'EDITAR', `Metas de ${mes} atualizadas: ${c.nome}`, c.setor)
   })
   return null
 }
@@ -782,9 +783,24 @@ export function marcarLidas(ids: string[]) {
   })
 }
 
+// Parâmetros do negócio (bonificação, diárias, alimentação...) — ADM › Configurações
+export async function salvarParametros(valores: Record<string, number>): Promise<string | null> {
+  if (MODO === 'supabase') {
+    if (!empresaId) return 'Cadastre os dados da empresa antes de salvar os parâmetros.'
+    return gravar(() => sb().from('empresas').update({ parametros: valores }).eq('id', empresaId!), 'Parâmetros salvos.')
+  }
+  mutar((d, ctx) => {
+    d.empresa = { ...d.empresa, parametros: valores }
+    F.auditar(d, ctx, 'EDITAR', 'Parâmetros do negócio atualizados', 'adm')
+  })
+  return null
+}
+
 export async function salvarEmpresa(empresa: ErpState['empresa']): Promise<string | null> {
   if (MODO === 'supabase') {
-    return gravar(() => (empresaId ? sb().from('empresas').update(empresa).eq('id', empresaId) : sb().from('empresas').insert(empresa)), 'Dados da empresa salvos.')
+    const { parametros: _p, ...dados } = empresa // parâmetros têm tela e ação próprias
+    void _p
+    return gravar(() => (empresaId ? sb().from('empresas').update(dados).eq('id', empresaId) : sb().from('empresas').insert(dados)), 'Dados da empresa salvos.')
   }
   mutar((d, ctx) => {
     d.empresa = empresa
