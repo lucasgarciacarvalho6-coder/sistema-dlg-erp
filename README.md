@@ -190,13 +190,14 @@ src/
 
 | Setor | Rota inicial | Telas | Indicadores de meta |
 |---|---|---|---|
-| **Administração** | `/adm` | Visão TV, Colaboradores, Matriz de acesso, Metas, Cadastros, Relatórios, Auditoria, Configurações e atalhos para todos os setores | — (visão total) |
+| **Administração** | `/adm` | Visão TV (com o **caminho do mês** e o alerta de **quem está abaixo do piso**), Colaboradores, **Vendedores externos**, Matriz de acesso, Metas, Cadastros, Relatórios, Auditoria, Configurações e atalhos para todos os setores | — (visão total) |
 | **Gerência** | `/gerencia` | Painel tático, Metas das equipes, Aprovações, Relatórios e atalhos para todos os setores | Aprovações analisadas |
-| **Operacional** | `/operacional/metas` | Dashboard & metas, Controle operacional (gestão diária, dashboard, rotas, vendedores PJ, fotógrafos, motoristas), Contratos de escola, Agenda fotográfica, Fechamento operacional, Tarefas avulsas, Histórico | Fichas fotografadas |
+| **Operacional** | `/operacional/metas` | Dashboard & metas, Controle operacional (gestão diária, dashboard, rotas, vendedores PJ, fotógrafos, motoristas, veículos), Contratos de escola, Agenda fotográfica, Fechamento operacional, **App dos vendedores**, **GPS dos vendedores**, Tarefas avulsas, Histórico | Fichas fotografadas |
 | **Vendas** | `/vendas` | Dashboard das vendedoras, Leads & prospecção, Contratos (pedidos), Tabela de preços, Histórico | Contratos fechados, Escolas visitadas |
-| **Produção** | `/producao` | Dashboard, Ordens de produção, Matéria-prima, Qualidade & perdas, Histórico | Fotos editadas, E-books gerados |
-| **Financeiro** | `/financeiro` | Dashboard, Contas a pagar, Pagamentos operacionais (PIX dos fechamentos), Fluxo de caixa, Histórico | Pagamentos processados |
-| **Cobrança** | `/cobranca` | Dashboard, Vendas de e-books, Contas a receber, Inadimplência, Acordos, Histórico | E-books vendidos, Valor recebido |
+| **Produção** | `/app/producao` (equipe) · `/producao` (painel) | A equipe usa só o **app da Produção** (books feitos no dia). No ERP ficam o painel de books e o histórico | Books produzidos |
+| **Financeiro** | `/financeiro` | Dashboard, Contas a pagar, Pagamentos operacionais (PIX dos fechamentos), **Vendas de books** (todas as vendas e formas de pagamento), Fluxo de caixa, Histórico | Pagamentos processados |
+| **Cobrança** | `/cobranca` | Dashboard, Vendas de books (equipe interna), Contas a receber, Inadimplência, Acordos, Histórico | Books vendidos, Valor recebido |
+| **Vendedores externos** | `/app/vendedor` | Só o **app do vendedor** (celular): vendedor de contrato e vendedor de books | — |
 
 **Login.** O sistema identifica o colaborador pelo e-mail, lê o **setor** e redireciona para a rota inicial dele.
 Quem define o setor é o ADM, em `/adm/colaboradores`, e o perfil (ADM, GERENTE ou COLABORADOR) é derivado automaticamente do setor.
@@ -283,10 +284,10 @@ VENDEDOR PJ fecha o contrato (papel)
    └─► CONTRATOS DE ESCOLA: importar arquivo → revisar campos → "Em conferência"
          • obrigatórios: escola, cidade, endereço, telefone, diretora, vendedor, fichas, data, bonificação/ficha
          • PIX da escola pode ser completado depois (não bloqueia)
-   └─► diretora confirma → "Enviar à agenda" ─► AGENDA FOTOGRÁFICA (visita) + ordem na PRODUÇÃO
+   └─► diretora confirma → "Enviar à agenda" ─► AGENDA FOTOGRÁFICA (visita)
          • histórico de contatos: fichas autorizadas pelos pais
          • equipe, carro, fotógrafos e motorista (freelancers)
-   └─► ENCERRAR VISITA (fichas fotografadas) ─► meta do Operacional + fotos para tratamento na Produção
+   └─► ENCERRAR VISITA (fichas fotografadas) ─► meta do Operacional (as fotos seguem para os editores PJ, fora do sistema)
    └─► FECHAMENTO OPERACIONAL
          • escola (diário):   fichas bonificadas × R$/ficha  + ajudantes (valor combinado)
          • vendedor (semanal): alunos fotografados nas escolas dele × R$ por aluno
@@ -296,9 +297,36 @@ VENDEDOR PJ fecha o contrato (papel)
 ```
 
 - **Gestão diária** (Controle Operacional) lista só as pendências acionáveis: contratos a conferir, PIX faltando, fichas a confirmar, equipes a definir, visitas a encerrar, fechamentos a enviar e vendedores sem contato. Resolvida na origem, a pendência some sozinha.
-- **Cadastros PJ** (sem login): vendedores de contrato (R$ por aluno fotografado, histórico de contatos), fotógrafos (diária de R$ 150 a 200) e motoristas (diária de ~R$ 200).
+- **Cadastros PJ**: vendedores de contrato (com login no app, criado pelo ADM) (R$ por aluno fotografado, histórico de contatos), fotógrafos (diária de R$ 150 a 200) e motoristas (diária de ~R$ 200).
 - **Controle de rota**: uma rota por vendedor e estado, com as cidades na ordem de visita, o resultado de cada visita e os contratos fechados.
 - **Banco**: tabelas e triggers em `docs/supabase/004_operacional.sql`. Regras no front: `lib/erp/operacional.ts` e `lib/erp/fluxos.ts`.
+
+---
+
+## 8c. Apps de celular (PWA)
+
+São dois apps instaláveis pelo navegador. No celular, é só abrir o link e tocar em "Adicionar à tela inicial". Eles usam o mesmo login e o mesmo banco do ERP, e tudo que registram aparece na hora no dashboard do ADM.
+
+| App | Quem usa | O que faz |
+|---|---|---|
+| **`/app/producao`** | Equipe da Produção (setor `producao`) | Informa os **books feitos no dia**, com a escola opcional. Mostra a meta do dia, o piso, o mês e os últimos dias úteis. Dá para corrigir o lançamento do próprio dia. |
+| **`/app/vendedor`** — contrato | Vendedor de **contrato** (setor `externo`) | Fotografa o contrato da escola com a câmera, sem passar pelo WhatsApp. O contrato vai para **Contratos de Escola › Em conferência** com o selo 📱 APP, e a leitura automática roda ao abrir. Também mostra "Minhas escolas". |
+| **`/app/vendedor`** — books | Vendedor de **books** (setor `externo`) | Registra a venda (família, valor, PIX, dinheiro, cartão ou boleto, parcelas) e envia **documentos**. Informa os **books devolvidos** (não vendidos), que seguem para as vendas internas. |
+
+- **Cadastro e login dos vendedores:** em **ADM › Vendedores externos** (tipo contrato ou books → "Criar acesso"). Cada vendedor vê só o que é dele; o banco bloqueia o resto do ERP.
+- **GPS:**
+  - É obrigatório para usar o app, com aviso de monitoramento (LGPD) aceito na primeira vez.
+  - A localização é registrada **enquanto o app está aberto**: ao abrir, a cada ~3 min e em cada ação. O vendedor não vê mapa nem rota.
+  - O Operacional acompanha em **GPS dos Vendedores**: um card por vendedor, a última posição de todos e a rota do dia (Leaflet + OpenStreetMap).
+  - O histórico fica guardado por 90 dias.
+- **Vendas de books:**
+  - **Boleto** gera parcelas mensais em aberto em Contas a Receber, e a Cobrança acompanha os atrasos.
+  - **PIX, dinheiro e cartão** ficam registrados como recebidos na venda. O sistema só registra; o pagamento é feito no sistema de fora.
+  - Tudo aparece em **Financeiro › Vendas de books**.
+- **Código:**
+  - `src/app/app/*`;
+  - `components/app/` (moldura, GPS e câmera);
+  - as ações ficam em `lib/erp/store.ts` (seção "Apps de celular").
 
 ---
 
@@ -310,6 +338,12 @@ VENDEDOR PJ fecha o contrato (papel)
 2. `docs/supabase/002_realtime_completo.sql`, `003_fotos_perfil.sql` e `004_operacional.sql`: só para bancos criados com versões anteriores do schema.
    - `docs/supabase/005_metas_piso_dias_uteis.sql`: rodar **sempre** depois do schema (novo ou antigo). Traz metas por mês com piso, dias úteis, fichas na RMC e parâmetros editáveis.
    - `docs/supabase/006_cancelar_excluir_contrato.sql`: rodar depois do 005. Permite **cancelar** e **excluir** um contrato de escola. O cancelamento também tira a visita da agenda e a ordem que aguardava fotos. As duas ações são bloqueadas se a escola já foi fotografada.
+   - `docs/supabase/008_apps_vendedores_producao_gps.sql`: rodar depois do 007. Cria:
+     - o setor `externo` (vendedores externos com login);
+     - as tabelas de documentos, devoluções e GPS (`localizacoes`, fora do Realtime);
+     - as colunas de canal e forma de pagamento nas vendas de books;
+     - o indicador "Books produzidos".
+     Também desliga a criação automática de ordens de produção.
    - `docs/supabase/007_veiculos_equipes.sql`: rodar depois do 006. Cria o cadastro de **veículos** e liga o veículo a cada visita. A equipe da viagem tem veículo, motorista e de 1 a 4 fotógrafos.
 3. Criar o primeiro ADM: *Authentication → Add user* e depois o `insert` em `colaboradores` (no final do schema).
 4. Publicar a Edge Function `admin-colaboradores`, deixando **Verify JWT with legacy secret desligado**, porque a função valida o usuário sozinha.
@@ -396,10 +430,15 @@ ERP
 │   └── ✅ Recebimentos · ✅ Baixas · ✅ Histórico · ✅ Venda de e-books aos pais
 │
 ├── 08. ÁREA DE PRODUÇÃO
-│   ├── ✅ Dashboard · ✅ Ordens de produção · ✅ Etapas · ✅ Apontamentos · ✅ Controle
-│   ├── ✅ Produtos · ✅ Matéria-prima · ✅ Perdas · ✅ Qualidade · ✅ Histórico
-│   ├── 🟡 Planejamento (prazos e fila por etapa)
-│   └── ⬜ Ficha técnica
+│   ├── ✅ App da Produção (celular): books feitos no dia, meta, piso e correção do dia
+│   └── ✅ Painel de books produzidos e histórico no ERP (ordens, matéria-prima e qualidade saíram: a produção só informa books)
+│
+├── 08b. APPS DOS VENDEDORES EXTERNOS (PWA)
+│   ├── ✅ Cadastro e login pelo ADM (vendedor de contrato / vendedor de books)
+│   ├── ✅ Foto do contrato pela câmera → Operações (leitura automática) · ✅ Minhas escolas
+│   ├── ✅ Venda de books (forma de pagamento e parcelas) · ✅ Documentos · ✅ Books devolvidos
+│   ├── ✅ GPS obrigatório (só com o app aberto) → Operacional › GPS dos Vendedores
+│   └── ⬜ Contrato de venda gerado pelo sistema + assinatura do pai no celular + cópia por e-mail (aguarda modelo e domínio)
 │
 ├── (EXTRA) ÁREA FINANCEIRA
 │   └── ✅ Dashboard · ✅ Contas a pagar · ✅ Comissões das escolas · ✅ Fluxo de caixa · ✅ Histórico

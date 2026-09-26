@@ -230,7 +230,7 @@ export default function LoginPage() {
                     email === c.email ? 'border-blue-500/60 text-blue-400' : 'border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white'
                   }`}
                 >
-                  {SETORES[c.setor].nome}
+                  {'rotulo' in c && c.rotulo ? c.rotulo : SETORES[c.setor].nome}
                 </button>
               ))}
             </div>

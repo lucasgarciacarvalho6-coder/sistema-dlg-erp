@@ -58,6 +58,8 @@ export function pode(usuario: Colaborador | null, matriz: MatrizPermissoes, modu
   return false
 }
 
+// Produção (equipe) e vendedores externos entram direto no app de celular
 export function rotaInicial(usuario: Colaborador) {
+  if (usuario.setor === 'producao' && usuario.perfil === 'COLABORADOR') return '/app/producao'
   return SETORES[usuario.setor].home
 }

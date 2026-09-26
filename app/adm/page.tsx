@@ -9,6 +9,7 @@ import { brl, dataHoraBR, formatar, mesAtual, nomeMes, num, pct } from '@/lib/er
 import Icon from '@/components/erp/Icon'
 import { RankingGeral } from '@/components/erp/PainelSetores'
 import { GradeEvolucao, ModoTV, PlacarAreas } from '@/components/erp/VisaoTV'
+import { AbaixoDoPiso, FunilDoMes } from '@/components/erp/FunilADM'
 import EquipeCards from '@/components/erp/EquipeCards'
 import { Badge, PageHeader, Panel, StatCard, TONS, btnBranco } from '@/components/erp/ui'
 
@@ -23,8 +24,7 @@ export default function AdmVisaoTVPage() {
   const fotografado = resumo(s, 'operacional', 'fichas', mes)
   const contratos = resumo(s, 'vendas', 'contratos', mes)
   const ebooks = resumo(s, 'cobranca', 'ebooks_vendidos', mes)
-  const ordens = colecao(s, 'ordens_producao')
-  const emProducao = ordens.filter((o) => o.etapa !== 'Concluído').length
+  const books = resumo(s, 'producao', 'books', mes)
   const titulos = colecao(s, 'titulos')
   const abertos = titulos.filter((t) => t.status === 'Aberto' || t.status === 'Em acordo')
   const atrasados = titulos.filter(tituloAtrasado)
@@ -79,20 +79,24 @@ export default function AdmVisaoTVPage() {
         <div className="bg-painel-2/80 border border-violet-500/20 p-8 rounded-3xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-violet-500 opacity-60 shadow-[0_0_15px_#8b5cf6]"></div>
           <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-violet-500/10 brilho scale-150 rounded-full"></div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Total em Produção</p>
-          <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4 relative z-10">{emProducao}</p>
-          <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold relative z-10">Ordens abertas • {ordens.length - emProducao} concluídas</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Books produzidos • Produção</p>
+          <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4 relative z-10">{num(books.mes)}</p>
+          <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold relative z-10">Hoje {num(books.hoje)} • {pct(books.pctMes)} da meta mensal</p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard tom="emerald" label="Contratos no mês" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} progresso={contratos.pctMes} />
-        <StatCard tom="orange" label="E-books vendidos" valor={num(ebooks.mes)} detalhe={`Meta ${num(ebooks.meta.mensal)} • hoje ${num(ebooks.hoje)}`} progresso={ebooks.pctMes} />
+        <StatCard tom="orange" label="Books vendidos (internas)" valor={num(ebooks.mes)} detalhe={`Meta ${num(ebooks.meta.mensal)} • hoje ${num(ebooks.hoje)}`} progresso={ebooks.pctMes} />
         <StatCard tom="red" label="Inadimplência" valor={pct(inadimplencia)} detalhe={`${atrasados.length} título(s) em atraso`} />
         <Link href="/gerencia/aprovacoes" className="block">
           <StatCard tom="yellow" label="Aprovações pendentes" valor={aprovacoesPendentes} detalhe="Gerência • clique para ver" />
         </Link>
       </div>
+
+      {/* Caminho completo do mês (setores + apps) e quem está abaixo do piso */}
+      <FunilDoMes s={s} mes={mes} />
+      <AbaixoDoPiso s={s} mes={mes} />
 
       {/* Placar: cada área contra a meta do mês, com a marca de onde deveria estar hoje */}
       <PlacarAreas s={s} mes={mes} />

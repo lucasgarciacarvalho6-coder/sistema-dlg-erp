@@ -2,13 +2,14 @@
 
 import { useMemo, useRef, useState } from 'react'
 import type { Colaborador, Setor } from '@/lib/erp/types'
-import { SETORES, perfilDoSetor } from '@/lib/erp/config'
+import { SETORES_ERP, SETORES, perfilDoSetor } from '@/lib/erp/config'
 import { avisar, definirFoto, excluirColaborador, salvarColaborador, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { dataBR, hoje, iniciais } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Avatar, Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
-const SETORES_IDS = Object.keys(SETORES) as Setor[]
+// vendedores externos são cadastrados em ADM › Vendedores externos
+const SETORES_IDS = SETORES_ERP
 
 type Form = {
   nome: string

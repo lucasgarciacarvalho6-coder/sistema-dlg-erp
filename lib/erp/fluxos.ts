@@ -6,7 +6,7 @@
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
-import { addDias, hoje, uid } from './format'
+import { addDias, addMeses, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 
 export interface Contexto {
@@ -94,52 +94,54 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
       status: 'Pendente',
       contratoId: r.id,
     })
-    inserir(d, 'ordens_producao', {
-      escola: r.escola,
-      contratoId: r.id,
-      alunos: r.alunos,
-      fotos: 0,
-      etapa: ETAPAS_PRODUCAO[0],
-      responsavelId: '',
-      prazo: addDias(data, 30),
-    })
     notificar(d, ctx, {
-      setores: ['operacional', 'producao', 'adm', 'gerencia'],
+      setores: ['operacional', 'adm', 'gerencia'],
       tipo: 'info',
       titulo: 'Novo contrato fechado',
-      descricao: `${r.escola} (${r.cidade}) — ${r.alunos} alunos. Sessão fotográfica e ordem de produção criadas.`,
+      descricao: `${r.escola} (${r.cidade}) — ${r.alunos} alunos. Sessão fotográfica criada.`,
       link: '/operacional/tarefas',
     })
   },
 
   // VENDA DE E-BOOK AOS PAIS → Contas a receber (parcelas).
   // (A escola NÃO recebe % sobre a venda: ela recebe a bonificação por ficha no fechamento operacional.)
+  // Canal Interno (equipe da empresa) conta na meta da Cobrança; Externo (vendedor de books do app) não.
+  // Boleto → parcelas mensais em aberto; PIX, dinheiro e cartão → registrado como recebido na venda.
   vendas_ebooks(d, r, ctx) {
     const data = String(r.data || hoje())
     const valor = Number(r.valor) || 0
     const parcelas = Math.max(1, Number(r.parcelas) || 1)
-    lancar(d, ctx, { setor: 'cobranca', indicador: 'ebooks_vendidos', colaboradorId: String(r.cobradorId ?? ''), quantidade: 1, descricao: `${r.pacote} — ${r.responsavel}`, data })
-    for (let i = 1; i <= parcelas; i++) {
-      inserir(d, 'titulos', {
-        cliente: r.responsavel,
-        aluno: r.aluno,
-        escola: r.escola,
-        telefone: r.telefone,
-        parcela: `${i}/${parcelas}`,
-        valor: Math.round((valor / parcelas) * 100) / 100,
-        vencimento: addDias(data, 30 * (i - 1)),
-        status: 'Aberto',
-        dataPagamento: '',
-        cobradorId: r.cobradorId,
-        vendaId: r.id,
-      })
+    const canal = String(r.canal || 'Interno')
+    const forma = String(r.formaPagamento || 'Boleto')
+    r.canal = canal
+    r.formaPagamento = forma
+    if (!r.pacote) r.pacote = 'Book'
+    if (canal === 'Interno') {
+      lancar(d, ctx, { setor: 'cobranca', indicador: 'ebooks_vendidos', colaboradorId: String(r.cobradorId ?? ''), quantidade: Number(r.quantidade) || 1, descricao: `${r.pacote} — ${r.responsavel}`, data })
+    }
+    const base = { cliente: r.responsavel, aluno: r.aluno, escola: r.escola, telefone: r.telefone, cobradorId: r.cobradorId ?? '', vendaId: r.id, formaPagamento: forma }
+    if (forma === 'Boleto') {
+      const parcela = Math.round((valor / parcelas) * 100) / 100
+      for (let i = 1; i <= parcelas; i++) {
+        inserir(d, 'titulos', {
+          ...base,
+          parcela: `${i}/${parcelas}`,
+          valor: i === parcelas ? Math.round((valor - parcela * (parcelas - 1)) * 100) / 100 : parcela,
+          vencimento: addMeses(String(r.primeiroVencimento || data), i - 1),
+          status: 'Aberto',
+          dataPagamento: '',
+        })
+      }
+    } else {
+      inserir(d, 'titulos', { ...base, parcela: forma === 'Cartão de crédito' && parcelas > 1 ? `${parcelas}x no cartão` : '1/1', valor, vencimento: data, status: 'Pago', dataPagamento: data })
+      if (canal === 'Interno') lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(r.cobradorId ?? ''), quantidade: valor, descricao: `Recebido na venda — ${r.responsavel}`, data })
     }
     notificar(d, ctx, {
-      setores: ['cobranca', 'adm'],
+      setores: ['cobranca', 'financeiro', 'adm'],
       tipo: 'info',
-      titulo: 'Venda de e-book registrada',
-      descricao: `${r.pacote} para ${r.responsavel} (${r.escola}). ${parcelas} parcela(s) em Contas a Receber.`,
-      link: '/cobranca/titulos',
+      titulo: `${canal === 'Externo' ? 'Venda externa' : 'Venda interna'} de book`,
+      descricao: `${r.responsavel} (${r.escola}) • ${forma} • R$ ${valor.toFixed(2).replace('.', ',')}`,
+      link: '/financeiro/vendas-books',
     })
   },
 
@@ -232,14 +234,16 @@ export function baixarTitulo(d: ErpState, id: string, ctx: Contexto, data = hoje
   if (!t || t.status === 'Pago') return
   t.status = 'Pago'
   t.dataPagamento = data
-  lancar(d, ctx, {
-    setor: 'cobranca',
-    indicador: 'valor_recebido',
-    colaboradorId: String(t.cobradorId ?? ''),
-    quantidade: Number(t.valor) || 0,
-    descricao: `Baixa ${t.parcela} — ${t.cliente}`,
-    data,
-  })
+  if (t.cobradorId) {
+    lancar(d, ctx, {
+      setor: 'cobranca',
+      indicador: 'valor_recebido',
+      colaboradorId: String(t.cobradorId),
+      quantidade: Number(t.valor) || 0,
+      descricao: `Baixa ${t.parcela} — ${t.cliente}`,
+      data,
+    })
+  }
   auditar(d, ctx, 'EDITAR', `Baixa do título ${t.parcela} de ${t.cliente}`, 'cobranca')
 }
 
@@ -384,18 +388,8 @@ export function excluirContratoEscola(d: ErpState, id: string, ctx: Contexto): s
 }
 
 APOS_CRIAR.agenda_visitas = (d, v, ctx) => {
-  // A Produção já fica sabendo que haverá fotos dessa escola
-  inserir(d, 'ordens_producao', {
-    escola: v.escola,
-    contratoId: v.contratoId,
-    alunos: v.fichasPrevistas,
-    fotos: 0,
-    etapa: ETAPAS_PRODUCAO[0],
-    responsavelId: '',
-    prazo: addDias(String(v.data || hoje()), 30),
-  })
   notificar(d, ctx, {
-    setores: ['producao', 'adm', 'gerencia'],
+    setores: ['adm', 'gerencia'],
     tipo: 'info',
     titulo: 'Nova visita na agenda',
     descricao: `${v.escola} (${v.cidade}) em ${String(v.data).split('-').reverse().join('/')} — ${v.fichasPrevistas} fichas previstas.`,
@@ -429,18 +423,13 @@ export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ct
   v.fichasFotografadas = fichas
   // As fichas contam na meta da RMC (dona dos contratos do Operacional)
   lancar(d, ctx, { setor: 'operacional', indicador: 'fichas', colaboradorId: responsavelOperacional(d)?.id ?? '', quantidade: fichas, descricao: `Visita fotografada: ${v.escola}`, data: String(v.data) })
-  const ordem = col(d, 'ordens_producao').find((o) => o.contratoId === v.contratoId && o.etapa === ETAPAS_PRODUCAO[0])
-  if (ordem) {
-    ordem.fotos = fichas
-    ordem.etapa = ETAPAS_PRODUCAO[1]
-  }
   inserir(d, 'agenda_historico', { visitaId, data: hoje(), tipo: 'Visita encerrada', fichasAntes: null, fichasDepois: null, descricao: `${fichas} fichas fotografadas.`, autor: ctx.autorNome })
   notificar(d, ctx, {
-    setores: ['producao', 'adm'],
+    setores: ['adm', 'gerencia'],
     tipo: 'sucesso',
     titulo: 'Visita fotografada',
-    descricao: `${v.escola}: ${fichas} fichas. As fotos seguem para tratamento na Produção.`,
-    link: '/producao/ordens',
+    descricao: `${v.escola}: ${fichas} fichas. As fotos seguem para os editores.`,
+    link: '/operacional/agenda',
   })
   auditar(d, ctx, 'EDITAR', `Visita encerrada: ${v.escola} (${fichas} fichas)`, 'operacional')
 }

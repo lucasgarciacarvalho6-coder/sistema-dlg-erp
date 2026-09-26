@@ -167,3 +167,12 @@ input[type='date']::-webkit-calendar-picker-indicator {
   mask-image: radial-gradient(closest-side, #000 20%, transparent);
 }
 
+
+/* Mapa do GPS no tema escuro: escurece os mapas do OpenStreetMap (os pontos continuam coloridos) */
+:root[data-theme='dark'] .mapa-gps .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+.mapa-gps .leaflet-container {
+  background: var(--color-painel);
+  font-family: inherit;
+}

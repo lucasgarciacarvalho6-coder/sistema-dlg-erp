@@ -762,6 +762,263 @@ export async function anexarArquivoContrato(arquivo: File): Promise<{ caminho: s
   return { caminho }
 }
 
+// ---------------- Apps de celular (vendedor externo e produção) ----------------
+
+// Cadastro PJ do vendedor externo logado (null se não for vendedor externo)
+export function meuVendedorExterno(s: ErpState, usuarioId: string | undefined) {
+  if (!usuarioId) return null
+  return F.col(s, 'pj_vendedores').find((v) => v.usuarioId === usuarioId) ?? null
+}
+
+// Demo: as fotos ficam nesta aba do navegador (no Supabase vão para o bucket "contratos")
+const arquivosDemo = new Map<string, Blob>()
+const CHAVE_ARQ_DEMO = 'dlg-erp:arquivo-demo:'
+async function guardarArquivoDemo(caminho: string, blob: Blob) {
+  arquivosDemo.set(caminho, blob)
+  try {
+    sessionStorage.setItem(CHAVE_ARQ_DEMO + caminho, await blobParaDataURL(blob))
+  } catch {
+    // sem espaço: fica só na memória
+  }
+}
+async function lerArquivoDemo(caminho: string): Promise<Blob | null> {
+  const mem = arquivosDemo.get(caminho)
+  if (mem) return mem
+  const dataUrl = sessionStorage.getItem(CHAVE_ARQ_DEMO + caminho)
+  if (!dataUrl) return null
+  const blob = await (await fetch(dataUrl)).blob()
+  arquivosDemo.set(caminho, blob)
+  return blob
+}
+
+// Foto da câmera → JPEG de até 2400 px (nítido para a leitura, bem menor que a foto original)
+async function prepararFotoDocumento(arquivo: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(arquivo)
+  const escala = Math.min(1, 2400 / Math.max(bitmap.width, bitmap.height))
+  const c = document.createElement('canvas')
+  c.width = Math.round(bitmap.width * escala)
+  c.height = Math.round(bitmap.height * escala)
+  c.getContext('2d')!.drawImage(bitmap, 0, 0, c.width, c.height)
+  bitmap.close()
+  return new Promise((ok, erro) => c.toBlob((b) => (b ? ok(b) : erro(new Error('Falha ao preparar a foto'))), 'image/jpeg', 0.9))
+}
+
+// Envia as páginas fotografadas no app. Caminho: contratos/externos/<usuário>/<lote>-pN.jpg
+export async function enviarPaginasApp(paginas: File[]): Promise<{ caminhos: string[] } | { erro: string }> {
+  const usuarioId = lerSessao()?.colaboradorId
+  if (!usuarioId) return { erro: 'Sessão expirada. Entre novamente.' }
+  const lote = uid()
+  const caminhos: string[] = []
+  for (const [i, f] of paginas.entries()) {
+    let blob: Blob
+    try {
+      blob = await prepararFotoDocumento(f)
+    } catch {
+      return { erro: 'Não consegui abrir a foto. Tire de novo.' }
+    }
+    const caminho = `externos/${usuarioId}/${lote}-p${i + 1}.jpg`
+    if (MODO === 'supabase') {
+      const { error } = await sb().storage.from('contratos').upload(caminho, blob, { contentType: 'image/jpeg' })
+      if (error) return { erro: traduzirErro(error) }
+    } else await guardarArquivoDemo(caminho, blob)
+    caminhos.push(caminho)
+  }
+  return { caminhos }
+}
+
+// Arquivo guardado (foto/PDF) → Blob, para mostrar e para a leitura automática
+export async function baixarArquivoContrato(caminho: string): Promise<Blob | null> {
+  if (MODO !== 'supabase') return lerArquivoDemo(caminho)
+  const { data, error } = await sb().storage.from('contratos').download(caminho)
+  return error ? null : data
+}
+
+export async function urlArquivoContrato(caminho: string): Promise<string | null> {
+  if (MODO !== 'supabase') {
+    const b = await lerArquivoDemo(caminho)
+    return b ? URL.createObjectURL(b) : null
+  }
+  const { data } = await sb().storage.from('contratos').createSignedUrl(caminho, 600)
+  return data?.signedUrl ?? null
+}
+
+// Grava um registro do app (contrato, venda, documento, devolução) já ligado ao vendedor logado
+async function registrarDoApp(nome: string, dados: Record<string, Valor>, sucesso: string): Promise<string | null> {
+  const vend = meuVendedorExterno(carregar(), lerSessao()?.colaboradorId)
+  if (!vend) return 'Seu login não está ligado a um cadastro de vendedor. Procure o ADM.'
+  const campoVendedor = nome === 'vendas_ebooks' ? 'vendedorExternoId' : 'vendedorId'
+  const completo = { ...dados, [campoVendedor]: vend.id }
+  if (MODO === 'supabase') return gravar(() => sb().from(nome).insert(registroParaBanco(nome, completo)), sucesso)
+  mutar((d, ctx) => {
+    const criado = F.inserir(d, nome, completo)
+    F.APOS_CRIAR[nome]?.(d, criado, ctx)
+    F.auditar(d, ctx, 'CRIAR', `${sucesso} (app do vendedor)`, 'operacional')
+  })
+  avisar(sucesso, 'ok')
+  return null
+}
+
+export const enviarContratoApp = (d: { escola: string; cidade: string; observacao: string }, paginas: string[]) =>
+  registrarDoApp(
+    'contratos_escola',
+    {
+      escola: d.escola.trim().toUpperCase(),
+      cidade: d.cidade.trim(),
+      uf: '',
+      observacao: d.observacao.trim(),
+      status: 'Em conferência',
+      origem: 'App',
+      arquivo: paginas[0] ?? '',
+      paginas: JSON.stringify(paginas),
+      fichasPrevistas: 0,
+      bonificacaoPorFicha: 0,
+    },
+    'Contrato enviado para Operações.',
+  )
+
+export const registrarVendaExterna = (d: Record<string, Valor>) => registrarDoApp('vendas_ebooks', { ...d, canal: 'Externo', pacote: 'Book' }, 'Venda registrada.')
+
+export const enviarDocumentoApp = (d: { tipo: string; escola: string; descricao: string }, paginas: string[]) =>
+  registrarDoApp('documentos_externos', { ...d, paginas: JSON.stringify(paginas), status: 'Recebido' }, 'Documento enviado para Operações.')
+
+export const registrarDevolucaoBooks = (d: { escola: string; quantidade: number; observacao: string }) =>
+  registrarDoApp('devolucoes_books', { ...d, data: hoje(), status: 'Devolvido' }, 'Devolução registrada.')
+
+// ---- GPS (só enquanto o app está aberto) ----
+export interface PontoGps {
+  vendedorId: string
+  lat: number
+  lng: number
+  precisao: number
+  origem: 'abertura' | 'periodico' | 'acao'
+  descricao: string
+  criadoEm: string
+}
+
+export async function registrarLocalizacao(p: { lat: number; lng: number; precisao: number; origem: PontoGps['origem']; descricao?: string }): Promise<void> {
+  if (MODO === 'supabase') {
+    await sb().rpc('registrar_localizacao', { p_lat: p.lat, p_lng: p.lng, p_precisao: p.precisao, p_origem: p.origem, p_descricao: p.descricao ?? null })
+    return
+  }
+  const vend = meuVendedorExterno(carregar(), lerSessao()?.colaboradorId)
+  if (!vend) return
+  mutar((d) => {
+    const lista = (d.colecoes.localizacoes ??= [])
+    lista.push({ id: uid(), criadoEm: new Date().toISOString(), vendedorId: vend.id, lat: p.lat, lng: p.lng, precisao: p.precisao, origem: p.origem, descricao: p.descricao ?? '' })
+    const limite = new Date(Date.now() - 90 * 86_400_000).toISOString() // histórico de 90 dias
+    d.colecoes.localizacoes = lista.filter((x) => String(x.criadoEm) >= limite)
+  })
+}
+
+export async function aceitarMonitoramentoGps(): Promise<void> {
+  if (MODO === 'supabase') {
+    await sb().rpc('aceitar_monitoramento_gps')
+    agendarRecarga(150)
+    return
+  }
+  const vend = meuVendedorExterno(carregar(), lerSessao()?.colaboradorId)
+  if (!vend) return
+  mutar((d) => {
+    const alvo = F.col(d, 'pj_vendedores').find((x) => x.id === vend.id)
+    if (alvo) alvo.gpsAceiteEm = new Date().toISOString()
+  })
+}
+
+const pontoDoBanco = (l: Record<string, unknown>): PontoGps => ({
+  vendedorId: String(l.vendedor_id ?? l.vendedorId),
+  lat: Number(l.lat),
+  lng: Number(l.lng),
+  precisao: Number(l.precisao ?? 0),
+  origem: (l.origem as PontoGps['origem']) ?? 'periodico',
+  descricao: String(l.descricao ?? ''),
+  criadoEm: String(l.created_at ?? l.criadoEm),
+})
+
+// Último ponto de cada vendedor + quantos pontos hoje (cards da aba GPS)
+export async function buscarUltimasLocalizacoes(): Promise<(PontoGps & { pontosHoje: number })[]> {
+  if (MODO === 'supabase') {
+    const { data } = await sb().from('vw_ultima_localizacao').select('*')
+    return (data ?? []).map((l) => ({ ...pontoDoBanco(l), pontosHoje: Number(l.pontos_hoje ?? 0) }))
+  }
+  const porVendedor = new Map<string, Registro[]>()
+  for (const p of F.col(carregar(), 'localizacoes')) porVendedor.set(String(p.vendedorId), [...(porVendedor.get(String(p.vendedorId)) ?? []), p])
+  return [...porVendedor.values()].map((pts) => {
+    const ultimo = [...pts].sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0]
+    return { ...pontoDoBanco(ultimo), pontosHoje: pts.filter((p) => new Date(String(p.criadoEm)).toDateString() === new Date().toDateString()).length }
+  })
+}
+
+// Rota de um vendedor em um dia (pontos em ordem de horário)
+export async function buscarRotaDoDia(vendedorId: string, dia: string): Promise<PontoGps[]> {
+  const inicio = new Date(`${dia}T00:00:00`).toISOString()
+  const fim = new Date(`${dia}T23:59:59.999`).toISOString()
+  if (MODO === 'supabase') {
+    const { data } = await sb().from('localizacoes').select('*').eq('vendedor_id', vendedorId).gte('created_at', inicio).lte('created_at', fim).order('created_at').limit(5000)
+    return (data ?? []).map(pontoDoBanco)
+  }
+  return F.col(carregar(), 'localizacoes')
+    .filter((p) => p.vendedorId === vendedorId && String(p.criadoEm) >= inicio && String(p.criadoEm) <= fim)
+    .sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)))
+    .map(pontoDoBanco)
+}
+
+// ---- ADM: login do vendedor externo (ligado ao cadastro PJ) ----
+export async function criarAcessoVendedor(pjId: string, email: string, senha: string): Promise<string | null> {
+  const s = carregar()
+  const pj = F.col(s, 'pj_vendedores').find((v) => v.id === pjId)
+  if (!pj) return 'Vendedor não encontrado.'
+  if (!email.trim()) return 'Informe o e-mail de acesso.'
+  if (senha.length < 6) return 'A senha precisa ter ao menos 6 caracteres.'
+  const funcao = pj.tipo === 'Books' ? 'Vendedor de books' : 'Vendedor de contrato'
+  if (MODO === 'supabase') {
+    const { data, error } = await sb().functions.invoke('admin-colaboradores', {
+      body: { acao: 'criar', nome: String(pj.nome), email: email.trim(), senha, telefone: String(pj.telefone || ''), funcao, setor: 'externo' },
+    })
+    let msg: string | null = null
+    if (error) {
+      msg = error.message
+      if (error instanceof FunctionsHttpError) {
+        try {
+          msg = ((await error.context.json()) as { erro?: string }).erro ?? msg
+        } catch {
+          // mantém a mensagem genérica
+        }
+      }
+    }
+    const id = (data as { id?: string } | null)?.id
+    if (msg || !id) {
+      const texto = msg ?? 'Não foi possível criar o acesso.'
+      avisar(texto)
+      return texto
+    }
+    return gravar(() => sb().from('pj_vendedores').update({ usuario_id: id, email: email.trim() }).eq('id', pjId), 'Acesso ao app criado.')
+  }
+  if (s.colaboradores.some((c) => c.email.toLowerCase() === email.trim().toLowerCase())) return 'E-mail já cadastrado.'
+  mutar((d, ctx) => {
+    const id = uid()
+    d.colaboradores.push({
+      id,
+      nome: String(pj.nome),
+      email: email.trim(),
+      senha,
+      cpf: '',
+      telefone: String(pj.telefone || ''),
+      funcao,
+      setor: 'externo',
+      perfil: 'COLABORADOR',
+      status: 'ATIVO',
+      dataAdmissao: hoje(),
+      metas: {},
+      criadoEm: new Date().toISOString(),
+    })
+    const alvo = F.col(d, 'pj_vendedores').find((v) => v.id === pjId)
+    if (alvo) Object.assign(alvo, { usuarioId: id, email: email.trim() })
+    F.auditar(d, ctx, 'CRIAR', `Acesso ao app criado: ${pj.nome} (${funcao})`, 'adm')
+  })
+  avisar('Acesso ao app criado.', 'ok')
+  return null
+}
+
 // ---- Leitura do contrato com IA (Edge Function "ler-contrato" → Gemini, cota gratuita) ----
 // Devolve os campos crus da IA; 'indisponivel' = sem Supabase/sem chave/função não publicada (usa a leitura do navegador)
 export async function lerContratoComIA(

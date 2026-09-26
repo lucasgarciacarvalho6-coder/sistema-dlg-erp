@@ -70,19 +70,7 @@ const RELATORIOS: Relatorio[] = [
     ], (r, s) => ({ vendedora: nomeColaborador(s, r.vendedoraId), data: dataBR(String(r.data)) })),
   },
   { id: 'prod-operacional', titulo: 'Produção Operacional', descricao: 'Fichas fotografadas por equipe', modulo: 'operacional', gerar: producaoSetor('operacional') },
-  { id: 'prod-producao', titulo: 'Produção (edição e e-books)', descricao: 'Relatório de produção por editor', modulo: 'producao', gerar: producaoSetor('producao') },
-  {
-    id: 'ordens',
-    titulo: 'Ordens de produção',
-    descricao: 'Fila e etapas por escola',
-    modulo: 'producao',
-    gerar: deColecao('ordens_producao', [
-      { chave: 'escola', label: 'Escola' },
-      { chave: 'etapa', label: 'Etapa' },
-      { chave: 'responsavel', label: 'Responsável' },
-      { chave: 'prazo', label: 'Prazo' },
-    ], (r, s) => ({ responsavel: nomeColaborador(s, r.responsavelId), prazo: dataBR(String(r.prazo)) })),
-  },
+  { id: 'prod-producao', titulo: 'Produção (books produzidos)', descricao: 'Books produzidos por pessoa (lançados pelo app)', modulo: 'producao', gerar: producaoSetor('producao') },
   {
     id: 'titulos',
     titulo: 'Contas a receber',

@@ -311,9 +311,11 @@ function VendedoresContrato() {
         setor="operacional"
         moduloLabel="Vendedores de contrato"
         titulo="Vendedores de contrato (PJ)"
-        descricao="Recebem por aluno fotografado nas escolas que fecham — entra no fechamento semanal"
+        descricao="Recebem por aluno fotografado nas escolas que fecham — entra no fechamento semanal. O acesso ao app é criado em ADM › Vendedores externos."
         rotuloNovo="Novo vendedor"
+        filtro={(r) => r.tipo !== 'Books'}
         campos={[
+          { chave: 'tipo', label: 'Tipo', tipo: 'texto', tabela: false, formulario: false, padrao: () => 'Contrato' },
           { chave: 'nome', label: 'Nome', tipo: 'texto', obrigatorio: true },
           { chave: 'telefone', label: 'Contato', tipo: 'telefone' },
           { chave: 'cidade', label: 'Cidade', tipo: 'texto' },

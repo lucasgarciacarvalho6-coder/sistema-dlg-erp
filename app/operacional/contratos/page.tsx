@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
-import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, cancelarContratoEscola, confirmarContratoEscola, criarRegistro, excluirContratoEscola, useErp, usePode } from '@/lib/erp/store'
+import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, baixarArquivoContrato, cancelarContratoEscola, confirmarContratoEscola, criarRegistro, excluirContratoEscola, urlArquivoContrato, useErp, usePode } from '@/lib/erp/store'
 import { lerContratoLocal } from '@/lib/erp/leitura-contrato'
 import { colecao } from '@/lib/erp/metrics'
-import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, corEquipe, equipeDaVisita, nomePJ, nomeVeiculo, pixCompleto } from '@/lib/erp/operacional'
+import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, corEquipe, equipeDaVisita, lerJSON, nomePJ, nomeVeiculo, pixCompleto } from '@/lib/erp/operacional'
 import { brl, dataBR, num } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, Tabs, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
@@ -70,11 +70,13 @@ export default function ContratosEscolaPage() {
   const [ia, setIa] = useState<EstadoIA>({ estado: 'parado' })
   const [iaCampos, setIaCampos] = useState<Set<string>>(new Set())
   const [duvidas, setDuvidas] = useState<Set<string>>(new Set())
-  const [ultimoArquivo, setUltimoArquivo] = useState<File | null>(null)
+  const [ultimoArquivo, setUltimoArquivo] = useState<File | File[] | null>(null)
+  // páginas já guardadas do contrato (fotos enviadas pelo app do vendedor ou arquivo anexado antes)
+  const [paginasSalvas, setPaginasSalvas] = useState<{ caminho: string; url: string }[]>([])
   const [verTexto, setVerTexto] = useState(false)
 
   const contratos = colecao(s, 'contratos_escola')
-  const vendedores = colecao(s, 'pj_vendedores').filter((v) => v.status !== 'Inativo')
+  const vendedores = colecao(s, 'pj_vendedores').filter((v) => v.status !== 'Inativo' && v.tipo !== 'Books')
   const pCriar = podeFazer('operacional', 'criar')
   const pEditar = podeFazer('operacional', 'editar')
   // Escola já fotografada: fichas, fechamento e pagamentos dependem da visita → não cancela nem exclui
@@ -134,10 +136,36 @@ export default function ContratosEscolaPage() {
     setIaCampos(new Set())
     setDuvidas(new Set())
     setUltimoArquivo(null)
+    setPaginasSalvas([])
     setAberto(true)
+    if (c) void carregarPaginas(c)
   }
 
-  const lerComIA = async (arquivo: File) => {
+  // Mostra as páginas guardadas e, se o contrato veio do app e ainda não foi lido, já roda a leitura
+  const carregarPaginas = async (c: Registro) => {
+    const caminhos = lerJSON<string[]>(c.paginas, [])
+    const lista = caminhos.length ? caminhos : c.arquivo && /\.(jpe?g|png|webp)$/i.test(String(c.arquivo)) ? [String(c.arquivo)] : []
+    if (!lista.length) return
+    const urls = await Promise.all(lista.map(async (caminho) => ({ caminho, url: (await urlArquivoContrato(caminho)) ?? '' })))
+    const validas = urls.filter((u) => u.url)
+    setPaginasSalvas(validas)
+    if (validas[0]) setPreview(validas[0].url)
+    const naoLido = c.origem === 'App' && c.status === 'Em conferência' && !String(c.telefone || '').trim() && !String(c.endereco || '').trim()
+    if (naoLido) void lerPaginasSalvas(lista)
+  }
+
+  const lerPaginasSalvas = async (caminhos: string[]) => {
+    const arquivos: File[] = []
+    for (const [i, caminho] of caminhos.entries()) {
+      const blob = await baixarArquivoContrato(caminho)
+      if (blob) arquivos.push(new File([blob], `pagina-${i + 1}.jpg`, { type: blob.type || 'image/jpeg' }))
+    }
+    if (!arquivos.length) return setIa({ estado: 'erro', msg: 'Não consegui abrir as fotos do contrato.' })
+    setUltimoArquivo(arquivos)
+    await lerComIA(arquivos)
+  }
+
+  const lerComIA = async (arquivo: File | File[]) => {
     setIa({ estado: 'lendo', progresso: 0, etapa: 'Preparando' })
     setVerTexto(false)
     const r = await lerContratoLocal(
@@ -164,15 +192,15 @@ export default function ContratosEscolaPage() {
     // Preenche o que está vazio (ou que a própria IA tinha preenchido antes); o que a pessoa digitou fica
     setForm((f) => {
       const n = { ...f }
-      for (const [k, v] of Object.entries(novos)) if (!String(f[k] ?? '').trim() || iaCampos.has(k)) n[k] = v
+      for (const [k, v] of Object.entries(novos)) if (!String(f[k] ?? '').trim() || (NUMERICOS.includes(k) && !Number(f[k])) || iaCampos.has(k)) n[k] = v
       return n
     })
     // turmas, CNPJ da escola, assinatura... (o que não tem campo próprio) vão para a observação
-    if (r.observacao) novos.observacao = r.observacao
     if (r.observacao) setForm((f) => (!f.observacao.trim() || iaCampos.has('observacao') ? { ...f, observacao: r.observacao } : f))
-    setIaCampos(new Set(Object.keys(novos)))
-    setDuvidas(new Set(r.duvidas.map((d) => (d === 'vendedorNome' ? 'vendedorId' : d)).filter((d) => d in novos)))
-    setIa({ estado: 'ok', lidos: Object.keys(novos).length, texto: r.texto, fonte: r.fonte, aviso: r.aviso })
+    const lidos = r.observacao ? [...Object.keys(novos), 'observacao'] : Object.keys(novos)
+    setIaCampos(new Set(lidos))
+    setDuvidas(new Set(r.duvidas.map((d) => (d === 'vendedorNome' ? 'vendedorId' : d)).filter((d) => lidos.includes(d))))
+    setIa({ estado: 'ok', lidos: lidos.length, texto: r.texto, fonte: r.fonte, aviso: r.aviso })
   }
 
   const escolherArquivo = async (arquivo: File | undefined) => {
@@ -303,7 +331,10 @@ export default function ContratosEscolaPage() {
                   return (
                     <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-4 min-w-[220px]">
-                        <p className="text-white font-bold tracking-wide">{String(c.escola)}</p>
+                        <p className="text-white font-bold tracking-wide">
+                          {String(c.escola)}
+                          {c.origem === 'App' && <span className="ml-2 align-middle px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[8px] font-black tracking-widest">📱 APP</span>}
+                        </p>
                         <p className="text-[11px] text-zinc-500 font-mono">{String(c.cidade || '—')} - {String(c.uf || '')}</p>
                       </td>
                       <td className="px-4 py-4 text-zinc-400 whitespace-nowrap" title={String(nomePJ(s, c.vendedorId))}>
@@ -445,6 +476,16 @@ export default function ContratosEscolaPage() {
                 </div>
               )}
               {enviandoArquivo && <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mt-3">Enviando arquivo...</p>}
+              {paginasSalvas.length > 1 && (
+                <span className="flex gap-2 mt-3 justify-center" onClick={(e) => e.preventDefault()}>
+                  {paginasSalvas.map((p, i) => (
+                    <button key={p.caminho} type="button" onClick={() => setPreview(p.url)} className={`w-12 h-16 rounded-lg overflow-hidden border ${preview === p.url ? 'border-blue-500' : 'border-white/[0.1]'}`} title={`Página ${i + 1}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.url} alt={`Página ${i + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </span>
+              )}
               {form.arquivo && !enviandoArquivo && <p className="text-[10px] text-zinc-500 mt-3 truncate">📎 {form.arquivo.replace(/^[0-9a-f-]{36}-/, '')}</p>}
             </label>
             <div
@@ -482,6 +523,11 @@ export default function ContratosEscolaPage() {
                 </>
               )}
               {ia.estado === 'erro' && ia.msg}
+              {!ultimoArquivo && paginasSalvas.length > 0 && ia.estado !== 'lendo' && (
+                <button type="button" onClick={() => lerPaginasSalvas(paginasSalvas.map((p) => p.caminho))} className="block mt-2 text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-white">
+                  ▶ Ler as páginas deste contrato
+                </button>
+              )}
               {ultimoArquivo && ia.estado !== 'lendo' && ia.estado !== 'parado' && (
                 <button type="button" onClick={() => lerComIA(ultimoArquivo)} className="block mt-2 text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-white">
                   ↻ Ler novamente

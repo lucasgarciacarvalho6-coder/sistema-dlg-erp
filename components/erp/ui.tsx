@@ -91,6 +91,8 @@ export function StatCard({
   destaque?: boolean
 }) {
   const t = TONS[tom]
+  // valores longos (ex.: R$ 12.345,67) usam fonte menor para não quebrar no meio do número
+  const longo = typeof valor === 'string' && (valor.length > 10 || (valor.includes('R$') && valor.length > 7))
   return (
     <div
       className={`bg-painel-2/80 border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
@@ -98,7 +100,7 @@ export function StatCard({
       <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} ${destaque ? 'opacity-80' : 'opacity-40'} ${t.brilho}`}></div>
       {destaque && <div className={`absolute -bottom-10 -right-10 w-32 h-32 ${t.suave} brilho scale-150 rounded-full`}></div>}
       <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${tom === 'zinc' ? 'text-zinc-400' : t.texto} mb-2 relative z-10`}>{label}</p>
-      <p className={`${destaque ? 'text-5xl tracking-tighter' : 'text-3xl xl:text-4xl tracking-tight'} font-black text-white relative z-10 break-words`}>{valor}</p>
+      <p className={`${destaque ? 'text-5xl tracking-tighter' : longo ? 'text-2xl xl:text-[1.7rem] tracking-tight whitespace-nowrap' : 'text-3xl xl:text-4xl tracking-tight'} font-black text-white relative z-10 break-words`}>{valor}</p>
       {progresso !== undefined && (
         <div className="w-full bg-white/[0.05] h-1.5 rounded-full mt-4 overflow-hidden relative z-10">
           <div className={`${progresso >= 100 ? 'bg-emerald-500' : t.solido} h-full rounded-full ${t.brilho}`} style={{ width: `${Math.min(100, progresso)}%` }}></div>

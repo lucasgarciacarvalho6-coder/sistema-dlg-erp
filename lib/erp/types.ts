@@ -1,7 +1,8 @@
 // Tipos centrais do ERP. Espelham as tabelas que serão criadas no Supabase
 // (ver docs/SUPABASE_PROMPT.md), para que a troca do mock pelo backend seja direta.
 
-export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'producao' | 'financeiro' | 'cobranca'
+// 'externo' = vendedores externos PJ (contrato e books): usam só o app do vendedor
+export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'producao' | 'financeiro' | 'cobranca' | 'externo'
 
 export type Perfil = 'ADM' | 'GERENTE' | 'COLABORADOR'
 

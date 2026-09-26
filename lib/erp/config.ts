@@ -60,14 +60,12 @@ export const SETORES: Record<Setor, ConfigSetor> = {
   producao: {
     id: 'producao',
     nome: 'Produção',
-    descricao: 'Edição, diagramação e e-books',
+    descricao: 'Impressão e montagem dos books (lançados pelo app)',
     home: '/producao',
     tom: 'violet',
-    indicadores: [
-      { id: 'fotos_editadas', label: 'Fotos editadas', unidade: 'qtd', metaPadrao: { diaria: 300, mensal: 6600 } },
-      { id: 'ebooks_gerados', label: 'E-books gerados', unidade: 'qtd', metaPadrao: { diaria: 2, mensal: 40 } },
-    ],
-    funcoes: ['Editor(a) de imagens', 'Diagramador(a)', 'Produtor(a) de foto'],
+    // A equipe só informa, pelo app, quantos books fez no dia
+    indicadores: [{ id: 'books', label: 'Books produzidos', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
+    funcoes: ['Produtor(a) de books', 'Montador(a) de álbuns', 'Impressão'],
   },
   financeiro: {
     id: 'financeiro',
@@ -81,16 +79,28 @@ export const SETORES: Record<Setor, ConfigSetor> = {
   cobranca: {
     id: 'cobranca',
     nome: 'Cobrança',
-    descricao: 'Venda de e-books aos pais e recebimentos',
+    descricao: 'Venda de books aos pais e recebimentos',
     home: '/cobranca',
     tom: 'orange',
     indicadores: [
-      { id: 'ebooks_vendidos', label: 'E-books vendidos', unidade: 'qtd', metaPadrao: { diaria: 6, mensal: 130 } },
+      { id: 'ebooks_vendidos', label: 'Books vendidos', unidade: 'qtd', metaPadrao: { diaria: 6, mensal: 130 } },
       { id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1500, mensal: 33000 } },
     ],
     funcoes: ['Cobrador(a)', 'Atendente de vendas', 'Supervisor(a) de cobrança'],
   },
+  externo: {
+    id: 'externo',
+    nome: 'Vendedores externos',
+    descricao: 'App do vendedor de contrato e de books',
+    home: '/app/vendedor',
+    tom: 'orange',
+    indicadores: [],
+    funcoes: ['Vendedor de contrato', 'Vendedor de books'],
+  },
 }
+
+// Setores do ERP (sem os vendedores externos, que usam só o app)
+export const SETORES_ERP: Setor[] = ['adm', 'gerencia', 'operacional', 'vendas', 'producao', 'financeiro', 'cobranca']
 
 // Setores com produção própria (aparecem nos painéis consolidados)
 export const SETORES_PRODUTIVOS: Setor[] = ['vendas', 'operacional', 'producao', 'cobranca', 'financeiro', 'gerencia']
@@ -126,6 +136,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       itens: [
         { label: 'Visão TV', href: '/adm', icone: 'tv' },
         { label: 'Colaboradores', href: '/adm/colaboradores', icone: 'users', modulo: 'usuarios' },
+        { label: 'Vendedores Externos', href: '/adm/vendedores', icone: 'handshake', modulo: 'usuarios' },
         { label: 'Matriz de Acesso', href: '/adm/permissoes', icone: 'shield', modulo: 'permissoes' },
         { label: 'Metas', href: '/adm/metas', icone: 'target', modulo: 'metas' },
       ],
@@ -160,6 +171,8 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Contratos de Escola', href: '/operacional/contratos', icone: 'doc' },
         { label: 'Agenda Fotográfica', href: '/operacional/agenda', icone: 'calendar' },
         { label: 'Fechamento Operacional', href: '/operacional/fechamento', icone: 'wallet' },
+        { label: 'App dos Vendedores', href: '/operacional/app-vendedores', icone: 'upload' },
+        { label: 'GPS dos Vendedores', href: '/operacional/gps', icone: 'target' },
         { label: 'Tarefas Avulsas', href: '/operacional/tarefas', icone: 'check' },
         { label: 'Histórico', href: '/operacional/historico', icone: 'log' },
       ],
@@ -181,10 +194,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
     {
       titulo: 'Produção',
       itens: [
-        { label: 'Dashboard da Produção', href: '/producao', icone: 'dashboard' },
-        { label: 'Ordens de Produção', href: '/producao/ordens', icone: 'layers' },
-        { label: 'Matéria-prima', href: '/producao/materia-prima', icone: 'box' },
-        { label: 'Qualidade & Perdas', href: '/producao/qualidade', icone: 'shield' },
+        { label: 'Books produzidos', href: '/producao', icone: 'dashboard' },
         { label: 'Histórico', href: '/producao/historico', icone: 'log' },
       ],
     },
@@ -196,6 +206,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Dashboard Financeiro', href: '/financeiro', icone: 'dashboard' },
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
+        { label: 'Vendas de Books', href: '/financeiro/vendas-books', icone: 'book' },
         { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-caixa', icone: 'chart' },
         { label: 'Histórico', href: '/financeiro/historico', icone: 'log' },
       ],
@@ -206,7 +217,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       titulo: 'Cobrança',
       itens: [
         { label: 'Dashboard de Cobrança', href: '/cobranca', icone: 'dashboard' },
-        { label: 'Vendas de E-books', href: '/cobranca/vendas-ebooks', icone: 'book' },
+        { label: 'Vendas de Books', href: '/cobranca/vendas-ebooks', icone: 'book' },
         { label: 'Contas a Receber', href: '/cobranca/titulos', icone: 'wallet' },
         { label: 'Inadimplência', href: '/cobranca/inadimplencia', icone: 'alert' },
         { label: 'Acordos', href: '/cobranca/acordos', icone: 'handshake' },
@@ -214,6 +225,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       ],
     },
   ],
+  externo: [], // usam o app /app/vendedor
 }
 
 // Etapas das ordens de produção (fluxo Vendas → Operacional → Produção → Cobrança)

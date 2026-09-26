@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { colecao, diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, situacaoResumo, somar } from '@/lib/erp/metrics'
+import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { CardColaborador } from './EquipeCards'
 import Icon from './Icon'
@@ -364,7 +364,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
   const faturado = somar(s.lancamentos, { setor: 'cobranca', indicador: 'valor_recebido', mes })
   const fotografado = resumo(s, 'operacional', 'fichas', mes)
   const contratos = resumo(s, 'vendas', 'contratos', mes)
-  const emProducao = colecao(s, 'ordens_producao').filter((o) => o.etapa !== 'Concluído').length
+  const books = resumo(s, 'producao', 'books', mes)
 
   let conteudo: ReactNode
   if (atual.id === 'resumo') {
@@ -374,7 +374,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
           <NumeroTV rotulo="Faturado no mês" valor={brl(faturado).replace(',00', '')} detalhe="Recebimentos da Cobrança" />
           <NumeroTV rotulo="Fichas fotografadas" valor={num(fotografado.mes)} detalhe={`${pct(fotografado.pctMes)} da meta mensal`} />
           <NumeroTV rotulo="Contratos fechados" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} />
-          <NumeroTV rotulo="Em produção" valor={emProducao} detalhe="Ordens abertas" />
+          <NumeroTV rotulo="Books produzidos" valor={num(books.mes)} detalhe={`Hoje ${num(books.hoje)}`} />
         </div>
         <PlacarAreas s={s} mes={mes} grande />
       </div>

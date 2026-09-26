@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import type { Setor } from '@/lib/erp/types'
-import { MENUS, SETORES } from '@/lib/erp/config'
+import { MENUS, SETORES, SETORES_ERP } from '@/lib/erp/config'
 import { pode, rotaInicial } from '@/lib/erp/permissions'
 import { logout, registrarAcesso, useAviso, useErp, useStatus, useUsuario } from '@/lib/erp/store'
 import Icon from './Icon'
@@ -22,7 +22,9 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
   const usuario = useUsuario()
   const [menuAberto, setMenuAberto] = useState(false)
 
-  const permitido = pode(usuario, s.permissoes, setor, 'visualizar')
+  // Equipe da Produção e vendedores externos usam SÓ o celular (apps): o ERP fica para ADM/Gerência
+  const soCelular = !!usuario && usuario.perfil === 'COLABORADOR' && (usuario.setor === 'producao' || usuario.setor === 'externo')
+  const permitido = !soCelular && pode(usuario, s.permissoes, setor, 'visualizar')
 
   useEffect(() => {
     if (!hidratado) return
@@ -44,7 +46,7 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
 
   // ADM e Gerência têm um atalho para os dashboards de todos os setores
   const setoresAcessiveis = (setor === 'adm' || setor === 'gerencia') && visaoTotal
-    ? (Object.keys(SETORES) as Setor[]).filter((x) => x !== setor && pode(usuario, s.permissoes, x, 'visualizar'))
+    ? SETORES_ERP.filter((x) => x !== setor && pode(usuario, s.permissoes, x, 'visualizar'))
     : []
 
   const ativo = (href: string) => (href === SETORES[setor].home || href === `/${setor}` ? pathname === href : pathname.startsWith(href))

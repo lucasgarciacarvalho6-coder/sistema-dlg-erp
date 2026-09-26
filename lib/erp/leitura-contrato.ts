@@ -101,11 +101,15 @@ async function lerNoNavegador(arquivo: File, paginas: HTMLCanvasElement[], vende
 
 // ---------------- Entrada única ----------------
 
-export async function lerContratoLocal(arquivo: File, vendedores: string[], progresso: Progresso = () => {}): Promise<LeituraContrato> {
+// Aceita 1 arquivo (foto ou PDF) ou várias fotos (páginas enviadas pelo app do vendedor)
+export async function lerContratoLocal(entrada: File | File[], vendedores: string[], progresso: Progresso = () => {}): Promise<LeituraContrato> {
+  const arquivos = Array.isArray(entrada) ? entrada : [entrada]
+  const arquivo = arquivos[0]
+  if (!arquivo) return { erro: 'Nenhum arquivo para ler.' }
   try {
-    let paginas: HTMLCanvasElement[]
+    let paginas: HTMLCanvasElement[] = []
     try {
-      paginas = await paginasDoArquivo(arquivo)
+      for (const a of arquivos) paginas = paginas.concat(await paginasDoArquivo(a))
     } catch {
       return { erro: 'Não consegui abrir esse arquivo. Envie a foto em JPG/PNG ou um PDF.' }
     }

@@ -15,27 +15,30 @@ export const COLUNAS: Record<string, string[]> = {
   tarefas_operacionais: ['titulo', 'escola', 'cidade', 'responsavel_id', 'prioridade', 'prazo', 'status'],
   ordens_producao: ['escola', 'alunos', 'fotos', 'etapa', 'responsavel_id', 'prazo'],
   qualidade: ['ordem', 'tipo', 'descricao', 'quantidade', 'responsavel_id', 'data'],
-  vendas_ebooks: ['responsavel', 'aluno', 'escola', 'telefone', 'pacote', 'valor', 'parcelas', 'cobrador_id', 'data'],
-  titulos: ['cliente', 'aluno', 'escola', 'telefone', 'parcela', 'valor', 'vencimento', 'status', 'cobrador_id'],
+  vendas_ebooks: ['responsavel', 'aluno', 'escola', 'telefone', 'pacote', 'valor', 'parcelas', 'cobrador_id', 'data', 'canal', 'vendedor_externo_id', 'forma_pagamento', 'cpf', 'email', 'endereco', 'quantidade', 'primeiro_vencimento', 'observacao'],
+  titulos: ['cliente', 'aluno', 'escola', 'telefone', 'parcela', 'valor', 'vencimento', 'status', 'cobrador_id', 'forma_pagamento'],
   acordos: ['cliente', 'escola', 'telefone', 'titulo_id', 'valor_original', 'valor_acordo', 'parcelas', 'primeiro_vencimento', 'status'],
   contas_pagar: ['descricao', 'fornecedor', 'categoria', 'valor', 'vencimento', 'favorecido', 'pix_chave', 'pix_banco'],
   comissoes: ['escola', 'referencia', 'base_calculo', 'percentual', 'valor', 'vencimento'],
   aprovacoes: [],
   // ---- Operacional (processo de campo) ----
-  pj_vendedores: ['nome', 'telefone', 'cidade', 'uf', 'status', 'valor_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'ultimo_contato', 'observacao'],
+  pj_vendedores: ['nome', 'telefone', 'cidade', 'uf', 'status', 'valor_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'ultimo_contato', 'observacao', 'tipo', 'email', 'usuario_id'],
   freelancers: ['tipo', 'nome', 'cidade', 'uf', 'telefone', 'status', 'nivel', 'diaria', 'pix_nome', 'pix_chave', 'pix_banco'],
   historico_contatos: ['pessoa_id', 'data', 'assunto', 'autor'],
-  contratos_escola: ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'vendedor_id', 'fichas_previstas', 'data_prevista', 'bonificacao_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'arquivo', 'observacao', 'status'],
+  contratos_escola: ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'vendedor_id', 'fichas_previstas', 'data_prevista', 'bonificacao_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'arquivo', 'observacao', 'status', 'paginas', 'origem'],
   agenda_visitas: ['data', 'fichas_previstas', 'equipe', 'carro', 'veiculo_id', 'fotografo_ids', 'motorista_id', 'telefone', 'responsavel', 'endereco', 'status'],
   veiculos: ['modelo', 'placa', 'ano', 'cor', 'lugares', 'status', 'observacao'],
   agenda_historico: [],
   fechamentos: ['id', 'tipo', 'ref_id', 'periodo', 'referencia', 'data', 'quantidade', 'valor_unitario', 'subtotal', 'ajudantes', 'beneficiarios', 'total', 'pix_nome', 'pix_chave', 'pix_banco', 'observacao'],
   rotas: ['vendedor_id', 'uf', 'nome', 'status'],
   rota_cidades: ['rota_id', 'cidade', 'ordem', 'data_visita', 'visitada', 'fechou', 'contratos', 'motivo', 'observacao'],
+  // ---- App dos vendedores externos ----
+  documentos_externos: ['vendedor_id', 'tipo', 'escola', 'descricao', 'paginas', 'status'],
+  devolucoes_books: ['vendedor_id', 'escola', 'quantidade', 'data', 'observacao', 'status'],
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade
-const COLUNAS_JSON: Record<string, string[]> = { fechamentos: ['ajudantes', 'beneficiarios'] }
+const COLUNAS_JSON: Record<string, string[]> = { fechamentos: ['ajudantes', 'beneficiarios'], contratos_escola: ['paginas'], documentos_externos: ['paginas'] }
 
 export const TABELAS_COLECAO = Object.keys(COLUNAS)
 

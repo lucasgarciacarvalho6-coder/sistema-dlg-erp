@@ -3,11 +3,10 @@
 
 import type { Colaborador, ErpState, Setor } from './types'
 import { SETORES } from './config'
-import { addDias, hoje, isoData } from './format'
+import { addDias, hoje, isoData, uid } from './format'
 import { MATRIZ_PADRAO } from './permissions'
 import {
   APOS_CRIAR,
-  avancarOrdem,
   baixarTitulo,
   col,
   confirmarContratoEscola,
@@ -23,7 +22,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 5 // v5: veículos e equipes de viagem (várias equipes no mesmo dia em estados diferentes)
+export const VERSAO_DADOS = 6 // v6: apps (vendedor externo e produção), GPS, vendas externas de books
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -48,11 +47,14 @@ const COLABORADORES: [string, string, string, Setor, string][] = [
   ['u-op1', 'Flávia Alves Roquini', 'operacional@dlgphotos.com', 'operacional', 'Coordenação / RMC'],
   ['u-op2', 'Diego Lima', 'diego.foto@dlgphotos.com', 'operacional', 'Fotógrafo(a)'],
   ['u-op3', 'Rafael Costa', 'rafael.foto@dlgphotos.com', 'operacional', 'Fotógrafo(a)'],
-  ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Editor(a) de imagens'],
-  ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Diagramador(a)'],
+  ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Produtor(a) de books'],
+  ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Montador(a) de álbuns'],
   ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador(a)'],
   ['u-co2', 'Renata Alves', 'renata.cobranca@dlgphotos.com', 'cobranca', 'Atendente de vendas'],
   ['u-fi1', 'Eduardo Nunes', 'financeiro@dlgphotos.com', 'financeiro', 'Analista financeiro'],
+  // Vendedores externos (PJ) com acesso ao app do vendedor
+  ['u-ext1', 'Ahmed Husni Ali Choucair', 'contrato@dlgphotos.com', 'externo', 'Vendedor de contrato'],
+  ['u-ext2', 'Rafaela Moura', 'books@dlgphotos.com', 'externo', 'Vendedor de books'],
 ]
 
 // Contas de acesso rápido exibidas na tela de login
@@ -64,6 +66,8 @@ export const CONTAS_DEMO = [
   { setor: 'producao' as Setor, email: 'producao@dlgphotos.com' },
   { setor: 'financeiro' as Setor, email: 'financeiro@dlgphotos.com' },
   { setor: 'cobranca' as Setor, email: 'cobranca@dlgphotos.com' },
+  { setor: 'externo' as Setor, email: 'contrato@dlgphotos.com', rotulo: 'App • Vendedor de contrato' },
+  { setor: 'externo' as Setor, email: 'books@dlgphotos.com', rotulo: 'App • Vendedor de books' },
 ]
 
 export function estadoVazio(): ErpState {
@@ -198,15 +202,6 @@ export function gerarSeed(): ErpState {
     APOS_CRIAR.contratos(s, reg, ctx)
     s.lancamentos.splice(antes, s.lancamentos.length - antes)
   }
-  // Coloca as ordens em etapas diferentes para a fila de produção ficar realista
-  const ordens = col(s, 'ordens_producao')
-  const avancos = [5, 3, 2, 1, 0]
-  ordens.forEach((o, i) => {
-    o.responsavelId = i % 2 === 0 ? 'u-pr1' : 'u-pr2'
-    o.fotos = Number(o.alunos) * 3
-    for (let k = 0; k < (avancos[ordens.length - 1 - i] ?? 0); k++) avancarOrdem(s, o.id, ctx)
-  })
-  s.lancamentos = s.lancamentos.filter((l) => l.origem !== 'automatico' || l.indicador !== 'ebooks_gerados')
   col(s, 'tarefas_operacionais').forEach((t, i) => {
     t.responsavelId = 'u-op1'
     t.status = i >= 2 ? 'Concluída' : i === 1 ? 'Em andamento' : 'Pendente'
@@ -424,8 +419,6 @@ export function gerarSeed(): ErpState {
   col(s, 'ordens_producao').forEach((o) => {
     o.responsavelId = o.etapa === 'Tratamento' ? 'u-pr1' : ''
   })
-  const ordemMaisAntiga = col(s, 'ordens_producao').find((o) => o.escola === 'PROJETO ESPAÇO CRIANÇA')
-  if (ordemMaisAntiga) avancarOrdem(s, ordemMaisAntiga.id, ctxOp) // já em diagramação
 
   // Rotas dos vendedores
   const rotaAhmed = inserir(s, 'rotas', { vendedorId: ahmed.id, uf: 'PR', nome: 'Rota Noroeste', status: 'Ativa' })
@@ -448,9 +441,49 @@ export function gerarSeed(): ErpState {
     inserir(s, 'rota_cidades', { rotaId: rotaRodrigo.id, cidade, ordem: i + 1, dataVisita: addDias(hojeISO, Number(dias)), visitada, fechou, contratos, motivo, observacao }),
   )
 
-  // ---- Produção: qualidade ----
-  inserir(s, 'qualidade', { ordem: 'PROJETO ESPAÇO CRIANÇA', tipo: 'Retrabalho', descricao: 'Ajuste de cor em 12 fotos', quantidade: 12, responsavelId: 'u-pr1', data: addDias(hojeISO, -4) })
-  inserir(s, 'qualidade', { ordem: 'MARIA MAYSRE M PESSUTI EF', tipo: 'Perda', descricao: 'Arquivos corrompidos no cartão 3', quantidade: 5, responsavelId: 'u-pr2', data: addDias(hojeISO, -2) })
+  // ---- App dos vendedores externos: tipos, logins, vendas de books, documentos, devoluções e GPS ----
+  col(s, 'pj_vendedores').forEach((v) => (v.tipo = 'Contrato'))
+  Object.assign(ahmed, { usuarioId: 'u-ext1', email: 'contrato@dlgphotos.com', gpsAceiteEm: criado })
+  const rafaela = inserir(s, 'pj_vendedores', {
+    nome: 'Rafaela Moura', telefone: '(44) 99877-1020', cidade: 'Umuarama', uf: 'PR', status: 'Ativo', valorPorFicha: 0, tipo: 'Books',
+    usuarioId: 'u-ext2', email: 'books@dlgphotos.com', gpsAceiteEm: criado, pixNome: 'Rafaela Moura', pixChave: '44998771020', pixBanco: 'Nubank', ultimoContato: hojeISO, observacao: '',
+  })
+  inserir(s, 'pj_vendedores', {
+    nome: 'Sérgio Almeida', telefone: '(18) 99654-3321', cidade: 'Presidente Prudente', uf: 'SP', status: 'Ativo', valorPorFicha: 0, tipo: 'Books',
+    usuarioId: '', email: '', gpsAceiteEm: '', pixNome: 'Sérgio Almeida', pixChave: '18996543321', pixBanco: 'Caixa', ultimoContato: addDias(hojeISO, -3), observacao: '',
+  })
+  const ctxExt: Contexto = { autorId: 'u-ext2', autorNome: 'Rafaela Moura', autorSetor: 'externo', silencioso: true }
+  ;(
+    [
+      ['PROJETO ESPAÇO CRIANÇA', 'Luiza Martins', 'Carla Martins', 'PIX', 1, 180, -2],
+      ['PROJETO ESPAÇO CRIANÇA', 'Pedro Henrique', 'José Carlos Souza', 'Boleto', 3, 240, -2],
+      ['ESCOLA MUNICIPAL SOL NASCENTE', 'Ana Beatriz', 'Mariana Lopes', 'Cartão de crédito', 4, 260, -1],
+      ['ESCOLA MUNICIPAL SOL NASCENTE', 'Miguel Santos', 'Fernanda Santos', 'Dinheiro', 1, 150, 0],
+      ['ESCOLA MUNICIPAL SOL NASCENTE', 'Helena Costa', 'Ricardo Costa', 'Boleto', 2, 200, 0],
+    ] as [string, string, string, string, number, number, number][]
+  ).forEach(([escola, aluno, responsavel, forma, parcelas, valor, dias]) => {
+    const v = inserir(s, 'vendas_ebooks', {
+      responsavel, aluno, escola, telefone: '(44) 99900-0000', pacote: 'Book', valor, parcelas, cobradorId: '', data: addDias(hojeISO, dias),
+      canal: 'Externo', vendedorExternoId: rafaela.id, formaPagamento: forma, cpf: '', email: '', endereco: '', quantidade: 1,
+      primeiroVencimento: forma === 'Boleto' ? addDias(hojeISO, dias + 30) : '', observacao: '',
+    })
+    APOS_CRIAR.vendas_ebooks(s, v, ctxExt)
+  })
+  inserir(s, 'devolucoes_books', { vendedorId: rafaela.id, escola: 'PROJETO ESPAÇO CRIANÇA', quantidade: 12, data: addDias(hojeISO, -1), observacao: 'Pais não estavam em casa em 5 endereços.', status: 'Devolvido' })
+  inserir(s, 'documentos_externos', { vendedorId: rafaela.id, tipo: 'Comprovante', escola: 'ESCOLA MUNICIPAL SOL NASCENTE', descricao: 'Comprovante PIX da venda da Ana Beatriz', paginas: '[]', status: 'Recebido' })
+  // GPS: rotas de exemplo de hoje e de ontem (enquanto o app esteve aberto)
+  const rota = (vendedorId: string, dia: number, pontos: [number, number, string?][], horaInicio: number) =>
+    pontos.forEach(([lat, lng, acao], k) => {
+      const t = new Date()
+      t.setDate(t.getDate() + dia)
+      t.setHours(horaInicio, 0, 0, 0)
+      t.setMinutes(k * 17)
+      if (t.getTime() > Date.now()) return
+      ;(s.colecoes.localizacoes ??= []).push({ id: uid(), criadoEm: t.toISOString(), vendedorId, lat, lng, precisao: 12 + (k % 5) * 6, origem: acao ? 'acao' : k === 0 ? 'abertura' : 'periodico', descricao: acao ?? '' })
+    })
+  rota(ahmed.id, -1, [[-23.7657, -53.325], [-23.771, -53.39], [-23.776, -53.47], [-23.7355, -53.4883, 'Contrato enviado: CMEI Pequeno Príncipe'], [-23.76, -53.56], [-23.8039, -53.6836], [-23.81, -53.69, 'Contrato enviado: Col. Dom Athamazio']], 8)
+  rota(ahmed.id, 0, [[-23.8039, -53.6836], [-23.83, -53.75], [-23.85, -53.82], [-23.8745, -53.9016, 'Contrato enviado'], [-23.9, -53.8], [-24.0033, -53.7058]], 7)
+  rota(rafaela.id, 0, [[-23.7657, -53.325], [-23.78, -53.4], [-23.8, -53.5], [-23.82, -53.6], [-23.8039, -53.6836, 'Venda registrada: Helena Costa'], [-23.806, -53.688], [-23.809, -53.692, 'Venda registrada: Miguel Santos']], 8)
 
   s.auditoria = []
   s.notificacoes = []
