@@ -231,7 +231,11 @@ A mesma regra existe em três lugares:
 - **Meta diária** = meta mensal ÷ dias úteis do mês, e **piso diário** = piso ÷ dias úteis. Dias úteis são de segunda a sexta, sem feriados nacionais (`lib/erp/calendario.ts`). Ex.: 1.200 ÷ 21 = 57,14.
 - **Situação** (cor): no ritmo da meta = verde; acima do ritmo do piso = amarelo; abaixo do piso = vermelho (prejuízo). Nos gráficos por dia útil vale o mesmo: verde bateu a meta do dia, amarelo passou do piso, vermelho ficou abaixo do piso.
 - No **Operacional**, todas as fichas fotografadas contam para a coordenação (RMC). Os fotógrafos ficam com meta 0 e não aparecem nos cards.
-- **Dinheiro de Operações** (`components/erp/PainelOperacoes.tsx`, cálculo em `lib/erp/operacoes-financeiro.ts`): abre ao **clicar no card da coordenação na Visão TV** e fica no topo do **Dashboard de Operações**. Mostra alunos fotografados, custo médio por aluno, gastos do mês, projeção e resumo do setor.
+- **Dinheiro de Operações** (`components/erp/PainelOperacoes.tsx`, cálculo em `lib/erp/operacoes-financeiro.ts`):
+  - na Visão TV, a aba **Operacional** mostra o card da coordenação e mais 3 cards: custo por aluno, gastos e projeção. Na aba "Todos" fica só o card dela;
+  - **clicar** nesses cards abre a **tela cheia em colunas lado a lado**, sem rolar (Esc fecha);
+  - no topo do **Dashboard de Operações** fica o painel em grade, com o gasto fixo dos carros.
+  Os gráficos são por dia útil (segunda a sexta). Mostra alunos fotografados, custo médio por aluno, gastos do mês, projeção e resumo do setor.
   - **Custo** = gasto fixo do carro por dia de viagem (tudo incluso; só nos dias em que o carro sai; editável no próprio painel e guardado por mês) + fichas × valor por ficha do vendedor + custo da escola (Fechamento da escola; sem fechamento, estimado pela bonificação do contrato). As diárias dos fechamentos não entram, porque já estão no fixo.
   - **Projeção pelas fichas fechadas:** fotografadas + fichas previstas das visitas agendadas + contratos em conferência do mês.
   - **Quanto vai ganhar:** receita real das vendas de books por aluno fotografado (últimos 3 meses + o atual) × alunos projetados.

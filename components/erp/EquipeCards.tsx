@@ -9,7 +9,7 @@ import { formatar, iniciais, mesAtual } from '@/lib/erp/format'
 import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
-import PainelOperacoes from './PainelOperacoes'
+import { CardsOperacoes, TelaOperacoes } from './PainelOperacoes'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
 function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
@@ -212,23 +212,23 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
         {lista.map(({ c }) => (
           <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={todos.findIndex((t) => t.c.id === c.id) + 1} onAbrir={() => setAberto(c)} />
         ))}
+        {/* aba Operacional: ao lado da coordenação, custo por aluno, gastos e projeção (clicar abre a tela cheia) */}
+        {filtro === 'operacional' &&
+          lista.slice(0, 1).map(({ c }) => <CardsOperacoes key={`ops-${c.id}`} s={s} colaborador={c} mes={mes} onAbrir={() => setAberto(c)} />)}
       </div>
 
+      {/* Operações (coordenação/RMC): tudo em tela cheia, em colunas, sem rolar */}
+      {aberto?.setor === 'operacional' && <TelaOperacoes s={s} colaborador={aberto} mes={mes} onSair={() => setAberto(null)} />}
+
       <Modal
-        aberto={!!aberto}
+        aberto={!!aberto && aberto.setor !== 'operacional'}
         titulo={aberto ? `Painel • ${aberto.nome}` : ''}
         subtitulo={aberto ? `${SETORES[aberto.setor].nome} • ${aberto.funcao}` : ''}
         onFechar={() => setAberto(null)}
         largura="max-w-6xl"
         rodape={<button onClick={() => setAberto(null)} className={btnSecundario}>Fechar</button>}
       >
-        {/* Operações (coordenação/RMC): o painel completo do dinheiro da operação */}
-        {aberto &&
-          (aberto.setor === 'operacional' ? (
-            <PainelOperacoes s={s} colaborador={aberto} mes={mes} />
-          ) : (
-            <PainelMeta s={s} colaborador={aberto} indicadorId={SETORES[aberto.setor].indicadores[0].id} mes={mes} />
-          ))}
+        {aberto && aberto.setor !== 'operacional' && <PainelMeta s={s} colaborador={aberto} indicadorId={SETORES[aberto.setor].indicadores[0].id} mes={mes} />}
       </Modal>
     </div>
   )
