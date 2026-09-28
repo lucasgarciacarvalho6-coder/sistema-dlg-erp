@@ -2,7 +2,7 @@
 
 import type { ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { equipe, metaColaborador, progresso, somar } from '@/lib/erp/metrics'
+import { equipeComMeta, metaColaborador, progresso, somar } from '@/lib/erp/metrics'
 import { iniciais, pct } from '@/lib/erp/format'
 import { Avatar, Panel, ProgressBar, TONS } from './ui'
 
@@ -12,7 +12,7 @@ import { Avatar, Panel, ProgressBar, TONS } from './ui'
 export function RankingGeral({ s, mes, limite = 10 }: { s: ErpState; mes: string; limite?: number }) {
   const linhas = SETORES_PRODUTIVOS.flatMap((setor) => {
     const ind = SETORES[setor].indicadores[0]
-    return equipe(s, setor).map((c) => {
+    return equipeComMeta(s, setor, mes).map((c) => {
       const valor = somar(s.lancamentos, { setor, indicador: ind.id, colaboradorId: c.id, mes })
       return { c, setor, ind, valor, pct: progresso(valor, metaColaborador(c, ind.id).mensal) }
     })

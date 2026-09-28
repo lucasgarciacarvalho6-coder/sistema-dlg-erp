@@ -21,9 +21,10 @@ type Form = {
   dataAdmissao: string
   senha: string
   status: 'ATIVO' | 'INATIVO'
+  semMeta: boolean
 }
 
-const vazio = (): Form => ({ nome: '', cpf: '', email: '', telefone: '', setor: 'vendas', funcao: SETORES.vendas.funcoes[0], dataAdmissao: hoje(), senha: '', status: 'ATIVO' })
+const vazio = (): Form => ({ nome: '', cpf: '', email: '', telefone: '', setor: 'vendas', funcao: SETORES.vendas.funcoes[0], dataAdmissao: hoje(), senha: '', status: 'ATIVO', semMeta: false })
 
 export default function ColaboradoresPage() {
   const s = useErp()
@@ -75,7 +76,7 @@ export default function ColaboradoresPage() {
   }
 
   const abrirEdicao = (c: Colaborador) => {
-    setForm({ nome: c.nome, cpf: c.cpf, email: c.email, telefone: c.telefone, setor: c.setor, funcao: c.funcao, dataAdmissao: c.dataAdmissao, senha: '', status: c.status })
+    setForm({ nome: c.nome, cpf: c.cpf, email: c.email, telefone: c.telefone, setor: c.setor, funcao: c.funcao, dataAdmissao: c.dataAdmissao, senha: '', status: c.status, semMeta: !!c.semMeta })
     setEditando(c)
     setErro('')
     setAberto(true)
@@ -118,7 +119,7 @@ export default function ColaboradoresPage() {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-4">
         <StatCard label="Total" valor={s.colaboradores.length} detalhe={`${ativos.length} ativos`} tom="blue" />
         {SETORES_IDS.map((x) => (
           <button key={x} onClick={() => setFiltroSetor(filtroSetor === x ? '' : x)} className="text-left">
@@ -190,7 +191,12 @@ export default function ColaboradoresPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4"><Badge texto={SETORES[c.setor].nome} tom={SETORES[c.setor].tom} /></td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge texto={SETORES[c.setor].nome} tom={SETORES[c.setor].tom} />
+                        {c.semMeta && SETORES[c.setor].indicadores.length > 0 && <Badge texto="Sem meta" tom="zinc" />}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-zinc-400 whitespace-nowrap">{c.funcao}</td>
                     <td className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-400">{c.perfil}</td>
                     <td className="px-6 py-4 text-zinc-500 whitespace-nowrap">{c.telefone || '—'}</td>
@@ -299,6 +305,27 @@ export default function ColaboradoresPage() {
               ))}
             </select>
           </div>
+          {SETORES[form.setor].indicadores.length > 0 && (
+            <div className="space-y-2 md:col-span-2">
+              <label className={labelCls}>Meta</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { v: false, t: '✅ Tem meta', d: 'Aparece nos cards de meta, no ranking e soma na meta do setor.' },
+                  { v: true, t: '⛔ Sem meta', d: 'Ex.: Financeiro e Gerência. Fica fora dos cards e do ranking; o que lançar continua contando no setor.' },
+                ].map((o) => (
+                  <button
+                    key={String(o.v)}
+                    type="button"
+                    onClick={() => setForm({ ...form, semMeta: o.v })}
+                    className={`text-left p-3 rounded-xl border transition-all ${form.semMeta === o.v ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/[0.06] hover:bg-white/[0.02]'}`}
+                  >
+                    <p className="text-xs font-black text-white">{o.t}</p>
+                    <p className="text-[10px] text-zinc-500 mt-1">{o.d}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <label className={labelCls}>Data de admissão</label>
             <input type="date" value={form.dataAdmissao} onChange={(e) => setForm({ ...form, dataAdmissao: e.target.value })} className={inputCls} />

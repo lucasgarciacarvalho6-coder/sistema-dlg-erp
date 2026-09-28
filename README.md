@@ -196,7 +196,8 @@ src/
 | **Vendas** | `/vendas` | Dashboard das vendedoras, Leads & prospecção, Contratos (pedidos), Tabela de preços, Histórico | Contratos fechados, Escolas visitadas |
 | **Produção** | `/app/producao` (equipe) · `/producao` (painel) | A equipe usa só o **app da Produção** (books feitos no dia). No ERP ficam o painel de books e o histórico | Books produzidos |
 | **Financeiro** | `/financeiro` | Dashboard, Contas a pagar, Pagamentos operacionais (PIX dos fechamentos), **Vendas de books** (todas as vendas e formas de pagamento), Fluxo de caixa, Histórico | Pagamentos processados |
-| **Cobrança** | `/cobranca` | Dashboard, Vendas de books (equipe interna), Contas a receber, Inadimplência, Acordos, Histórico | Books vendidos, Valor recebido |
+| **Vendas Rebolo** | `/rebolo` | Dashboard, Gestão diária, **Pacotes e fichas** (caixas de 10 álbuns, cadastro manual com CEP e DDD, etiquetas A4 com QR), **Contatos** (fila do dia, sem resposta → tentar de novo, descarte com motivo, desconto pela Gerência), **Vendas** (Contrato de Compra Online em PDF, contrato assinado anexado → Financeiro), **Envios** (rastreio), **Tabela de preços** (3 faixas) | Valor vendido, Books vendidos |
+| **Cobrança** | `/cobranca` | Dashboard, Contas a receber, Inadimplência, Acordos, Histórico | Valor recebido |
 | **Vendedores externos** | `/app/vendedor` | Só o **app do vendedor** (celular): vendedor de contrato e vendedor de books | — |
 
 **Login.** O sistema identifica o colaborador pelo e-mail, lê o **setor** e redireciona para a rota inicial dele.
@@ -230,8 +231,13 @@ A mesma regra existe em três lugares:
 - **Meta diária** = meta mensal ÷ dias úteis do mês, e **piso diário** = piso ÷ dias úteis. Dias úteis são de segunda a sexta, sem feriados nacionais (`lib/erp/calendario.ts`). Ex.: 1.200 ÷ 21 = 57,14.
 - **Situação** (cor): no ritmo da meta = verde; acima do ritmo do piso = amarelo; abaixo do piso = vermelho (prejuízo). Nos gráficos por dia útil vale o mesmo: verde bateu a meta do dia, amarelo passou do piso, vermelho ficou abaixo do piso.
 - No **Operacional**, todas as fichas fotografadas contam para a coordenação (RMC). Os fotógrafos ficam com meta 0 e não aparecem nos cards.
+- **Dinheiro de Operações** (`components/erp/PainelOperacoes.tsx`, cálculo em `lib/erp/operacoes-financeiro.ts`): abre ao **clicar no card da coordenação na Visão TV** e fica no topo do **Dashboard de Operações**. Mostra alunos fotografados, custo médio por aluno, gastos do mês, projeção e resumo do setor.
+  - **Custo** = gasto fixo do carro por dia de viagem (tudo incluso; só nos dias em que o carro sai; editável no próprio painel e guardado por mês) + fichas × valor por ficha do vendedor + custo da escola (Fechamento da escola; sem fechamento, estimado pela bonificação do contrato). As diárias dos fechamentos não entram, porque já estão no fixo.
+  - **Projeção pelas fichas fechadas:** fotografadas + fichas previstas das visitas agendadas + contratos em conferência do mês.
+  - **Quanto vai ganhar:** receita real das vendas de books por aluno fotografado (últimos 3 meses + o atual) × alunos projetados.
 - **Parâmetros do negócio** (bonificação à escola, diárias, alimentação) são editáveis em **ADM › Configurações** (`PARAMETROS` em `lib/erp/config.ts`, lidos por `lib/erp/parametros.ts`).
 - **Meta do setor** = soma das metas individuais dos colaboradores ativos.
+- **Sem meta** (ADM › Colaboradores, ao criar ou editar): para quem não tem meta, como Financeiro e Gerência. A pessoa sai dos cards de meta, do ranking, do "abaixo do piso" e da soma da meta do setor; o que ela lança continua contando no realizado. Em **Metas** aparece com o botão "Ligar meta". Setor sem ninguém com meta sai do placar e da evolução da Visão TV.
 - A **produção** é registrada por **lançamentos**, que podem ser manuais ("Registrar produção") ou automáticos, gerados pelos fluxos.
 - Cada dashboard de setor mostra:
   - o mês e o dia contra a meta;
@@ -343,6 +349,13 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
    - `docs/supabase/005_metas_piso_dias_uteis.sql`: rodar **sempre** depois do schema (novo ou antigo). Traz metas por mês com piso, dias úteis, fichas na RMC e parâmetros editáveis.
    - `docs/supabase/006_cancelar_excluir_contrato.sql`: rodar depois do 005. Permite **cancelar** e **excluir** um contrato de escola. O cancelamento também tira a visita da agenda e a ordem que aguardava fotos. As duas ações são bloqueadas se a escola já foi fotografada.
    - `docs/supabase/009_venda_books_conferencia.sql`: rodar depois do 008. Cria os campos do **Contrato de Compra** e os anexos (contrato, assinatura, documento e promissória), e a **conferência do Financeiro**, que gera as parcelas só quando confere. Depois dele, atualize a Edge Function `ler-contrato`, que agora também lê o contrato de venda.
+   - `docs/supabase/011_setor_rebolo.sql` e depois `docs/supabase/012_rebolo_sem_meta.sql`: **nesta ordem, em duas execuções** (o Postgres só deixa usar o setor novo depois que o 011 foi salvo). O 012 cria:
+     - o campo `sem_meta` nos colaboradores;
+     - o setor **Vendas Rebolo**: tabelas `rebolo_pacotes`, `rebolo_fichas`, `rebolo_contatos`, os indicadores "Valor vendido" e "Books vendidos" e as funções da fila (`registrar_contato_rebolo`, `reabrir_ficha_rebolo`, `pedir_desconto_rebolo`, `atualizar_venda_rebolo`, `registrar_envio_rebolo`);
+     - a venda do rebolo em `vendas_ebooks` (canal `Rebolo`, "Aguardando contrato" → "Aguardando conferência"), com parcelas e meta só quando o Financeiro confere;
+     - a pasta `contratos/rebolo/<usuário>/` no Storage para os contratos assinados.
+     O histórico de "books vendidos" da Cobrança passa para o Rebolo.
+   - `docs/supabase/013_gasto_fixo_carros.sql`: rodar depois do 012. Cria o **gasto fixo por dia de viagem** de cada carro (guardado por mês), usado no painel do dinheiro de Operações.
    - `docs/supabase/010_parcelas_ate_24.sql`: rodar depois do 009. Passa o limite da venda de books de 12 para **entrada + 24 parcelas** (até 25 pagamentos) e corrige o erro `vendas_ebooks_parcelas_check`.
    - Venda em andamento no app do vendedor: um rascunho fica salvo **no celular** (IndexedDB) com os dados, as fotos e a assinatura. Se o app fechar sem querer, a venda volta de onde parou. O rascunho é apagado quando a venda é enviada ou quando o vendedor toca em "Descartar e começar de novo".
    - `docs/supabase/008_apps_vendedores_producao_gps.sql`: rodar depois do 007. Cria:
@@ -363,6 +376,7 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
 | Vendas | `leads`, `contratos` |
 | Operacional | `contratos_escola`, `agenda_visitas`, `agenda_historico`, `fechamentos`, `pj_vendedores`, `freelancers`, `historico_contatos`, `rotas`, `rota_cidades`, `tarefas_operacionais` |
 | Produção | `ordens_producao`, `qualidade` |
+| Vendas Rebolo | `rebolo_pacotes`, `rebolo_fichas`, `rebolo_contatos` (+ vendas em `vendas_ebooks` com canal `Rebolo`) |
 | Cobrança | `vendas_ebooks`, `titulos`, `acordos` |
 | Financeiro | `contas_pagar` (com PIX e origem do fechamento), `comissoes` (legado, sem uso) |
 | Gerência | `aprovacoes` |
@@ -447,6 +461,13 @@ ERP
 │   ├── ✅ Documentos · ✅ Books devolvidos
 │   ├── ✅ GPS obrigatório (só com o app aberto) → Operacional › GPS dos Vendedores
 │   └── ⬜ Cópia do contrato por e-mail ao cliente (deixado de lado a pedido: o cliente fica com a via em papel)
+│
+├── 08c. VENDAS REBOLO (revenda dos books que o externo não vendeu)
+│   ├── ✅ Pacotes de 10 álbuns (ou avulso), um aberto por vendedora · cadastro manual das fichas com CEP (ViaCEP) e DDD por estado/região
+│   ├── ✅ Etiquetas A4 (10 por folha, com QR) · faixa de preço pela data da visita · Tabela de preços editável
+│   ├── ✅ Fila de contatos: sem resposta → tentar de novo · descarte com motivo (congelado) · agendamento · histórico · desconto pela Gerência
+│   ├── ✅ Venda sem entrada, até 15x (parcela mínima R$ 100) → Contrato de Compra Online (PDF) → contrato assinado → conferência do Financeiro
+│   └── ✅ Envio pelo Correio com rastreio e aviso no WhatsApp · Gestão diária · Dashboard · aba na Visão TV
 │
 ├── (EXTRA) ÁREA FINANCEIRA
 │   └── ✅ Dashboard · ✅ Contas a pagar · ✅ Comissões das escolas · ✅ Fluxo de caixa · ✅ Histórico

@@ -1,8 +1,9 @@
 'use client'
 
-// Financeiro › Conferência de vendas: as vendas de books feitas pelo app do vendedor chegam aqui com
-// contrato (lido pela IA), assinatura do cliente, documento (frente e verso) e promissória.
-// Conferir → gera as parcelas (títulos). Devolver → volta para o vendedor corrigir no app, com o motivo.
+// Financeiro › Conferência de vendas:
+//  • Externas (app do vendedor): contrato (lido pela IA), assinatura, documento, ficha, comprovante, promissória e foto do cliente.
+//  • Rebolo (vendas internas por telefone): Contrato de Compra Online assinado eletronicamente (PDF).
+// Conferir → gera as parcelas (títulos) e, no rebolo, conta na meta e libera o envio. Devolver → volta para corrigir, com o motivo.
 
 import { useEffect, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
@@ -22,9 +23,11 @@ interface Anexos {
   ficha?: string
   comprovante?: string
   clienteContrato?: string
+  contratoAssinado?: string // rebolo
 }
 
-const nomeVendedor = (s: ReturnType<typeof useErp>, id: unknown) => String(colecao(s, 'pj_vendedores').find((v) => v.id === id)?.nome ?? 'Vendedor externo')
+const nomeVendedor = (s: ReturnType<typeof useErp>, v: Registro) =>
+  v.canal === 'Rebolo' ? nomeColaborador(s, v.cobradorId) || 'Vendedora rebolo' : String(colecao(s, 'pj_vendedores').find((x) => x.id === v.vendedorExternoId)?.nome ?? 'Vendedor externo')
 const dataHora = (iso: unknown) => (iso ? new Date(String(iso)).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—')
 
 function Foto({ caminho, rotulo }: { caminho?: string; rotulo: string }) {
@@ -41,6 +44,10 @@ function Foto({ caminho, rotulo }: { caminho?: string; rotulo: string }) {
       <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{rotulo}</p>
       {!caminho ? (
         <div className="h-40 rounded-xl border border-dashed border-red-500/40 flex items-center justify-center text-xs font-bold text-red-400">Não enviado</div>
+      ) : url && /\.pdf$/i.test(caminho) ? (
+        <a href={url} target="_blank" rel="noreferrer" className="h-40 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:border-blue-500/60 flex flex-col items-center justify-center gap-2 text-sm font-bold text-blue-300">
+          <span className="text-3xl" aria-hidden="true">📄</span> Abrir PDF assinado
+        </a>
       ) : url ? (
         <a href={url} target="_blank" rel="noreferrer" className="block rounded-xl overflow-hidden border border-white/[0.08] bg-white hover:border-blue-500/60" title="Abrir em tamanho real">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -73,7 +80,8 @@ export default function ConferenciaVendasPage() {
   const [motivo, setMotivo] = useState('')
   const [salvando, setSalvando] = useState(false)
 
-  const externas = colecao(s, 'vendas_ebooks').filter((v) => v.canal === 'Externo')
+  // vendas que passam pela conferência: externas (app) e do rebolo
+  const externas = colecao(s, 'vendas_ebooks').filter((v) => v.canal === 'Externo' || v.canal === 'Rebolo')
   const aguardando = externas.filter((v) => v.conferencia === 'Aguardando conferência')
   const devolvidas = externas.filter((v) => v.conferencia === 'Devolvida')
   const conferidas = externas.filter((v) => v.conferencia === 'Conferida' && String(v.conferidoEm || v.data).slice(0, 7) === mesAtual())
@@ -96,6 +104,7 @@ export default function ConferenciaVendasPage() {
   const refs = venda ? lerJSON<{ nome: string; telefone: string }[]>(venda.referencias, []) : []
   const completo = (v: Registro) => {
     const a = lerJSON<Anexos>(v.anexos, {})
+    if (v.canal === 'Rebolo') return !!a.contratoAssinado
     return !!(a.contrato?.length && a.docFrente && a.docVerso && a.ficha && a.comprovante && a.recibo && a.clienteContrato && v.assinatura)
   }
 
@@ -104,7 +113,7 @@ export default function ConferenciaVendasPage() {
       <PageHeader
         modulo="Financeiro / Conferência"
         titulo="Conferência de Vendas"
-        descricao="Vendas de books feitas pelos vendedores no app, com contrato, assinatura do cliente, documento e promissória. Conferida gera as parcelas; devolvida volta ao vendedor com o motivo."
+        descricao="Vendas externas (app do vendedor, com contrato, assinatura e documentos) e do Rebolo (contrato assinado eletronicamente). Conferida gera as parcelas; devolvida volta a quem vendeu, com o motivo."
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
@@ -146,7 +155,10 @@ export default function ConferenciaVendasPage() {
                 {lista.map((v) => (
                   <tr key={v.id} className="hover:bg-white/[0.02]">
                     <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataHora(v.criadoEm)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-white font-bold">{nomeVendedor(s, v.vendedorExternoId)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <p className="text-white font-bold">{nomeVendedor(s, v)}</p>
+                      <Badge texto={v.canal === 'Rebolo' ? 'Rebolo' : 'Externa'} tom={v.canal === 'Rebolo' ? 'cyan' : 'orange'} />
+                    </td>
                     <td className="px-4 py-3 min-w-[180px]">
                       <p className="text-white text-xs font-bold">{String(v.responsavel)}</p>
                       <p className="text-[11px] text-zinc-500">Ficha {String(v.numeroFicha || '—')}</p>
@@ -174,7 +186,7 @@ export default function ConferenciaVendasPage() {
       <Modal
         aberto={!!venda}
         titulo={venda ? `Venda • ${venda.responsavel}` : ''}
-        subtitulo={venda ? `${nomeVendedor(s, venda.vendedorExternoId)} • ${venda.escola} • enviada em ${dataHora(venda.criadoEm)}` : ''}
+        subtitulo={venda ? `${venda.canal === 'Rebolo' ? 'Rebolo' : 'Externa'} • ${nomeVendedor(s, venda)} • ${venda.escola} • enviada em ${dataHora(venda.criadoEm)}` : ''}
         onFechar={() => setAberta(null)}
         largura="max-w-6xl"
         rodape={
@@ -247,9 +259,19 @@ export default function ConferenciaVendasPage() {
                   <Dado r="Entrada" v={Number(venda.entrada) ? brl(Number(venda.entrada)) : ''} />
                   <Dado r="Pagamento" v={`${venda.formaPagamento}${Number(venda.parcelas) > 1 ? ` • ${venda.parcelas}x` : ''}`} />
                   <Dado r="1º vencimento" v={venda.primeiroVencimento ? dataBR(String(venda.primeiroVencimento)) : ''} />
-                  <Dado r="Parcelamento (papel)" v={venda.formaParcelamento} />
-                  <Dado r="Itens" v={`${venda.qtdMaletas || 0} maleta • ${venda.qtdFotos || 0} fotos • ${venda.qtdMolduras || 0} moldura`} />
+                  <Dado r={venda.canal === 'Rebolo' ? 'Parcelamento' : 'Parcelamento (papel)'} v={venda.formaParcelamento} />
+                  <Dado
+                    r={venda.canal === 'Rebolo' ? 'Produto' : 'Itens'}
+                    v={venda.canal === 'Rebolo' ? `${venda.pacote} • ${venda.qtdFotos || 0} fotos` : `${venda.qtdMaletas || 0} maleta • ${venda.qtdFotos || 0} fotos • ${venda.qtdMolduras || 0} moldura`}
+                  />
                 </div>
+                {venda.canal === 'Rebolo' ? (
+                  venda.observacao ? (
+                    <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5">
+                      <Dado r="Observação da vendedora" v={venda.observacao} />
+                    </div>
+                  ) : null
+                ) : (
                 <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 grid grid-cols-2 gap-4">
                   <Dado r="Assinado no app em" v={dataHora(venda.assinaturaEm)} />
                   <Dado
@@ -258,9 +280,15 @@ export default function ConferenciaVendasPage() {
                   />
                   {venda.observacao ? <Dado r="Observação do vendedor" v={venda.observacao} /> : null}
                 </div>
+                )}
               </div>
 
               {/* Fotos */}
+              {venda.canal === 'Rebolo' ? (
+                <div className="grid grid-cols-2 gap-4 content-start">
+                  <Foto caminho={anexos.contratoAssinado} rotulo="Contrato de Compra Online • assinado" />
+                </div>
+              ) : (
               <div className="grid grid-cols-2 gap-4 content-start">
                 {(anexos.contrato?.length ? anexos.contrato : [undefined]).map((c, i) => (
                   <Foto key={`c-${i}`} caminho={c} rotulo={`Contrato${(anexos.contrato?.length ?? 0) > 1 ? ` • pág. ${i + 1}` : ''}`} />
@@ -273,6 +301,7 @@ export default function ConferenciaVendasPage() {
                 <Foto caminho={anexos.clienteContrato} rotulo="Cliente com o contrato" />
                 <Foto caminho={String(venda.assinatura || '') || undefined} rotulo="Assinatura no app" />
               </div>
+              )}
             </div>
             {devolvendo && <p className={`${labelCls} text-red-400`}>Escreva o motivo embaixo: o vendedor vê no app e corrige.</p>}
           </div>

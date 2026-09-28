@@ -7,6 +7,7 @@ import { addDias, hoje, isoData, uid } from './format'
 import { MATRIZ_PADRAO } from './permissions'
 import {
   APOS_CRIAR,
+  atualizarVendaRebolo,
   baixarTitulo,
   col,
   conferirVendaBook,
@@ -16,6 +17,7 @@ import {
   inserir,
   negociarTitulo,
   pagarConta,
+  registrarContatoRebolo,
   registrarHistoricoVisita,
   type Contexto,
 } from './fluxos'
@@ -23,7 +25,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 7 // v7: venda de books com contrato, assinatura e conferência do Financeiro
+export const VERSAO_DADOS = 9 // v9: gasto fixo dos carros e histórico de viagens (painel do dinheiro de Operações)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -53,6 +55,11 @@ const COLABORADORES: [string, string, string, Setor, string][] = [
   ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador(a)'],
   ['u-co2', 'Renata Alves', 'renata.cobranca@dlgphotos.com', 'cobranca', 'Atendente de vendas'],
   ['u-fi1', 'Eduardo Nunes', 'financeiro@dlgphotos.com', 'financeiro', 'Analista financeiro'],
+  // Vendas Rebolo: revendem por telefone/WhatsApp os books que o externo não vendeu
+  ['u-re0', 'Luana Ferraz', 'supervisao.rebolo@dlgphotos.com', 'rebolo', 'Supervisor(a) rebolo'],
+  ['u-re1', 'Bianca Rocha', 'rebolo@dlgphotos.com', 'rebolo', 'Vendedor(a) rebolo'],
+  ['u-re2', 'Tainá Moreira', 'taina.rebolo@dlgphotos.com', 'rebolo', 'Vendedor(a) rebolo'],
+  ['u-re3', 'Yasmin Prado', 'yasmin.rebolo@dlgphotos.com', 'rebolo', 'Vendedor(a) rebolo'],
   // Vendedores externos (PJ) com acesso ao app do vendedor
   ['u-ext1', 'Ahmed Husni Ali Choucair', 'contrato@dlgphotos.com', 'externo', 'Vendedor de contrato'],
   ['u-ext2', 'Rafaela Moura', 'books@dlgphotos.com', 'externo', 'Vendedor de books'],
@@ -67,6 +74,7 @@ export const CONTAS_DEMO = [
   { setor: 'producao' as Setor, email: 'producao@dlgphotos.com' },
   { setor: 'financeiro' as Setor, email: 'financeiro@dlgphotos.com' },
   { setor: 'cobranca' as Setor, email: 'cobranca@dlgphotos.com' },
+  { setor: 'rebolo' as Setor, email: 'rebolo@dlgphotos.com' },
   { setor: 'externo' as Setor, email: 'contrato@dlgphotos.com', rotulo: 'App • Vendedor de contrato' },
   { setor: 'externo' as Setor, email: 'books@dlgphotos.com', rotulo: 'App • Vendedor de books' },
 ]
@@ -107,7 +115,13 @@ export function gerarSeed(): ErpState {
     metas:
       setor === 'operacional'
         ? { fichas: id === 'u-op1' ? { mensal: 1200, diaria: 0, piso: 1000 } : { mensal: 0, diaria: 0, piso: 0 } }
-        : Object.fromEntries(SETORES[setor].indicadores.map((ind) => [ind.id, { mensal: ind.metaPadrao.mensal, diaria: 0, piso: Math.round(ind.metaPadrao.mensal * 0.8) }])),
+        : setor === 'rebolo'
+          ? // meta do time R$ 15.000 (piso R$ 10.000) dividida entre as vendedoras; supervisora sem meta
+            id === 'u-re0'
+            ? {}
+            : { valor_vendido: { mensal: 5000, diaria: 0, piso: 3334 }, books_vendidos: { mensal: 6, diaria: 0, piso: 4 } }
+          : Object.fromEntries(SETORES[setor].indicadores.map((ind) => [ind.id, { mensal: ind.metaPadrao.mensal, diaria: 0, piso: Math.round(ind.metaPadrao.mensal * 0.8) }])),
+    semMeta: setor === 'financeiro' || setor === 'gerencia' || id === 'u-re0',
     criadoEm: criado,
   }))
 
@@ -211,14 +225,14 @@ export function gerarSeed(): ErpState {
 
   // ---- Cobrança: vendas de e-books aos pais → títulos + comissões ----
   const pais: [string, string, string, number, number, string, number][] = [
-    ['Fernanda Oliveira', 'Pedro', 'PROJETO ESPAÇO CRIANÇA', 189.9, 3, 'u-co1', -58],
-    ['João Batista', 'Laura', 'PROJETO ESPAÇO CRIANÇA', 89.9, 1, 'u-co2', -40],
-    ['Simone Ferreira', 'Miguel', 'MARIA MAYSRE M PESSUTI EF', 249.9, 3, 'u-co1', -35],
-    ['Carlos Eduardo', 'Helena', 'MARIA MAYSRE M PESSUTI EF', 189.9, 2, 'u-co2', -20],
-    ['Priscila Santos', 'Davi', 'SANTA TEREZINHA C M E I', 89.9, 1, 'u-co1', -12],
-    ['Rodrigo Mendes', 'Alice', 'COLÉGIO DOM ATHAMAZIO MERKLE', 249.9, 3, 'u-co2', -6],
-    ['Tatiane Lopes', 'Theo', 'COLÉGIO DOM ATHAMAZIO MERKLE', 189.9, 2, 'u-co1', -3],
-    ['Marcelo Rocha', 'Sofia', 'PROJETO ESPAÇO CRIANÇA', 89.9, 1, 'u-co1', 0],
+    ['Fernanda Oliveira', 'Pedro', 'PROJETO ESPAÇO CRIANÇA', 189.9, 3, 'u-re1', -58],
+    ['João Batista', 'Laura', 'PROJETO ESPAÇO CRIANÇA', 89.9, 1, 'u-re2', -40],
+    ['Simone Ferreira', 'Miguel', 'MARIA MAYSRE M PESSUTI EF', 249.9, 3, 'u-re1', -35],
+    ['Carlos Eduardo', 'Helena', 'MARIA MAYSRE M PESSUTI EF', 189.9, 2, 'u-re2', -20],
+    ['Priscila Santos', 'Davi', 'SANTA TEREZINHA C M E I', 89.9, 1, 'u-re3', -12],
+    ['Rodrigo Mendes', 'Alice', 'COLÉGIO DOM ATHAMAZIO MERKLE', 249.9, 3, 'u-re2', -6],
+    ['Tatiane Lopes', 'Theo', 'COLÉGIO DOM ATHAMAZIO MERKLE', 189.9, 2, 'u-re1', -3],
+    ['Marcelo Rocha', 'Sofia', 'PROJETO ESPAÇO CRIANÇA', 89.9, 1, 'u-re3', 0],
   ]
   for (const [responsavel, aluno, escola, valor, parcelas, cobradorId, dias] of pais) {
     const pacote = valor === 89.9 ? 'E-book Digital' : valor === 189.9 ? 'E-book + Álbum Impresso' : 'Pacote Completo (E-book + Álbum + Quadro)'
@@ -305,7 +319,10 @@ export function gerarSeed(): ErpState {
       ['Chevrolet Spin', 'PRT3J88', 2019, 'Cinza', 7, 'Disponível'],
       ['Fiat Strada', 'MNB4K21', 2018, 'Vermelho', 2, 'Em manutenção'],
     ] as const
-  ).map(([modelo, placa, ano, cor, lugares, status]) => inserir(s, 'veiculos', { modelo, placa, ano, cor, lugares, status, observacao: '' }))
+  ).map(([modelo, placa, ano, cor, lugares, status]) =>
+    // gasto fixo por dia de viagem (tudo incluso), vigente desde 4 meses atrás
+    inserir(s, 'veiculos', { modelo, placa, ano, cor, lugares, status, observacao: '', gastoFixoMes: JSON.stringify({ [isoData(new Date(agora.getFullYear(), agora.getMonth() - 4, 1)).slice(0, 7)]: 2500 }) }),
+  )
   // Equipes de viagem: cada uma roda um estado (podem estar no mesmo dia em lugares diferentes)
   const EQUIPES: Record<string, Record<string, string>> = {
     PR: { equipe: 'Equipe 1', veiculoId: doblo.id, carro: 'Fiat Doblò • BCA2E45', fotografoIds: `${thiago.id},${lucas.id}`, motoristaId: jose.id },
@@ -375,6 +392,37 @@ export function gerarSeed(): ErpState {
   for (const v of visitas) if (!v.equipe && v.status === 'Agendada') Object.assign(v, EQUIPES[String(v.uf)] ?? EQUIPES.PR)
   Object.assign(porEscola('ESCOLA ESTADUAL VILA RICA'), { equipe: '', veiculoId: '', carro: '', fotografoIds: '', motoristaId: '' })
   registrarHistoricoVisita(s, porEscola('SANTA TEREZINHA C M E I').id, { tipo: 'Contato', descricao: 'Deixado recado com a secretaria; retornar amanhã cedo.' }, ctxOp)
+
+  // Histórico de viagens: as fichas já lançadas da coordenação viram visitas realizadas, com carro e vendedor
+  // (o painel do dinheiro de Operações calcula gasto fixo, vendedor e escola a partir delas)
+  const escolasHist = ['EMEI RAIO DE SOL', 'ESCOLA MUNICIPAL SÃO JOSÉ', 'CMEI CRIANÇA FELIZ', 'COLÉGIO SANTA RITA', 'ESCOLA ESTADUAL RUI BARBOSA', 'CMEI GIRASSOL', 'ESCOLA MUNICIPAL TIRADENTES']
+  const carrosHist: Record<string, string>[] = [
+    { ...EQUIPES.PR, uf: 'PR', cidade: 'Umuarama' },
+    { ...EQUIPES.SP, uf: 'SP', cidade: 'Presidente Prudente' },
+    { ...EQUIPES.MS, uf: 'MS', cidade: 'Naviraí' },
+  ]
+  const diasHist = new Map<string, number>()
+  for (const l of s.lancamentos) {
+    if (l.setor !== 'operacional' || l.indicador !== 'fichas' || l.colaboradorId !== 'u-op1' || l.origem !== 'manual' || l.data > hojeISO) continue
+    diasHist.set(l.data, (diasHist.get(l.data) ?? 0) + l.quantidade)
+  }
+  let k = 0
+  for (const [dia, fichas] of [...diasHist.entries()].sort()) {
+    // 1 a 3 carros no dia, dividindo as fichas
+    const qtdCarros = fichas > 70 ? 3 : fichas > 35 ? 2 : 1
+    let resto = fichas
+    for (let c = 0; c < qtdCarros; c++) {
+      const parte = c === qtdCarros - 1 ? resto : Math.round(fichas / qtdCarros)
+      resto -= parte
+      const eq = carrosHist[(k + c) % carrosHist.length]
+      inserir(s, 'agenda_visitas', {
+        contratoId: '', escola: escolasHist[k % escolasHist.length], cidade: eq.cidade, uf: eq.uf, endereco: '', telefone: '', responsavel: '',
+        vendedorId: k % 3 === 2 ? rodrigo.id : ahmed.id, data: dia, fichasPrevistas: parte + 10, fichasConfirmadas: parte, fichasFotografadas: parte,
+        equipe: eq.equipe, carro: eq.carro, veiculoId: eq.veiculoId, fotografoIds: eq.fotografoIds, motoristaId: eq.motoristaId, status: 'Fechamento enviado',
+      })
+      k++
+    }
+  }
 
   // Fechamento diário: um já enviado ao financeiro, um em rascunho (o terceiro fica pendente)
   const montarFechamento = (escola: string, ajudantes: { nome: string; valor: number; pixChave: string; pixBanco: string }[]) => {
@@ -488,12 +536,94 @@ export function gerarSeed(): ErpState {
   rota(ahmed.id, 0, [[-23.8039, -53.6836], [-23.83, -53.75], [-23.85, -53.82], [-23.8745, -53.9016, 'Contrato enviado'], [-23.9, -53.8], [-24.0033, -53.7058]], 7)
   rota(rafaela.id, 0, [[-23.7657, -53.325], [-23.78, -53.4], [-23.8, -53.5], [-23.82, -53.6], [-23.8039, -53.6836, 'Venda registrada: Helena Costa'], [-23.806, -53.688], [-23.809, -53.692, 'Venda registrada: Miguel Santos']], 8)
 
+  // ---- Vendas Rebolo: pacotes (caixas de 10 álbuns) com fichas em várias situações ----
+  const ctxRe = (id: string, nome: string): Contexto => ({ autorId: id, autorNome: nome, autorSetor: 'rebolo', silencioso: true })
+  const cidadesMT: [string, string, string, string][] = [
+    ['Diamantino', 'MT', '78400-000', '65'],
+    ['Denise', 'MT', '78380-000', '65'],
+    ['Cássia', 'MG', '37980-000', '35'],
+    ['Umuarama', 'PR', '87501-000', '44'],
+  ]
+  const fichasDemo: [string, string, number, string][] = [
+    // aluno, responsável, meses desde a visita, situação final
+    ['Maria Gabrielly Souza', 'Adriana Souza', 1, 'Aguardando contato'],
+    ['Isabela Rodrigues', 'Paulo Rodrigues', 1, 'Aguardando contato'],
+    ['Henzo Correia', 'Juliana Correia', 2, 'Tentar de novo'],
+    ['Celine Justeira', 'Marta Justeira', 2, 'Em negociação'],
+    ['Emilly Maria da Silva', 'José da Silva', 14, 'Agendado'],
+    ['Isabela Sophia Cecília', 'Roberta Cecília', 14, 'Descarte'],
+    ['Alice Vitória Santos', 'Edinaldo Santos', 20, 'Venda a efetivar'],
+    ['Theo Nascimento', 'Carla Nascimento', 20, 'Vendida'],
+    ['Lorena Batista', 'Sandra Batista', 3, 'Aguardando contato'],
+    ['Davi Lucas Pereira', 'Rosana Pereira', 3, 'Aguardando contato'],
+  ]
+  const mesesAtras = (n: number) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - n)
+    return isoData(d)
+  }
+  const criarPacote = (vendedoraId: string, numero: number, tipo: 'Padrão' | 'Avulso') => inserir(s, 'rebolo_pacotes', { numero, tipo, vendedoraId, observacao: '' })
+  const criarFicha = (pacoteId: string, vendedoraId: string, i: number, aluno: string, resp: string, meses: number, escola: string) => {
+    const [cidade, uf, cep, ddd] = cidadesMT[i % cidadesMT.length]
+    return inserir(s, 'rebolo_fichas', {
+      pacoteId, vendedoraId, escola, dataVisita: mesesAtras(meses), numeroFicha: String(37530 + i + (vendedoraId === 'u-re1' ? 0 : 40)), aluno, serie: `${1 + (i % 5)}º ano`,
+      dataNascimento: `201${6 + (i % 3)}-0${1 + (i % 9)}-1${i % 9}`, qtdFotos: 26, cep, rua: 'Rua das Flores', numero: String(10 + i * 7), apto: '', fazenda: '', proprietarioFazenda: '',
+      bairro: 'Centro', cidade, uf, pontoReferencia: '', whatsapp1: `(${ddd}) 9${9900 + i}-${String(1000 + i * 37).slice(-4)}`, whatsapp2: '', whatsapp3: '', telefone: '',
+      nomePai: '', nomeMae: resp, horario: i % 2 ? 'Tarde' : 'Manhã', observacao: '', situacao: 'Aguardando contato', tentativas: 0, motivoDescarte: '',
+      agendadoPara: '', ultimoContato: '', vendaId: '', descontoValor: '', descontoStatus: '', descontoMotivo: '', rastreio: '', enviadoEm: '',
+    })
+  }
+  // P245: pacote anterior da Bianca, já finalizado (vendas enviadas e descartes)
+  const p245 = criarPacote('u-re1', 245, 'Padrão')
+  ;['Laura Mendes', 'Enzo Gabriel'].forEach((aluno, i) => {
+    const f = criarFicha(p245.id, 'u-re1', 20 + i, aluno, `Responsável de ${aluno.split(' ')[0]}`, 13, 'PROJETO ESPAÇO CRIANÇA')
+    f.situacao = i === 0 ? 'Vendida' : 'Descarte'
+    f.motivoDescarte = i === 0 ? '' : 'Sem condição financeira'
+    if (i === 0) Object.assign(f, { rastreio: 'AA123456789BR', enviadoEm: addDias(hojeISO, -2) })
+  })
+  // P246: pacote aberto da Bianca com as 10 fichas em várias etapas
+  const p246 = criarPacote('u-re1', 246, 'Padrão')
+  const cBianca = ctxRe('u-re1', 'Bianca Rocha')
+  fichasDemo.forEach(([aluno, resp, meses, situacao], i) => {
+    const f = criarFicha(p246.id, 'u-re1', i, aluno, resp, meses, i < 5 ? 'ESCOLA MUNICIPAL SOL NASCENTE' : 'CMEI PEQUENO PRÍNCIPE')
+    if (situacao === 'Tentar de novo') registrarContatoRebolo(s, f.id, { resultado: 'Sem resposta', observacao: 'Chamou e não atendeu' }, cBianca)
+    if (situacao === 'Em negociação') registrarContatoRebolo(s, f.id, { resultado: 'Em negociação', observacao: 'Mãe gostou do vídeo, vai falar com o marido' }, cBianca)
+    if (situacao === 'Agendado') registrarContatoRebolo(s, f.id, { resultado: 'Agendado', observacao: 'Pediu para ligar depois do almoço', agendadoPara: `${hojeISO}T14:00` }, cBianca)
+    if (situacao === 'Descarte') {
+      registrarContatoRebolo(s, f.id, { resultado: 'Sem resposta', observacao: '' }, cBianca)
+      registrarContatoRebolo(s, f.id, { resultado: 'Descarte', observacao: 'Não quis', motivo: 'Sem interesse' }, cBianca)
+    }
+    if (situacao === 'Venda a efetivar' || situacao === 'Vendida') {
+      registrarContatoRebolo(s, f.id, { resultado: 'Em negociação', observacao: '' }, cBianca)
+      const venda = inserir(s, 'vendas_ebooks', {
+        canal: 'Rebolo', fichaReboloId: f.id, cobradorId: 'u-re1', responsavel: resp.toUpperCase(), aluno: '', modelo: aluno.toUpperCase(), numeroFicha: f.numeroFicha, escola: f.escola,
+        telefone: f.whatsapp1, whatsapp: f.whatsapp1, cpf: '069.905.156-86', rg: '', endereco: `${f.rua}, ${f.numero}`, bairro: f.bairro, cep: f.cep, cidade: f.cidade, uf: f.uf,
+        nomePai: '', nomeMae: resp, pacote: 'Kit Sem Moldura', quantidade: 1, qtdFotos: 26, valor: 800, entrada: 0, formaPagamento: 'Boleto', parcelas: 8,
+        formaParcelamento: '8x R$ 100,00', primeiroVencimento: addDias(hojeISO, 20), data: addDias(hojeISO, -1), observacao: '', anexos: '{}', referencias: '[]',
+      })
+      APOS_CRIAR.vendas_ebooks(s, venda, cBianca)
+      if (situacao === 'Vendida') {
+        atualizarVendaRebolo(s, venda.id, 'enviar', { contrato: 'rebolo/u-re1/contrato-theo.pdf' }, cBianca)
+        conferirVendaBook(s, venda.id, 'conferir', '', { ...ctx, autorId: 'u-fi1', autorNome: 'Eduardo Nunes', autorSetor: 'financeiro' })
+      }
+    }
+  })
+  // P247 da Tainá (3 fichas cadastradas) e P248 avulso da Yasmin
+  const p247 = criarPacote('u-re2', 247, 'Padrão')
+  ;['Gabriel Moura', 'Sophia Lima', 'Arthur Alves'].forEach((aluno, i) => criarFicha(p247.id, 'u-re2', 30 + i, aluno, `Responsável de ${aluno.split(' ')[0]}`, 4 + i * 8, 'COLÉGIO DOM ATHAMAZIO MERKLE'))
+  const p248 = criarPacote('u-re3', 248, 'Avulso')
+  criarFicha(p248.id, 'u-re3', 40, 'Valentina Rocha', 'Patrícia Rocha', 22, 'SANTA TEREZINHA C M E I')
+  inserir(s, 'aprovacoes', {
+    tipo: 'Desconto rebolo', setorOrigem: 'rebolo', descricao: 'Exemplo de pedido de desconto (demonstração)', valor: 0, refColecao: 'rebolo_fichas', refId: '',
+    solicitante: 'Tainá Moreira', status: 'Rejeitado', decididoPor: 'Mariana Duarte', decididoEm: addDias(hojeISO, -5),
+  })
+
   s.auditoria = []
   s.notificacoes = []
   s.notificacoes.push({
     id: 'n-boas-vindas',
     data: criado,
-    setores: ['adm', 'gerencia', 'vendas', 'operacional', 'producao', 'financeiro', 'cobranca'],
+    setores: ['adm', 'gerencia', 'vendas', 'operacional', 'producao', 'rebolo', 'financeiro', 'cobranca'],
     tipo: 'info',
     titulo: 'Bem-vindo ao DLG Photos ERP',
     descricao: 'Ambiente de demonstração com dados fictícios. Todos os setores estão integrados ao painel do ADM.',

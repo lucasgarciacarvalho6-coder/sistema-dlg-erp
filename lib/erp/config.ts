@@ -82,11 +82,22 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     descricao: 'Venda de books aos pais e recebimentos',
     home: '/cobranca',
     tom: 'orange',
+    // a venda de books aos pais passou para o setor Vendas Rebolo
+    indicadores: [{ id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1500, mensal: 33000 } }],
+    funcoes: ['Cobrador(a)', 'Atendente de cobrança', 'Supervisor(a) de cobrança'],
+  },
+  rebolo: {
+    id: 'rebolo',
+    nome: 'Vendas Rebolo',
+    descricao: 'Revenda dos books que o vendedor externo não vendeu',
+    home: '/rebolo',
+    tom: 'cyan',
+    // meta do time = soma das metas individuais (ADM › Metas)
     indicadores: [
-      { id: 'ebooks_vendidos', label: 'Books vendidos', unidade: 'qtd', metaPadrao: { diaria: 6, mensal: 130 } },
-      { id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1500, mensal: 33000 } },
+      { id: 'valor_vendido', label: 'Valor vendido', unidade: 'brl', metaPadrao: { diaria: 0, mensal: 0 } },
+      { id: 'books_vendidos', label: 'Books vendidos', unidade: 'qtd', metaPadrao: { diaria: 0, mensal: 0 } },
     ],
-    funcoes: ['Cobrador(a)', 'Atendente de vendas', 'Supervisor(a) de cobrança'],
+    funcoes: ['Vendedor(a) rebolo', 'Supervisor(a) rebolo'],
   },
   externo: {
     id: 'externo',
@@ -100,10 +111,10 @@ export const SETORES: Record<Setor, ConfigSetor> = {
 }
 
 // Setores do ERP (sem os vendedores externos, que usam só o app)
-export const SETORES_ERP: Setor[] = ['adm', 'gerencia', 'operacional', 'vendas', 'producao', 'financeiro', 'cobranca']
+export const SETORES_ERP: Setor[] = ['adm', 'gerencia', 'operacional', 'vendas', 'producao', 'rebolo', 'financeiro', 'cobranca']
 
 // Setores com produção própria (aparecem nos painéis consolidados)
-export const SETORES_PRODUTIVOS: Setor[] = ['vendas', 'operacional', 'producao', 'cobranca', 'financeiro', 'gerencia']
+export const SETORES_PRODUTIVOS: Setor[] = ['vendas', 'operacional', 'producao', 'rebolo', 'cobranca', 'financeiro', 'gerencia']
 
 export function perfilDoSetor(setor: Setor): Perfil {
   if (setor === 'adm') return 'ADM'
@@ -218,11 +229,24 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       titulo: 'Cobrança',
       itens: [
         { label: 'Dashboard de Cobrança', href: '/cobranca', icone: 'dashboard' },
-        { label: 'Vendas de Books', href: '/cobranca/vendas-ebooks', icone: 'book' },
         { label: 'Contas a Receber', href: '/cobranca/titulos', icone: 'wallet' },
         { label: 'Inadimplência', href: '/cobranca/inadimplencia', icone: 'alert' },
         { label: 'Acordos', href: '/cobranca/acordos', icone: 'handshake' },
         { label: 'Histórico', href: '/cobranca/historico', icone: 'log' },
+      ],
+    },
+  ],
+  rebolo: [
+    {
+      titulo: 'Vendas Rebolo',
+      itens: [
+        { label: 'Dashboard Rebolo', href: '/rebolo', icone: 'dashboard' },
+        { label: 'Gestão Diária', href: '/rebolo/gestao', icone: 'chart' },
+        { label: 'Pacotes e Fichas', href: '/rebolo/pacotes', icone: 'book' },
+        { label: 'Contatos', href: '/rebolo/contatos', icone: 'users' },
+        { label: 'Vendas', href: '/rebolo/vendas', icone: 'doc' },
+        { label: 'Envios', href: '/rebolo/envios', icone: 'upload' },
+        { label: 'Tabela de Preços', href: '/rebolo/precos', icone: 'tag' },
       ],
     },
   ],

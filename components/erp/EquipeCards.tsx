@@ -9,6 +9,7 @@ import { formatar, iniciais, mesAtual } from '@/lib/erp/format'
 import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
+import PainelOperacoes from './PainelOperacoes'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
 function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
@@ -221,7 +222,13 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
         largura="max-w-6xl"
         rodape={<button onClick={() => setAberto(null)} className={btnSecundario}>Fechar</button>}
       >
-        {aberto && <PainelMeta s={s} colaborador={aberto} indicadorId={SETORES[aberto.setor].indicadores[0].id} mes={mes} />}
+        {/* Operações (coordenação/RMC): o painel completo do dinheiro da operação */}
+        {aberto &&
+          (aberto.setor === 'operacional' ? (
+            <PainelOperacoes s={s} colaborador={aberto} mes={mes} />
+          ) : (
+            <PainelMeta s={s} colaborador={aberto} indicadorId={SETORES[aberto.setor].indicadores[0].id} mes={mes} />
+          ))}
       </Modal>
     </div>
   )

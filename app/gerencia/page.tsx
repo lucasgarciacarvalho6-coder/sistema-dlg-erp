@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { decidirAprovacao, useErp, usePode } from '@/lib/erp/store'
-import { colecao, equipe, mesesDisponiveis, resumo } from '@/lib/erp/metrics'
+import { colecao, equipeComMeta, mesesDisponiveis, resumo, setoresComMeta } from '@/lib/erp/metrics'
 import { brl, formatar, iniciais, mesAtual, nomeMes, pct } from '@/lib/erp/format'
 import { RankingGeral } from '@/components/erp/PainelSetores'
 import { GradeEvolucao, PlacarAreas } from '@/components/erp/VisaoTV'
@@ -20,12 +20,13 @@ export default function GerenciaDashboardPage() {
     () =>
       SETORES_PRODUTIVOS.filter((x) => x !== 'gerencia').flatMap((setor) => {
         const ind = SETORES[setor].indicadores[0]
-        return equipe(s, setor).map((c) => ({ c, setor, ind, r: resumo(s, setor, ind.id, mes, c.id) }))
+        return equipeComMeta(s, setor, mes).map((c) => ({ c, setor, ind, r: resumo(s, setor, ind.id, mes, c.id) }))
       }),
     [s, mes],
   )
   const bateramHoje = linhas.filter((l) => l.r.pctDia >= 100).length
-  const setoresNoRitmo = SETORES_PRODUTIVOS.filter((x) => {
+  const comMeta = setoresComMeta(s, mes)
+  const setoresNoRitmo = comMeta.filter((x) => {
     const r = resumo(s, x, SETORES[x].indicadores[0].id, mes)
     return r.projecao >= r.meta.mensal
   }).length
@@ -49,7 +50,7 @@ export default function GerenciaDashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard destaque tom="blue" label="Bateram a meta hoje" valor={`${bateramHoje}/${linhas.length}`} detalhe="Colaboradores de todas as áreas" progresso={(bateramHoje / (linhas.length || 1)) * 100} />
-        <StatCard tom="emerald" label="Setores no ritmo da meta" valor={`${setoresNoRitmo}/${SETORES_PRODUTIVOS.length}`} detalhe="Projeção ≥ meta mensal" />
+        <StatCard tom="emerald" label="Setores no ritmo da meta" valor={`${setoresNoRitmo}/${comMeta.length}`} detalhe="Projeção ≥ meta mensal" />
         <StatCard tom="yellow" label="Aprovações pendentes" valor={pendentes.length} detalhe={`${pct(aprov.pctMes)} da meta de análises do mês`} />
         <StatCard tom="orange" label="Valor pendente de aprovação" valor={brl(pendentes.reduce((a, p) => a + Number(p.valor || 0), 0))} />
       </div>

@@ -23,7 +23,8 @@ export default function AdmVisaoTVPage() {
   const faturadoHoje = resumo(s, 'cobranca', 'valor_recebido', mes).hoje
   const fotografado = resumo(s, 'operacional', 'fichas', mes)
   const contratos = resumo(s, 'vendas', 'contratos', mes)
-  const ebooks = resumo(s, 'cobranca', 'ebooks_vendidos', mes)
+  const rebolo = resumo(s, 'rebolo', 'valor_vendido', mes)
+  const booksRebolo = resumo(s, 'rebolo', 'books_vendidos', mes)
   const books = resumo(s, 'producao', 'books', mes)
   const titulos = colecao(s, 'titulos')
   const abertos = titulos.filter((t) => t.status === 'Aberto' || t.status === 'Em acordo')
@@ -87,7 +88,7 @@ export default function AdmVisaoTVPage() {
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard tom="emerald" label="Contratos no mês" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} progresso={contratos.pctMes} />
-        <StatCard tom="orange" label="Books vendidos (internas)" valor={num(ebooks.mes)} detalhe={`Meta ${num(ebooks.meta.mensal)} • hoje ${num(ebooks.hoje)}`} progresso={ebooks.pctMes} />
+        <StatCard tom="cyan" label="Vendas Rebolo" valor={brl(rebolo.mes)} detalhe={`Meta ${brl(rebolo.meta.mensal)} • ${num(booksRebolo.mes)} books • hoje ${brl(rebolo.hoje)}`} progresso={rebolo.pctMes} />
         <StatCard tom="red" label="Inadimplência" valor={pct(inadimplencia)} detalhe={`${atrasados.length} título(s) em atraso`} />
         <Link href="/gerencia/aprovacoes" className="block">
           <StatCard tom="yellow" label="Aprovações pendentes" valor={aprovacoesPendentes} detalhe="Gerência • clique para ver" />

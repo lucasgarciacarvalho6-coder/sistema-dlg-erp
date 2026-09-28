@@ -433,6 +433,10 @@ export async function salvarColaborador(dados: DadosColaborador, id?: string): P
         funcao: dados.funcao,
         setor: dados.setor,
         dataAdmissao: dados.dataAdmissao || null,
+      }).then(async (erro) => {
+        // "Sem meta" é gravado logo depois (a Edge Function só cria o acesso)
+        if (erro || !dados.semMeta) return erro
+        return gravar(() => sb().from('colaboradores').update({ sem_meta: true }).eq('email', email))
       })
     }
     const erro = await gravar(() =>
@@ -446,6 +450,7 @@ export async function salvarColaborador(dados: DadosColaborador, id?: string): P
           setor: dados.setor,
           status: dados.status,
           data_admissao: dados.dataAdmissao || null,
+          sem_meta: !!dados.semMeta,
         })
         .eq('id', id),
     )
@@ -913,6 +918,128 @@ export const enviarDocumentoApp = (d: { tipo: string; escola: string; descricao:
 export const registrarDevolucaoBooks = (d: { escola: string; quantidade: number; observacao: string }) =>
   registrarDoApp('devolucoes_books', { ...d, data: hoje(), status: 'Devolvido' }, 'Devolução registrada.')
 
+// ---------------- Dinheiro de Operações ----------------
+
+// Gasto fixo por dia de viagem de cada carro, a partir do mês informado (os meses anteriores ficam como estavam)
+export async function salvarGastoFixoCarros(valores: Record<string, number>, mes: string): Promise<string | null> {
+  const s = carregar()
+  for (const [id, valor] of Object.entries(valores)) {
+    const v = F.col(s, 'veiculos').find((x) => x.id === id)
+    if (!v) continue
+    const mapa = { ...lerJSON<Record<string, number>>(v.gastoFixoMes, {}), [mes]: Math.max(0, valor) }
+    const erro = await atualizarRegistro('veiculos', id, { gastoFixoMes: JSON.stringify(mapa) }, 'operacional')
+    if (erro) return erro
+  }
+  avisar('Gasto fixo dos carros salvo.', 'ok')
+  return null
+}
+
+// ---------------- Vendas Rebolo ----------------
+// Supabase: funções do banco (SQL 012) garantem as regras; demo: mesmas regras em fluxos.ts
+
+async function acaoRebolo(rpc: string, params: Record<string, unknown>, demo: (d: ErpState, ctx: F.Contexto) => string | null, ok: string): Promise<string | null> {
+  if (MODO === 'supabase') return gravar(() => sb().rpc(rpc, params), ok)
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = demo(d, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Nova caixa: Padrão (10 álbuns) ou Avulso (1). Só abre com o pacote anterior finalizado.
+export async function abrirPacoteRebolo(tipo: 'Padrão' | 'Avulso'): Promise<string | null> {
+  const eu = lerSessao()?.colaboradorId
+  if (!eu) return 'Sessão expirada.'
+  const s = carregar()
+  const meus = F.col(s, 'rebolo_pacotes').filter((p) => p.vendedoraId === eu)
+  const aberto = meus.find((p) => {
+    const fichas = F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === p.id)
+    return !(fichas.length > 0 && fichas.every((f) => ['Vendida', 'Descarte', 'Cancelada'].includes(String(f.situacao))))
+  })
+  if (aberto) {
+    const msg = `Finalize o pacote P${aberto.numero} (todas as fichas vendidas ou em descarte) antes de abrir outro.`
+    avisar(msg)
+    return msg
+  }
+  if (MODO === 'supabase') return gravar(() => sb().from('rebolo_pacotes').insert({ tipo, vendedora_id: eu }), `Pacote ${tipo.toLowerCase()} aberto.`)
+  mutar((d, ctx) => {
+    const numero = Math.max(245, ...F.col(d, 'rebolo_pacotes').map((p) => Number(p.numero) || 0)) + 1
+    F.inserir(d, 'rebolo_pacotes', { numero, tipo, vendedoraId: eu, observacao: '' })
+    F.auditar(d, ctx, 'CRIAR', `Pacote P${numero} (${tipo}) aberto`, 'rebolo')
+  })
+  avisar(`Pacote ${tipo.toLowerCase()} aberto.`, 'ok')
+  return null
+}
+
+export async function salvarFichaRebolo(dados: Record<string, Valor>, id?: string): Promise<string | null> {
+  if (id) return atualizarRegistro('rebolo_fichas', id, dados, 'rebolo')
+  const s = carregar()
+  const pacote = F.col(s, 'rebolo_pacotes').find((p) => p.id === dados.pacoteId)
+  if (!pacote) return 'Pacote não encontrado.'
+  const capacidade = pacote.tipo === 'Avulso' ? 1 : 10
+  if (F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === pacote.id).length >= capacidade) return `O pacote P${pacote.numero} já tem ${capacidade} ficha(s).`
+  const erro = await criarRegistro('rebolo_fichas', { ...dados, vendedoraId: pacote.vendedoraId, situacao: 'Aguardando contato', tentativas: 0 }, 'rebolo')
+  if (!erro) avisar('Ficha cadastrada.', 'ok')
+  return erro
+}
+
+export const registrarContatoRebolo = (fichaId: string, c: { resultado: F.ResultadoContato; observacao: string; motivo?: string; agendadoPara?: string }) =>
+  acaoRebolo(
+    'registrar_contato_rebolo',
+    { p_ficha: fichaId, p_resultado: c.resultado, p_observacao: c.observacao, p_motivo: c.motivo || null, p_agendado: c.agendadoPara || null },
+    (d, ctx) => F.registrarContatoRebolo(d, fichaId, c, ctx),
+    'Contato registrado.',
+  )
+
+export const reabrirFichaRebolo = (fichaId: string) =>
+  acaoRebolo('reabrir_ficha_rebolo', { p_ficha: fichaId }, (d, ctx) => F.reabrirFichaRebolo(d, fichaId, ctx), 'Ficha devolvida para a fila.')
+
+export const pedirDescontoRebolo = (fichaId: string, valor: number, motivo: string) =>
+  acaoRebolo('pedir_desconto_rebolo', { p_ficha: fichaId, p_valor: valor, p_motivo: motivo }, (d, ctx) => F.pedirDescontoRebolo(d, fichaId, valor, motivo, ctx), 'Desconto enviado para a Gerência aprovar.')
+
+// Fechou negócio: a venda fica "Aguardando contrato" até a vendedora anexar o contrato assinado
+export async function fecharVendaRebolo(fichaId: string, dados: Record<string, Valor>): Promise<string | null> {
+  const eu = lerSessao()?.colaboradorId
+  if (!eu) return 'Sessão expirada.'
+  const erro = await criarRegistro('vendas_ebooks', { ...dados, canal: 'Rebolo', fichaReboloId: fichaId, conferencia: 'Aguardando contrato', cobradorId: eu, entrada: 0, data: hoje() }, 'rebolo')
+  if (!erro) avisar('Venda registrada. Gere o contrato, colete a assinatura e anexe o PDF assinado.', 'ok')
+  return erro
+}
+
+export const enviarVendaRebolo = (vendaId: string, contrato: string) =>
+  acaoRebolo(
+    'atualizar_venda_rebolo',
+    { p_venda: vendaId, p_acao: 'enviar', p_contrato: contrato, p_motivo: null },
+    (d, ctx) => F.atualizarVendaRebolo(d, vendaId, 'enviar', { contrato }, ctx),
+    'Venda enviada ao Financeiro.',
+  )
+
+export const cancelarVendaRebolo = (vendaId: string, motivo: string) =>
+  acaoRebolo(
+    'atualizar_venda_rebolo',
+    { p_venda: vendaId, p_acao: 'cancelar', p_contrato: null, p_motivo: motivo },
+    (d, ctx) => F.atualizarVendaRebolo(d, vendaId, 'cancelar', { motivo }, ctx),
+    'Venda cancelada.',
+  )
+
+export const registrarEnvioRebolo = (fichaId: string, rastreio: string) =>
+  acaoRebolo('registrar_envio_rebolo', { p_ficha: fichaId, p_rastreio: rastreio }, (d, ctx) => F.registrarEnvioRebolo(d, fichaId, rastreio, ctx), 'Envio registrado.')
+
+// Contrato assinado (PDF ou foto) enviado pelo computador. Caminho: contratos/rebolo/<usuário>/<id>-nome
+export async function anexarContratoRebolo(arquivo: File): Promise<{ caminho: string } | { erro: string }> {
+  const usuarioId = lerSessao()?.colaboradorId
+  if (!usuarioId) return { erro: 'Sessão expirada. Entre novamente.' }
+  if (arquivo.size > 10 * 1024 * 1024) return { erro: 'O arquivo precisa ter no máximo 10 MB.' }
+  const nome = arquivo.name.normalize('NFD').replace(/[^\w.-]+/g, '_')
+  const caminho = `rebolo/${usuarioId}/${uid()}-${nome}`
+  if (MODO === 'supabase') {
+    const { error } = await sb().storage.from('contratos').upload(caminho, arquivo, { contentType: arquivo.type || undefined })
+    if (error) return { erro: traduzirErro(error) }
+  } else await guardarArquivoDemo(caminho, arquivo)
+  return { caminho }
+}
+
 // ---- GPS (só enquanto o app está aberto) ----
 export interface PontoGps {
   vendedorId: string
@@ -1131,7 +1258,9 @@ export function marcarLidas(ids: string[]) {
 }
 
 // Parâmetros do negócio (bonificação, diárias, alimentação...) — ADM › Configurações
-export async function salvarParametros(valores: Record<string, number>): Promise<string | null> {
+export async function salvarParametros(novos: Record<string, number>): Promise<string | null> {
+  // junta com os já salvos: Configurações e a Tabela de Preços do rebolo gravam no mesmo lugar
+  const valores = { ...(carregar().empresa.parametros ?? {}), ...novos }
   if (MODO === 'supabase') {
     if (!empresaId) return 'Cadastre os dados da empresa antes de salvar os parâmetros.'
     return gravar(() => sb().from('empresas').update({ parametros: valores }).eq('id', empresaId!), 'Parâmetros salvos.')

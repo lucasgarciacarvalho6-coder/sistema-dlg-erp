@@ -3,11 +3,11 @@
 import { useState } from 'react'
 import type { Colaborador, Meta, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { definirMetas, useErp, usePode } from '@/lib/erp/store'
+import { definirMetas, salvarColaborador, useErp, usePode } from '@/lib/erp/store'
 import { equipe, metaColaborador, metaDefinida, metaSetor, resumo, type OrigemMeta } from '@/lib/erp/metrics'
 import { formatar, iniciais, mesAtual, nomeMes, pct } from '@/lib/erp/format'
 import { metaDiariaDoMes, totalDiasUteis } from '@/lib/erp/calendario'
-import { Avatar, PageHeader, Panel, ProgressBar, Tabs, btnPrimario } from './ui'
+import { Avatar, Badge, PageHeader, Panel, ProgressBar, Tabs, btnPrimario, btnSecundario } from './ui'
 
 const dec = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -28,6 +28,42 @@ function textoOrigem(o: OrigemMeta) {
 
 const inputMeta =
   'w-full mt-1 bg-black/50 border border-white/[0.05] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 disabled:opacity-60'
+
+// Colaborador marcado "Sem meta" no cadastro: não entra na soma do setor; pode religar aqui
+function LinhaSemMeta({ c, colunas, podeReligar }: { c: Colaborador; colunas: number; podeReligar: boolean }) {
+  const religar = () => {
+    const { id, criadoEm, perfil, ...dados } = c
+    void criadoEm
+    void perfil
+    void salvarColaborador({ ...dados, semMeta: false }, id)
+  }
+  return (
+    <tr className="align-middle opacity-80">
+      <td className="px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Avatar texto={iniciais(c.nome)} foto={c.foto} />
+          <div>
+            <p className="text-white font-bold">{c.nome}</p>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{c.funcao}</p>
+          </div>
+        </div>
+      </td>
+      <td colSpan={colunas} className="px-6 py-4">
+        <div className="flex items-center gap-3">
+          <Badge texto="Sem meta" tom="zinc" />
+          <span className="text-xs text-zinc-500">Fora dos cards, do ranking e da soma da meta do setor. O que ele lança continua contando no realizado.</span>
+        </div>
+      </td>
+      <td className="px-6 py-4 text-right">
+        {podeReligar && (
+          <button onClick={religar} className={btnSecundario}>
+            Ligar meta
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
 
 function LinhaMetas({ c, mes, editavel }: { c: Colaborador; mes: string; editavel: boolean }) {
   const s = useErp()
@@ -172,9 +208,13 @@ export default function MetasEditor({ modulo }: { modulo: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.02]">
-              {time.map((c) => (
-                <LinhaMetas key={`${c.id}-${mes}`} c={c} mes={mes} editavel={editavel} />
-              ))}
+              {time.map((c) =>
+                c.semMeta ? (
+                  <LinhaSemMeta key={c.id} c={c} colunas={cfg.indicadores.length} podeReligar={podeFazer('usuarios', 'editar')} />
+                ) : (
+                  <LinhaMetas key={`${c.id}-${mes}`} c={c} mes={mes} editavel={editavel} />
+                ),
+              )}
             </tbody>
           </table>
         </div>

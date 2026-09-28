@@ -29,7 +29,7 @@ export default function VendasBooksFinanceiroPage() {
   const vendas = useMemo(
     () =>
       todas
-        .filter((v) => String(v.data).startsWith(mes) && (!canal || String(v.canal || 'Interno') === canal) && (!forma || String(v.formaPagamento || 'Boleto') === forma))
+        .filter((v) => v.conferencia !== 'Cancelada' && String(v.data).startsWith(mes) && (!canal || String(v.canal || 'Interno') === canal) && (!forma || String(v.formaPagamento || 'Boleto') === forma))
         .sort((a, b) => `${b.data}${b.criadoEm}`.localeCompare(`${a.data}${a.criadoEm}`)),
     [todas, mes, canal, forma],
   )
@@ -49,7 +49,7 @@ export default function VendasBooksFinanceiroPage() {
       <PageHeader
         modulo="Financeiro / Vendas de books"
         titulo="Vendas de Books"
-        descricao="Todas as vendas de books aos pais — externas (app do vendedor) e internas — com forma de pagamento e parcelas. O sistema registra; o pagamento é processado no sistema de pagamentos da empresa."
+        descricao="Todas as vendas de books aos pais — externas (app do vendedor) e do Rebolo — com forma de pagamento e parcelas. O sistema registra; o pagamento é processado no sistema de pagamentos da empresa."
         acoes={
           <div className="flex flex-wrap gap-2">
             <select value={mes} onChange={(e) => setMes(e.target.value)} className={selectCls}>
@@ -60,7 +60,8 @@ export default function VendasBooksFinanceiroPage() {
             <select value={canal} onChange={(e) => setCanal(e.target.value)} className={selectCls}>
               <option value="">Todos os canais</option>
               <option value="Externo">Externas (app)</option>
-              <option value="Interno">Internas</option>
+              <option value="Rebolo">Rebolo</option>
+              <option value="Interno">Internas (antigas)</option>
             </select>
             <select value={forma} onChange={(e) => setForma(e.target.value)} className={selectCls}>
               <option value="">Todas as formas</option>
@@ -122,7 +123,7 @@ export default function VendasBooksFinanceiroPage() {
                     <tr key={v.id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataBR(String(v.data))}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <Badge texto={v.canal === 'Externo' ? 'Externa' : 'Interna'} tom={v.canal === 'Externo' ? 'orange' : 'blue'} />
+                        <Badge texto={v.canal === 'Externo' ? 'Externa' : v.canal === 'Rebolo' ? 'Rebolo' : 'Interna'} tom={v.canal === 'Externo' ? 'orange' : v.canal === 'Rebolo' ? 'cyan' : 'blue'} />
                         <p className="text-[11px] text-zinc-400 mt-1">{vendedor(v)}</p>
                       </td>
                       <td className="px-4 py-3 text-xs">{String(v.escola)}</td>

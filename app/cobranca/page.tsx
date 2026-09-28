@@ -23,12 +23,12 @@ export default function CobrancaDashboardPage() {
     <SectorDashboard
       setor="cobranca"
       titulo="Dashboard de Cobrança"
-      descricao="E-books vendidos aos pais, recebimentos, inadimplência, acordos e metas de cada cobrador."
+      descricao="Recebimentos, inadimplência, acordos e metas de cada cobrador. A venda de books aos pais agora é feita pelo setor Vendas Rebolo."
       tituloEquipe="Cobradores • metas diárias e mensais"
       antesDaEquipe={
         <div className="space-y-6">
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-            <StatCard tom="orange" label="E-books vendidos (mês)" valor={vendidosMes.length} detalhe={brl(vendidosMes.reduce((a, v) => a + Number(v.valor || 0), 0))} />
+            <StatCard tom="orange" label="Books vendidos (mês)" valor={vendidosMes.length} detalhe={brl(vendidosMes.reduce((a, v) => a + Number(v.valor || 0), 0))} />
             <StatCard tom="blue" label="A receber" valor={brl(valor(emAberto))} detalhe={`${emAberto.length} parcela(s) em aberto`} />
             <StatCard tom="red" label="Taxa de inadimplência" valor={pct(taxa)} detalhe={`${atrasados.length} título(s) • ${brl(valor(atrasados))}`} />
             <StatCard tom="emerald" label="Acordos gerados" valor={acordos.length} detalhe={`${acordos.filter((a) => a.status === 'Ativo').length} ativos • ${acordos.filter((a) => a.status === 'Aguardando aprovação').length} aguardando`} />

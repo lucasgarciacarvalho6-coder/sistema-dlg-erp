@@ -3,18 +3,18 @@
 import type { Setor } from '@/lib/erp/types'
 import { SETORES } from '@/lib/erp/config'
 import { useErp } from '@/lib/erp/store'
-import { diaReferencia, equipe, resumo, serieMes } from '@/lib/erp/metrics'
+import { diaReferencia, equipeComMeta, resumo, serieMes } from '@/lib/erp/metrics'
 import { formatar, iniciais, mesAtual, pct } from '@/lib/erp/format'
 import { Avatar, BarChart, Badge, EmptyState, ProgressBar, TONS } from './ui'
 
 // Um cartão por colaborador: meta diária (hoje), meta mensal e gráfico diário do mês.
 export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: string }) {
   const s = useErp()
-  const time = equipe(s, setor)
+  const time = equipeComMeta(s, setor, mes) // quem está "Sem meta" não tem cartão
   const indicadores = SETORES[setor].indicadores
   const limite = mes === mesAtual() ? diaReferencia(mes) : undefined
 
-  if (time.length === 0) return <EmptyState titulo="Sem colaboradores" descricao="O ADM ainda não cadastrou colaboradores neste setor." />
+  if (time.length === 0) return <EmptyState titulo="Sem colaboradores com meta" descricao="Cadastre a equipe em Colaboradores e defina as metas em Metas." />
 
   const ranking = time
     .map((c) => ({ c, pct: resumo(s, setor, indicadores[0].id, mes, c.id).pctMes }))

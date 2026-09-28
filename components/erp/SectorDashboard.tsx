@@ -20,6 +20,7 @@ export default function SectorDashboard({
   tituloEquipe = 'Metas individuais da equipe',
   antesDaEquipe,
   depoisDaEquipe,
+  registroManual = true,
 }: {
   setor: Setor
   titulo: string
@@ -27,6 +28,7 @@ export default function SectorDashboard({
   tituloEquipe?: string
   antesDaEquipe?: ReactNode
   depoisDaEquipe?: ReactNode
+  registroManual?: boolean // false: a produção é lançada sozinha pelo fluxo (ex.: vendas do Rebolo)
 }) {
   const s = useErp()
   const podeFazer = usePode()
@@ -59,7 +61,7 @@ export default function SectorDashboard({
                 <option key={m} value={m}>{nomeMes(m)}</option>
               ))}
             </select>
-            {podeFazer(setor, 'criar') && (
+            {registroManual && podeFazer(setor, 'criar') && (
               <button onClick={() => setModal(true)} className={btnBranco}>
                 <Icon nome="plus" className="w-5 h-5" /> Registrar produção
               </button>

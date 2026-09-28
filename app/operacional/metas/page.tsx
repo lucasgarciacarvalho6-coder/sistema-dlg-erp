@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import SectorDashboard from '@/components/erp/SectorDashboard'
+import PainelOperacoes from '@/components/erp/PainelOperacoes'
 import { Badge, Panel } from '@/components/erp/ui'
 import { useErp } from '@/lib/erp/store'
 import { colecao, nomeColaborador } from '@/lib/erp/metrics'
 import { dataBR } from '@/lib/erp/format'
+import { responsavelOperacional } from '@/lib/erp/operacional'
 
 export default function OperacionalMetasPage() {
   const s = useErp()
@@ -15,9 +17,11 @@ export default function OperacionalMetasPage() {
     <SectorDashboard
       setor="operacional"
       titulo="Dashboard Operacional"
-      descricao="Fichas fotografadas por equipe, metas diárias e mensais e pendências de campo."
+      descricao="O dinheiro da operação (alunos, custo por aluno, gastos e projeção), metas e pendências de campo."
       tituloEquipe="Equipe de campo • metas diárias e mensais"
       antesDaEquipe={
+        <div className="space-y-8">
+        <PainelOperacoes s={s} colaborador={responsavelOperacional(s)} />
         <Panel
           titulo={`Pendências operacionais • ${pendentes.length}`}
           subtitulo="Sessões a agendar geradas pelos contratos de Vendas"
@@ -40,6 +44,7 @@ export default function OperacionalMetasPage() {
             </div>
           )}
         </Panel>
+        </div>
       }
     />
   )

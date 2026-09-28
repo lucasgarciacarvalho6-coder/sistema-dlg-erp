@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, situacaoResumo, somar } from '@/lib/erp/metrics'
+import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, setoresComMeta, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { CardColaborador } from './EquipeCards'
 import Icon from './Icon'
@@ -42,7 +42,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
       </div>
 
       <div className="divide-y divide-white/[0.03]">
-        {SETORES_PRODUTIVOS.map((setor) => {
+        {setoresComMeta(s, mes).map((setor) => {
           const cfg = SETORES[setor]
           const ind = cfg.indicadores[0]
           const r = resumo(s, setor, ind.id, mes)
@@ -259,7 +259,7 @@ export function GradeEvolucao({ s, mes, grande = false }: { s: ErpState; mes: st
         </div>
       )}
       <div className={`grid grid-cols-1 md:grid-cols-2 ${grande ? 'xl:grid-cols-3 gap-6' : 'xl:grid-cols-3 gap-5'}`}>
-        {SETORES_PRODUTIVOS.map((setor) => (
+        {setoresComMeta(s, mes).map((setor) => (
           <EvolucaoSetor key={setor} s={s} setor={setor} mes={mes} grande={grande} />
         ))}
       </div>

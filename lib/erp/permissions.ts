@@ -15,6 +15,7 @@ export const MATRIZ_PADRAO: MatrizPermissoes = {
     producao: TODAS,
     financeiro: TODAS,
     cobranca: TODAS,
+    rebolo: TODAS,
     adm: ['visualizar', 'exportar'],
     usuarios: ['visualizar'],
     permissoes: ['visualizar'],
@@ -38,7 +39,7 @@ export const MODULOS: { id: Modulo; label: string }[] = [
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'auditoria', label: 'Auditoria' },
   { id: 'configuracoes', label: 'Configurações' },
-  ...(['gerencia', 'operacional', 'vendas', 'producao', 'financeiro', 'cobranca'] as Setor[]).map((s) => ({
+  ...(['gerencia', 'operacional', 'vendas', 'producao', 'rebolo', 'financeiro', 'cobranca'] as Setor[]).map((s) => ({
     id: s as Modulo,
     label: `Setor ${SETORES[s].nome}`,
   })),

@@ -105,17 +105,27 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
 
   // VENDA DE E-BOOK AOS PAIS → Contas a receber (parcelas).
   // (A escola NÃO recebe % sobre a venda: ela recebe a bonificação por ficha no fechamento operacional.)
-  // Canal Interno (equipe da empresa): meta da Cobrança e títulos na hora.
+  // Canal Interno (vendas antigas registradas pela empresa): meta do Rebolo e títulos na hora.
   // Canal Externo (app do vendedor de books): espera a CONFERÊNCIA do Financeiro para gerar os títulos (mesma regra do SQL 009).
+  // Canal Rebolo: nasce "Aguardando contrato"; a vendedora anexa o contrato assinado e envia ao Financeiro (SQL 012).
   vendas_ebooks(d, r, ctx) {
     const canal = String(r.canal || 'Interno')
     r.canal = canal
     r.formaPagamento = String(r.formaPagamento || 'Boleto')
     if (!r.pacote) r.pacote = 'Book'
     const valor = Number(r.valor) || 0
+    if (canal === 'Rebolo') {
+      r.conferencia = 'Aguardando contrato'
+      const ficha = col(d, 'rebolo_fichas').find((f) => f.id === r.fichaReboloId)
+      if (ficha) {
+        ficha.situacao = 'Venda a efetivar'
+        ficha.vendaId = r.id
+      }
+      return
+    }
     if (canal === 'Interno') {
       r.conferencia = r.conferencia || 'Conferida'
-      lancar(d, ctx, { setor: 'cobranca', indicador: 'ebooks_vendidos', colaboradorId: String(r.cobradorId ?? ''), quantidade: Number(r.quantidade) || 1, descricao: `${r.pacote} — ${r.responsavel}`, data: String(r.data || hoje()) })
+      contarVendaRebolo(d, r, ctx)
       gerarTitulosVenda(d, r, ctx)
       notificar(d, ctx, { setores: ['cobranca', 'financeiro', 'adm'], tipo: 'info', titulo: 'Venda interna de book', descricao: `${r.responsavel} (${r.escola}) • ${r.formaPagamento} • R$ ${valor.toFixed(2).replace('.', ',')}`, link: '/financeiro/vendas-books' })
     } else {
@@ -189,6 +199,7 @@ export function decidirAprovacao(d: ErpState, id: string, aprovado: boolean, ctx
   if (ref) {
     if (a.refColecao === 'acordos') ref.status = aprovado ? 'Ativo' : 'Rejeitado'
     if (a.refColecao === 'contas_pagar') ref.status = aprovado ? 'A pagar' : 'Rejeitada'
+    if (a.refColecao === 'rebolo_fichas') ref.descontoStatus = aprovado ? 'Aprovado' : 'Rejeitado'
   }
   lancar(d, ctx, {
     setor: 'gerencia',
@@ -204,7 +215,7 @@ export function decidirAprovacao(d: ErpState, id: string, aprovado: boolean, ctx
     tipo: aprovado ? 'sucesso' : 'alerta',
     titulo: `${a.tipo} ${aprovado ? 'aprovado' : 'rejeitado'}`,
     descricao: `${a.descricao} — por ${ctx.autorNome}`,
-    link: a.refColecao === 'acordos' ? '/cobranca/acordos' : '/financeiro/contas-pagar',
+    link: a.refColecao === 'acordos' ? '/cobranca/acordos' : a.refColecao === 'rebolo_fichas' ? '/rebolo/contatos' : '/financeiro/contas-pagar',
   })
 }
 
@@ -378,7 +389,23 @@ export function conferirVendaBook(d: ErpState, id: string, acao: 'conferir' | 'd
   v.conferenciaMotivo = acao === 'conferir' ? '' : motivo.trim()
   v.conferidoPor = ctx.autorId
   v.conferidoEm = agora()
-  if (acao === 'conferir') gerarTitulosVenda(d, v, ctx)
+  if (acao === 'conferir') {
+    gerarTitulosVenda(d, v, ctx)
+    if (v.canal === 'Rebolo') {
+      contarVendaRebolo(d, v, ctx)
+      const ficha = col(d, 'rebolo_fichas').find((f) => f.id === v.fichaReboloId)
+      if (ficha) ficha.situacao = 'Vendida'
+    }
+  }
+  if (v.canal === 'Rebolo') {
+    notificar(d, ctx, {
+      setores: ['rebolo'],
+      tipo: acao === 'conferir' ? 'sucesso' : 'alerta',
+      titulo: acao === 'conferir' ? 'Venda aprovada pelo Financeiro' : 'Venda devolvida pelo Financeiro',
+      descricao: `${v.responsavel}${acao === 'conferir' ? ' — pronta para envio.' : `: ${motivo.trim()}`}`,
+      link: acao === 'conferir' ? '/rebolo/envios' : '/rebolo/vendas',
+    })
+  }
   auditar(d, ctx, 'EDITAR', `Venda de book ${acao === 'conferir' ? 'conferida' : `devolvida (${motivo.trim()})`}: ${v.responsavel}`, 'financeiro')
   return null
 }
@@ -506,5 +533,107 @@ export function enviarFechamento(d: ErpState, id: string, ctx: Contexto): string
     link: '/financeiro/pagamentos',
   })
   auditar(d, ctx, 'EDITAR', `Fechamento enviado ao financeiro: ${f.referencia}`, 'operacional')
+  return null
+}
+
+// ---------------- Vendas Rebolo (mesmas regras do SQL 012) ----------------
+
+// Venda aprovada (ou venda interna antiga) conta na meta da vendedora: books e valor vendido
+export function contarVendaRebolo(d: ErpState, v: Registro, ctx: Contexto) {
+  const colaboradorId = String(v.cobradorId ?? '')
+  const data = String(v.data || hoje())
+  lancar(d, ctx, { setor: 'rebolo', indicador: 'books_vendidos', colaboradorId, quantidade: Number(v.quantidade) || 1, descricao: `${v.pacote} — ${v.responsavel}`, data })
+  if ((Number(v.valor) || 0) > 0) lancar(d, ctx, { setor: 'rebolo', indicador: 'valor_vendido', colaboradorId, quantidade: Number(v.valor), descricao: `${v.pacote} — ${v.responsavel}`, data })
+}
+
+export type ResultadoContato = 'Sem resposta' | 'Em negociação' | 'Agendado' | 'Descarte'
+const SITUACAO_DO_RESULTADO: Record<ResultadoContato, string> = { 'Sem resposta': 'Tentar de novo', 'Em negociação': 'Em negociação', Agendado: 'Agendado', Descarte: 'Descarte' }
+
+export function registrarContatoRebolo(
+  d: ErpState,
+  fichaId: string,
+  c: { resultado: ResultadoContato; observacao: string; motivo?: string; agendadoPara?: string },
+  ctx: Contexto,
+): string | null {
+  const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
+  if (!f) return 'Ficha não encontrada.'
+  if (!['Aguardando contato', 'Tentar de novo', 'Em negociação', 'Agendado'].includes(String(f.situacao))) return 'Esta ficha não está na fila de contatos.'
+  if (c.resultado === 'Descarte' && !c.motivo) return 'Escolha o motivo do descarte.'
+  if (c.resultado === 'Agendado' && !c.agendadoPara) return 'Informe a data e a hora do agendamento.'
+  inserir(d, 'rebolo_contatos', {
+    fichaId,
+    vendedoraId: ctx.autorId,
+    resultado: c.resultado === 'Descarte' ? `Descarte: ${c.motivo}` : c.resultado,
+    observacao: c.observacao.trim(),
+    agendadoPara: c.agendadoPara ?? '',
+    data: agora(),
+  })
+  f.situacao = SITUACAO_DO_RESULTADO[c.resultado]
+  f.ultimoContato = agora()
+  if (c.resultado === 'Sem resposta') f.tentativas = (Number(f.tentativas) || 0) + 1
+  f.agendadoPara = c.resultado === 'Agendado' ? String(c.agendadoPara) : ''
+  f.motivoDescarte = c.resultado === 'Descarte' ? String(c.motivo) : ''
+  if (c.observacao.trim()) f.observacao = c.observacao.trim()
+  return null
+}
+
+// Supervisora/ADM devolve um descarte para a fila
+export function reabrirFichaRebolo(d: ErpState, fichaId: string, ctx: Contexto): string | null {
+  const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
+  if (!f || f.situacao !== 'Descarte') return 'Só fichas em descarte podem ser reabertas.'
+  f.situacao = 'Aguardando contato'
+  f.motivoDescarte = ''
+  inserir(d, 'rebolo_contatos', { fichaId, vendedoraId: ctx.autorId, resultado: 'Reaberta', observacao: `Descarte reaberto por ${ctx.autorNome}`, agendadoPara: '', data: agora() })
+  return null
+}
+
+export function pedirDescontoRebolo(d: ErpState, fichaId: string, valor: number, motivo: string, ctx: Contexto): string | null {
+  const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
+  if (!f) return 'Ficha não encontrada.'
+  if (!(valor > 0)) return 'Informe o valor com desconto.'
+  if (f.descontoStatus === 'Pendente') return 'Já existe um pedido de desconto aguardando a Gerência.'
+  f.descontoValor = valor
+  f.descontoStatus = 'Pendente'
+  f.descontoMotivo = motivo.trim()
+  pedirAprovacao(d, ctx, {
+    tipo: 'Desconto rebolo',
+    setorOrigem: 'rebolo',
+    descricao: `Ficha ${f.numeroFicha} (${f.aluno}) por R$ ${valor.toFixed(2).replace('.', ',')}${motivo.trim() ? ` — ${motivo.trim()}` : ''}`,
+    valor,
+    refColecao: 'rebolo_fichas',
+    refId: fichaId,
+  })
+  return null
+}
+
+// A vendedora anexa o contrato assinado e envia ao Financeiro, ou cancela a venda
+export function atualizarVendaRebolo(d: ErpState, vendaId: string, acao: 'enviar' | 'cancelar', dados: { contrato?: string; motivo?: string }, ctx: Contexto): string | null {
+  const v = col(d, 'vendas_ebooks').find((x) => x.id === vendaId)
+  if (!v || v.canal !== 'Rebolo') return 'Venda não encontrada.'
+  if (!['Aguardando contrato', 'Devolvida'].includes(String(v.conferencia))) return 'Esta venda já está com o Financeiro.'
+  const ficha = col(d, 'rebolo_fichas').find((f) => f.id === v.fichaReboloId)
+  if (acao === 'cancelar') {
+    v.conferencia = 'Cancelada'
+    v.conferenciaMotivo = String(dados.motivo ?? '').trim()
+    if (ficha) ficha.situacao = 'Cancelada'
+    auditar(d, ctx, 'EDITAR', `Venda rebolo cancelada: ${v.responsavel}`, 'rebolo')
+    return null
+  }
+  if (!dados.contrato) return 'Anexe o contrato assinado.'
+  v.anexos = JSON.stringify({ contratoAssinado: dados.contrato })
+  v.conferencia = 'Aguardando conferência'
+  v.conferenciaMotivo = ''
+  notificar(d, ctx, { setores: ['financeiro', 'adm'], tipo: 'aprovacao', titulo: 'Venda do rebolo para conferir', descricao: `${v.responsavel} • ${v.pacote} • R$ ${(Number(v.valor) || 0).toFixed(2).replace('.', ',')}`, link: '/financeiro/conferencia' })
+  auditar(d, ctx, 'EDITAR', `Venda rebolo enviada ao Financeiro: ${v.responsavel}`, 'rebolo')
+  return null
+}
+
+export function registrarEnvioRebolo(d: ErpState, fichaId: string, rastreio: string, ctx: Contexto): string | null {
+  const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
+  if (!f || f.situacao !== 'Vendida') return 'Só vendas aprovadas podem ser enviadas.'
+  if (!rastreio.trim()) return 'Informe o código de rastreio.'
+  f.rastreio = rastreio.trim().toUpperCase()
+  f.enviadoEm = agora()
+  auditar(d, ctx, 'EDITAR', `Álbum enviado (rastreio ${f.rastreio}): ficha ${f.numeroFicha}`, 'rebolo')
   return null
 }

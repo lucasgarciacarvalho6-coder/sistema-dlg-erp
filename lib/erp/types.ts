@@ -2,7 +2,8 @@
 // (ver docs/SUPABASE_PROMPT.md), para que a troca do mock pelo backend seja direta.
 
 // 'externo' = vendedores externos PJ (contrato e books): usam só o app do vendedor
-export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'producao' | 'financeiro' | 'cobranca' | 'externo'
+// 'rebolo'  = vendas internas: revendem por telefone/WhatsApp os books que o externo não vendeu
+export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'producao' | 'financeiro' | 'cobranca' | 'rebolo' | 'externo'
 
 export type Perfil = 'ADM' | 'GERENTE' | 'COLABORADOR'
 
@@ -50,6 +51,7 @@ export interface Colaborador {
   metas: Record<string, Meta> // meta padrão (vale para qualquer mês sem meta própria); chave = id do indicador
   metasMes?: Record<string, Record<string, Meta>> // metas de um mês específico: 'YYYY-MM' → indicador → meta
   foto?: string // URL da foto de perfil (Supabase Storage) ou data URL (modo demo)
+  semMeta?: boolean // sem meta (ex.: Financeiro, Gerência): fora dos cards/ranking e da soma da meta do setor
   criadoEm: string
 }
 

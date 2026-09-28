@@ -18,7 +18,9 @@ export const COLUNAS: Record<string, string[]> = {
   vendas_ebooks: ['responsavel', 'aluno', 'escola', 'telefone', 'pacote', 'valor', 'parcelas', 'cobrador_id', 'data', 'canal', 'vendedor_externo_id', 'forma_pagamento', 'cpf', 'email', 'endereco', 'quantidade', 'primeiro_vencimento', 'observacao',
     // contrato de compra (app do vendedor de books) + conferência do Financeiro
     'numero_ficha', 'modelo', 'qtd_maletas', 'qtd_fotos', 'qtd_molduras', 'rg', 'data_nascimento', 'whatsapp', 'referencias', 'bairro', 'cep', 'cidade', 'nome_pai', 'nome_mae',
-    'entrada', 'forma_parcelamento', 'anexos', 'assinatura', 'assinatura_em', 'assinatura_lat', 'assinatura_lng', 'conferencia', 'conferencia_motivo'],
+    'entrada', 'forma_parcelamento', 'anexos', 'assinatura', 'assinatura_em', 'assinatura_lat', 'assinatura_lng', 'conferencia', 'conferencia_motivo',
+    // venda do rebolo (ligada à ficha)
+    'uf', 'ficha_rebolo_id'],
   titulos: ['cliente', 'aluno', 'escola', 'telefone', 'parcela', 'valor', 'vencimento', 'status', 'cobrador_id', 'forma_pagamento'],
   acordos: ['cliente', 'escola', 'telefone', 'titulo_id', 'valor_original', 'valor_acordo', 'parcelas', 'primeiro_vencimento', 'status'],
   contas_pagar: ['descricao', 'fornecedor', 'categoria', 'valor', 'vencimento', 'favorecido', 'pix_chave', 'pix_banco'],
@@ -30,7 +32,7 @@ export const COLUNAS: Record<string, string[]> = {
   historico_contatos: ['pessoa_id', 'data', 'assunto', 'autor'],
   contratos_escola: ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'vendedor_id', 'fichas_previstas', 'data_prevista', 'bonificacao_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'arquivo', 'observacao', 'status', 'paginas', 'origem'],
   agenda_visitas: ['data', 'fichas_previstas', 'equipe', 'carro', 'veiculo_id', 'fotografo_ids', 'motorista_id', 'telefone', 'responsavel', 'endereco', 'status'],
-  veiculos: ['modelo', 'placa', 'ano', 'cor', 'lugares', 'status', 'observacao'],
+  veiculos: ['modelo', 'placa', 'ano', 'cor', 'lugares', 'status', 'observacao', 'gasto_fixo_mes'],
   agenda_historico: [],
   fechamentos: ['id', 'tipo', 'ref_id', 'periodo', 'referencia', 'data', 'quantidade', 'valor_unitario', 'subtotal', 'ajudantes', 'beneficiarios', 'total', 'pix_nome', 'pix_chave', 'pix_banco', 'observacao'],
   rotas: ['vendedor_id', 'uf', 'nome', 'status'],
@@ -38,10 +40,23 @@ export const COLUNAS: Record<string, string[]> = {
   // ---- App dos vendedores externos ----
   documentos_externos: ['vendedor_id', 'tipo', 'escola', 'descricao', 'paginas', 'status'],
   devolucoes_books: ['vendedor_id', 'escola', 'quantidade', 'data', 'observacao', 'status'],
+  // ---- Vendas Rebolo ----
+  rebolo_pacotes: ['tipo', 'vendedora_id', 'observacao'], // numero é gerado pelo banco
+  rebolo_fichas: ['pacote_id', 'vendedora_id', 'escola', 'data_visita', 'numero_ficha', 'aluno', 'serie', 'data_nascimento', 'qtd_fotos',
+    'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietario_fazenda', 'bairro', 'cidade', 'uf', 'ponto_referencia',
+    'whatsapp1', 'whatsapp2', 'whatsapp3', 'telefone', 'nome_pai', 'nome_mae', 'horario', 'observacao'],
+  // contatos, situação, desconto e envio mudam só pelas funções do banco (registrar_contato_rebolo etc.)
+  rebolo_contatos: [],
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade
-const COLUNAS_JSON: Record<string, string[]> = { fechamentos: ['ajudantes', 'beneficiarios'], contratos_escola: ['paginas'], documentos_externos: ['paginas'], vendas_ebooks: ['referencias', 'anexos'] }
+const COLUNAS_JSON: Record<string, string[]> = {
+  fechamentos: ['ajudantes', 'beneficiarios'],
+  contratos_escola: ['paginas'],
+  documentos_externos: ['paginas'],
+  vendas_ebooks: ['referencias', 'anexos'],
+  veiculos: ['gasto_fixo_mes'],
+}
 
 export const TABELAS_COLECAO = Object.keys(COLUNAS)
 
@@ -108,6 +123,7 @@ export function colaboradorDoBanco(l: Linha, metas: Linha[]): Colaborador {
     metas: minhas,
     metasMes: porMes,
     foto: txt(l.foto_url),
+    semMeta: l.sem_meta === true,
     criadoEm: txt(l.created_at),
   }
 }

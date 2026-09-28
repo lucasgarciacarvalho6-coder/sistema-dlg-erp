@@ -19,4 +19,5 @@ export const ROTAS_SETOR: Record<string, string> = {
   producao: 'producao',
   financeiro: 'financeiro',
   cobranca: 'cobranca',
+  rebolo: 'rebolo',
 }

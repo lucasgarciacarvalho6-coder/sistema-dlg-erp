@@ -1,5 +1,5 @@
 import type { Colaborador, ErpState, Lancamento, Meta, Registro, Setor } from './types'
-import { SETORES } from './config'
+import { SETORES, SETORES_PRODUTIVOS } from './config'
 import { diasNoMes, hoje, mesAtual } from './format'
 import { diasUteisAte, diasUteisDoMes, ehDiaUtil, metaDiariaDoMes, totalDiasUteis } from './calendario'
 
@@ -54,6 +54,7 @@ export function metaDefinida(c: Colaborador, indicadorId: string, mes: string): 
 // Meta do colaborador no mês. A DIÁRIA é sempre derivada da mensal:
 // mensal ÷ dias úteis do mês (seg–sex, sem feriados) — ex.: 1.200 ÷ 21 = 57,14. O piso segue a mesma conta.
 export function metaColaborador(c: Colaborador, indicadorId: string, mes: string = mesAtual()): Meta {
+  if (c.semMeta) return { mensal: 0, diaria: 0, piso: 0 } // marcado "Sem meta" no cadastro
   const { meta } = metaDefinida(c, indicadorId, mes)
   const mensal = meta.mensal ?? 0
   return { mensal, diaria: metaDiariaDoMes(mensal, mes), piso: Math.min(meta.piso ?? 0, mensal || Infinity) }
@@ -70,6 +71,11 @@ export function equipe(s: ErpState, setor: Setor) {
 export function equipeComMeta(s: ErpState, setor: Setor, mes: string = mesAtual()) {
   const principal = SETORES[setor].indicadores[0].id
   return equipe(s, setor).filter((c) => metaColaborador(c, principal, mes).mensal > 0)
+}
+
+// Setores que têm alguém com meta (os demais saem do placar e da evolução da Visão TV)
+export function setoresComMeta(s: ErpState, mes: string = mesAtual()): Setor[] {
+  return SETORES_PRODUTIVOS.filter((setor) => equipeComMeta(s, setor, mes).length > 0)
 }
 
 // Meta do setor = soma das metas individuais dos colaboradores ativos
