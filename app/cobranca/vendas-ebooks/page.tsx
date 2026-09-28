@@ -5,6 +5,7 @@ import { useSessao } from '@/lib/erp/store'
 import { opcoesColecao, opcoesEquipe, usuarioDoSetor } from '@/lib/erp/opcoes'
 import { brl, mesAtual } from '@/lib/erp/format'
 import { colecao } from '@/lib/erp/metrics'
+import { MAX_PARCELAS } from '@/lib/erp/contrato-parser'
 
 // Venda de book aos pais pela equipe interna. Ao salvar: lança a meta de quem vendeu e registra
 // o pagamento (boleto → parcelas em Contas a Receber; PIX, dinheiro e cartão → recebido na venda).
@@ -35,7 +36,7 @@ export default function VendasEbooksPage() {
           padrao: (s) => Number(colecao(s, 'produtos')[0]?.preco ?? 0),
         },
         { chave: 'formaPagamento', label: 'Forma de pagamento', tipo: 'select', opcoes: ['Boleto', 'PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito'], obrigatorio: true, padrao: () => 'Boleto' },
-        { chave: 'parcelas', label: 'Parcelas', tipo: 'select', opcoes: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'], obrigatorio: true, padrao: () => '1' },
+        { chave: 'parcelas', label: 'Parcelas', tipo: 'select', opcoes: Array.from({ length: MAX_PARCELAS }, (_, i) => String(i + 1)), obrigatorio: true, padrao: () => '1' },
         { chave: 'primeiroVencimento', label: '1º vencimento (boleto)', tipo: 'data', tabela: false },
         { chave: 'canal', label: 'Canal', tipo: 'texto', formulario: false, padrao: () => 'Interno', exibir: (r) => (r.canal === 'Externo' ? 'Externa (app)' : 'Interna') },
         { chave: 'cobradorId', label: 'Vendido por', tipo: 'select', opcoes: opcoesEquipe('cobranca'), obrigatorio: true, padrao: usuarioDoSetor('cobranca', sessao?.colaboradorId) },

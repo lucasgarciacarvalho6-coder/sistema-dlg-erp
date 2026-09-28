@@ -19,6 +19,9 @@ interface Anexos {
   docFrente?: string
   docVerso?: string
   recibo?: string
+  ficha?: string
+  comprovante?: string
+  clienteContrato?: string
 }
 
 const nomeVendedor = (s: ReturnType<typeof useErp>, id: unknown) => String(colecao(s, 'pj_vendedores').find((v) => v.id === id)?.nome ?? 'Vendedor externo')
@@ -93,7 +96,7 @@ export default function ConferenciaVendasPage() {
   const refs = venda ? lerJSON<{ nome: string; telefone: string }[]>(venda.referencias, []) : []
   const completo = (v: Registro) => {
     const a = lerJSON<Anexos>(v.anexos, {})
-    return !!(a.contrato?.length && a.docFrente && a.docVerso && a.recibo && v.assinatura)
+    return !!(a.contrato?.length && a.docFrente && a.docVerso && a.ficha && a.comprovante && a.recibo && a.clienteContrato && v.assinatura)
   }
 
   return (
@@ -262,10 +265,13 @@ export default function ConferenciaVendasPage() {
                 {(anexos.contrato?.length ? anexos.contrato : [undefined]).map((c, i) => (
                   <Foto key={`c-${i}`} caminho={c} rotulo={`Contrato${(anexos.contrato?.length ?? 0) > 1 ? ` • pág. ${i + 1}` : ''}`} />
                 ))}
-                <Foto caminho={String(venda.assinatura || '') || undefined} rotulo="Assinatura no app" />
                 <Foto caminho={anexos.docFrente} rotulo="Documento • frente" />
                 <Foto caminho={anexos.docVerso} rotulo="Documento • verso" />
+                <Foto caminho={anexos.ficha} rotulo="Ficha de reconhecimento" />
+                <Foto caminho={anexos.comprovante} rotulo="Comprovante de residência" />
                 <Foto caminho={anexos.recibo} rotulo="Promissória" />
+                <Foto caminho={anexos.clienteContrato} rotulo="Cliente com o contrato" />
+                <Foto caminho={String(venda.assinatura || '') || undefined} rotulo="Assinatura no app" />
               </div>
             </div>
             {devolvendo && <p className={`${labelCls} text-red-400`}>Escreva o motivo embaixo: o vendedor vê no app e corrige.</p>}

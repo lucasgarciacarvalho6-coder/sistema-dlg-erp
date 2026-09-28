@@ -179,30 +179,45 @@ Deno.serve(async (req) => {
     { text: venda ? INSTRUCAO_VENDA : INSTRUCAO((body.vendedores ?? []).slice(0, 200)) },
   ]
 
-  const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-2.5-flash', 'gemini-flash-latest'].filter((m, i, a): m is string => !!m && a.indexOf(m) === i)
+  // Vários modelos gratuitos: se um estiver sobrecarregado (503), no limite (429) ou descontinuado (404),
+  // passa para o próximo. Sobrecarga costuma durar segundos → tenta o mesmo modelo mais uma vez antes.
+  const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'].filter(
+    (m, i, a): m is string => !!m && a.indexOf(m) === i,
+  )
+  const temporario = new Set([429, 500, 502, 503, 504])
   let ultimoErro = ''
+  let ocupado = false
   for (const modelo of modelos) {
-    const r = await chamarGemini(chave, modelo, partes, venda ? ESQUEMA_VENDA : ESQUEMA)
-    if (r.status === 404) {
-      ultimoErro = `Modelo ${modelo} indisponível`
-      continue // modelo descontinuado → tenta o próximo
-    }
-    if (!r.ok) {
-      const detalhe = await r.text()
-      console.error('Gemini', modelo, r.status, detalhe)
-      if (r.status === 429) return json({ erro: 'Limite gratuito da IA atingido agora. Espere 1 minuto e clique em "Ler novamente".' }, 429)
-      if (r.status === 400 && /api key|API_KEY/i.test(detalhe)) return json({ erro: 'Chave do Gemini inválida (GEMINI_API_KEY).' }, 502)
-      if (r.status === 403) return json({ erro: 'A chave do Gemini não tem permissão (confira em aistudio.google.com).' }, 502)
-      return json({ erro: 'A IA não conseguiu ler agora. Tente "Ler novamente".' }, 502)
-    }
-    const saida = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
-    const bruto = saida.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
-    try {
-      return json({ campos: JSON.parse(bruto), modelo })
-    } catch {
-      console.error('Resposta sem JSON', bruto.slice(0, 500))
-      return json({ erro: 'A IA respondeu fora do formato. Tente "Ler novamente".' }, 502)
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      const r = await chamarGemini(chave, modelo, partes, venda ? ESQUEMA_VENDA : ESQUEMA)
+      if (r.status === 404) {
+        ultimoErro = `Modelo ${modelo} indisponível`
+        break // modelo descontinuado → próximo
+      }
+      if (!r.ok) {
+        const detalhe = await r.text()
+        console.error('Gemini', modelo, r.status, detalhe)
+        if (r.status === 400 && /api key|API_KEY/i.test(detalhe)) return json({ erro: 'Chave do Gemini inválida (GEMINI_API_KEY).' }, 502)
+        if (r.status === 403) return json({ erro: 'A chave do Gemini não tem permissão (confira em aistudio.google.com).' }, 502)
+        if (!temporario.has(r.status)) return json({ erro: 'A IA não conseguiu ler agora. Tente "Ler novamente".' }, 502)
+        ocupado = true
+        if (tentativa === 0 && r.status !== 429) {
+          await new Promise((ok) => setTimeout(ok, 1500))
+          continue // sobrecarga passageira → mesmo modelo de novo
+        }
+        break // → próximo modelo
+      }
+      const saida = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] }
+      const bruto = saida.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+      try {
+        return json({ campos: JSON.parse(bruto), modelo })
+      } catch {
+        console.error('Resposta sem JSON', modelo, bruto.slice(0, 500))
+        ultimoErro = 'A IA respondeu fora do formato'
+        break // → próximo modelo
+      }
     }
   }
-  return json({ erro: `${ultimoErro}. Defina o segredo GEMINI_MODEL com um modelo atual (ex.: gemini-2.5-flash).` }, 502)
+  if (ocupado) return json({ erro: 'A IA do Google está sobrecarregada agora. Espere 1 minuto e tente de novo, ou preencha à mão.' }, 503)
+  return json({ erro: `${ultimoErro}. Defina o segredo GEMINI_MODEL com um modelo atual (ex.: gemini-flash-latest).` }, 502)
 })

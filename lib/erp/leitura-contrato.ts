@@ -16,6 +16,7 @@ export type Progresso = (p: number, etapa: string) => void
 
 const MAX_LADO_OCR = 2400 // px: suficiente para o OCR e bem mais rápido que a foto original
 const MAX_LADO_IA = 2000
+const MODO_DEMO_IA = 'Modo demonstração' // no demo não há IA: não precisa avisar
 
 function redimensionar(fonte: ImageBitmap | HTMLCanvasElement, maxLado: number, filtro = 'none'): HTMLCanvasElement {
   const escala = Math.min(1, maxLado / Math.max(fonte.width, fonte.height))
@@ -160,7 +161,8 @@ export async function lerContratoVenda(fotos: File[], progresso: Progresso = () 
     }
     progresso(0, 'Lendo o texto')
     const texto = await lerNoNavegador(fotos[0], paginas, [], progresso, '4')
-    const aviso = ia.indisponivel ? undefined : `Leitor com IA: ${ia.erro} Usei a leitura básica.`
+    // mostra sempre o motivo (no celular não há console): ajuda a descobrir por que a IA não leu
+    const aviso = MODO_DEMO_IA === ia.erro ? undefined : `Leitor com IA: ${ia.erro} Usei a leitura básica.`
     if (texto.replace(/\s/g, '').length < 20) return { erro: `${aviso ? `${aviso} ` : ''}Não encontrei texto legível. Tire a foto mais de perto, com boa luz e o papel reto.` }
     return { ...interpretarContratoVenda(texto), fonte: 'local', aviso }
   } catch (e) {

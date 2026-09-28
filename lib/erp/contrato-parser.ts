@@ -367,6 +367,8 @@ export function normalizarLeituraIA(c: Record<string, unknown>, vendedores: stri
 // =====================================================================
 
 export const FORMAS_PAGAMENTO = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Boleto'] as const
+// Máximo de parcelas do saldo (a entrada é à parte): entrada + 24 = até 25 pagamentos
+export const MAX_PARCELAS = 24
 
 export interface Referencia {
   nome: string
@@ -468,7 +470,7 @@ export function normalizarLeituraVenda(c: Record<string, unknown>): LeituraVenda
   const formaIA = str(c.formaPagamento)
   const deduzido = deduzirPagamento(str(c.formaParcelamento))
   const forma = (FORMAS_PAGAMENTO as readonly string[]).includes(formaIA) ? formaIA : (deduzido.forma ?? '')
-  const parcelas = num(c.parcelas) > 0 ? Math.round(num(c.parcelas)) : (deduzido.parcelas ?? 0)
+  const parcelas = Math.min(MAX_PARCELAS, num(c.parcelas) > 0 ? Math.round(num(c.parcelas)) : (deduzido.parcelas ?? 0))
 
   const campos: Partial<CamposVenda> = {
     responsavel: titulo(str(c.comprador)),

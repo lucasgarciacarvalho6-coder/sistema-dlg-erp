@@ -5,7 +5,8 @@
 //  • Vendedor de BOOKS: registra as vendas aos pais, envia documentos e informa os books devolvidos
 // A localização é obrigatória e registrada só para monitoramento (o vendedor não vê mapa nem rota).
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { lerRascunho } from '@/lib/erp/rascunho'
 import type { Registro } from '@/lib/erp/types'
 import AppShell, { botaoApp, cardApp, inputApp, labelApp } from '@/components/app/AppShell'
 import CapturaPaginas from '@/components/app/CapturaPaginas'
@@ -41,6 +42,17 @@ export default function AppVendedorPage() {
   const [corrigir, setCorrigir] = useState<Registro | null>(null)
   const [vendaOk, setVendaOk] = useState(false)
   const [novaVenda, setNovaVenda] = useState(0)
+
+  // Voltou ao app com uma venda nova pela metade → abre direto nela (o rascunho fica no celular)
+  const usuarioId = usuario?.id
+  useEffect(() => {
+    if (!usuarioId || !livros) return
+    let vivo = true
+    void lerRascunho(`${usuarioId}:nova`).then((r) => vivo && r && setAba('venda'))
+    return () => {
+      vivo = false
+    }
+  }, [usuarioId, livros])
 
   const nav = livros
     ? [
@@ -170,6 +182,11 @@ export default function AppVendedorPage() {
             key={corrigir ? `c-${corrigir.id}` : `n-${novaVenda}`}
             escolas={escolasFotografadas(s)}
             devolvida={corrigir}
+            chaveRascunho={`${usuario?.id ?? ''}:${corrigir ? corrigir.id : 'nova'}`}
+            onDescartar={() => {
+              setCorrigir(null)
+              setNovaVenda((k) => k + 1)
+            }}
             onAcao={gps.registrarAcao}
             onConcluida={() => {
               setVendaOk(true)
