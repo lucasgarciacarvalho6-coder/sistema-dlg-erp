@@ -361,3 +361,202 @@ export function normalizarLeituraIA(c: Record<string, unknown>, vendedores: stri
 
   return { campos, duvidas, observacao: obs.join(' • '), texto: linhas.join('\n') }
 }
+
+// =====================================================================
+// CONTRATO DE COMPRA (venda de books aos pais, preenchido à mão pelo vendedor de books)
+// =====================================================================
+
+export const FORMAS_PAGAMENTO = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Boleto'] as const
+
+export interface Referencia {
+  nome: string
+  telefone: string
+}
+
+// Campos do formulário da venda no app (tudo texto, como nos inputs)
+export interface CamposVenda {
+  responsavel: string
+  cpf: string
+  rg: string
+  dataNascimento: string
+  whatsapp: string
+  endereco: string
+  bairro: string
+  cep: string
+  cidade: string
+  nomePai: string
+  nomeMae: string
+  qtdMaletas: string
+  qtdFotos: string
+  qtdMolduras: string
+  modelo: string
+  numeroFicha: string
+  valor: string
+  entrada: string
+  formaParcelamento: string
+  formaPagamento: string
+  parcelas: string
+  primeiroVencimento: string
+}
+
+export interface LeituraVenda {
+  campos: Partial<CamposVenda>
+  referencias: Referencia[]
+  duvidas: string[]
+  texto: string
+}
+
+const soDigitos = (t: string) => t.replace(/\D/g, '')
+function cpfFormatado(t: string) {
+  const d = soDigitos(t)
+  return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : t.trim()
+}
+function cepFormatado(t: string) {
+  const d = soDigitos(t)
+  return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : t.trim()
+}
+
+// "10x de 260 no boleto" → forma e parcelas (quando a IA não disse)
+function deduzirPagamento(texto: string): { forma?: string; parcelas?: number } {
+  const n = norm(texto)
+  const forma = /boleto|carne/.test(n)
+    ? 'Boleto'
+    : /credito/.test(n)
+      ? 'Cartão de crédito'
+      : /debito/.test(n)
+        ? 'Cartão de débito'
+        : /\bpix\b/.test(n)
+          ? 'PIX'
+          : /dinheiro|especie/.test(n)
+            ? 'Dinheiro'
+            : undefined
+  const m = /(\d{1,2})\s*(x|vezes|parcelas?)/.exec(n)
+  return { forma, parcelas: m ? Number(m[1]) : /a vista|avista/.test(n) ? 1 : undefined }
+}
+
+const ROTULOS_VENDA: [keyof CamposVenda | 'rua' | 'numero', string][] = [
+  ['responsavel', 'Comprador'],
+  ['cpf', 'CPF'],
+  ['rg', 'RG'],
+  ['dataNascimento', 'Nascimento'],
+  ['whatsapp', 'WhatsApp'],
+  ['endereco', 'Endereço'],
+  ['bairro', 'Bairro'],
+  ['cep', 'CEP'],
+  ['cidade', 'Cidade'],
+  ['nomePai', 'Pai'],
+  ['nomeMae', 'Mãe'],
+  ['qtdMaletas', 'Maletas'],
+  ['qtdFotos', 'Fotos 20x25'],
+  ['qtdMolduras', 'Fotos molduradas'],
+  ['modelo', 'Modelo'],
+  ['numeroFicha', 'Nº da ficha'],
+  ['valor', 'Valor total'],
+  ['entrada', 'Entrada'],
+  ['formaParcelamento', 'Forma de parcelamento'],
+  ['formaPagamento', 'Forma de pagamento'],
+  ['parcelas', 'Parcelas'],
+  ['primeiroVencimento', 'Vencimento'],
+]
+
+// Resposta da IA (Gemini) para o Contrato de Compra → campos do formulário da venda
+export function normalizarLeituraVenda(c: Record<string, unknown>): LeituraVenda {
+  const qtd = (v: unknown) => (num(v) > 0 ? String(Math.round(num(v))) : '')
+  const data = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? str(v) : '')
+  const rua = str(c.rua)
+  const nro = str(c.numero)
+  const formaIA = str(c.formaPagamento)
+  const deduzido = deduzirPagamento(str(c.formaParcelamento))
+  const forma = (FORMAS_PAGAMENTO as readonly string[]).includes(formaIA) ? formaIA : (deduzido.forma ?? '')
+  const parcelas = num(c.parcelas) > 0 ? Math.round(num(c.parcelas)) : (deduzido.parcelas ?? 0)
+
+  const campos: Partial<CamposVenda> = {
+    responsavel: titulo(str(c.comprador)),
+    cpf: cpfFormatado(str(c.cpf)),
+    rg: str(c.rg),
+    dataNascimento: data(c.dataNascimento),
+    whatsapp: formatarTelefone(str(c.whatsapp)) ?? str(c.whatsapp),
+    endereco: [rua, nro && !rua.includes(nro) ? nro : ''].filter(Boolean).join(', '),
+    bairro: str(c.bairro),
+    cep: cepFormatado(str(c.cep)),
+    cidade: str(c.cidade),
+    nomePai: titulo(str(c.nomePai)),
+    nomeMae: titulo(str(c.nomeMae)),
+    qtdMaletas: qtd(c.qtdMaletas),
+    qtdFotos: qtd(c.qtdFotos),
+    qtdMolduras: qtd(c.qtdMolduras),
+    modelo: str(c.modelo),
+    numeroFicha: str(c.numeroFicha),
+    valor: num(c.valorTotal) > 0 ? String(num(c.valorTotal)) : '',
+    entrada: num(c.entrada) > 0 ? String(num(c.entrada)) : '',
+    formaParcelamento: str(c.formaParcelamento),
+    formaPagamento: forma,
+    parcelas: parcelas ? String(parcelas) : '',
+    primeiroVencimento: data(c.dataVencimento),
+  }
+  for (const k of Object.keys(campos) as (keyof CamposVenda)[]) if (!campos[k]) delete campos[k]
+
+  const referencias = (Array.isArray(c.referencias) ? (c.referencias as Record<string, unknown>[]) : [])
+    .map((r) => ({ nome: titulo(str(r.nome)), telefone: formatarTelefone(str(r.telefone)) ?? str(r.telefone) }))
+    .filter((r) => r.nome || r.telefone)
+    .slice(0, 3)
+
+  const mapa: Record<string, string> = { comprador: 'responsavel', valorTotal: 'valor', dataVencimento: 'primeiroVencimento', rua: 'endereco', numero: 'endereco' }
+  const duvidas = (Array.isArray(c.duvidas) ? (c.duvidas as unknown[]).map(String) : []).map((d) => mapa[d] ?? d)
+
+  const linhas = ROTULOS_VENDA.map(([k, r]) => [r, str((campos as Record<string, string>)[k])]).filter(([, v]) => v).map(([r, v]) => `${r}: ${v}`)
+  referencias.forEach((r, i) => linhas.push(`Referência ${i + 1}: ${[r.nome, r.telefone].filter(Boolean).join(' • ')}`))
+  return { campos, referencias, duvidas, texto: linhas.join('\n') }
+}
+
+// Plano B (sem IA): texto do OCR → campos pelos rótulos impressos do contrato. Letra à mão fica fraca.
+export function interpretarContratoVenda(texto: string): LeituraVenda {
+  const linhas = texto
+    .normalize('NFC')
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const proximo = /\b(comprador|cpf|rg|data de nascimento|telefone|whats\s?app|referencia|rua|n[ºo°]|bairro|cep|cidade|nome d[oa] (pai|mae)|valor total|entrada|forma de parcelamento|data de vencimento|modelo|n[ºo°] da ficha)\b\s*:/
+  const pegar = (re: RegExp) => {
+    for (const l of linhas) {
+      const n = norm(l)
+      const m = re.exec(n)
+      if (!m) continue
+      let v = l.slice(m.index + m[0].length)
+      const outro = proximo.exec(norm(v))
+      if (outro && outro.index > 0) v = v.slice(0, outro.index)
+      v = limpar(v)
+      if (v.length >= 1) return v
+    }
+    return ''
+  }
+  const bruto: Record<string, unknown> = {
+    comprador: pegar(/\bcomprador\s*:/),
+    cpf: pegar(/\bcpf\s*:/),
+    rg: pegar(/\brg\s*:/),
+    dataNascimento: dataISO(pegar(/\bdata de nascimento\s*:/)) ?? '',
+    whatsapp: pegar(/\btelefone\s*whats\s?app\s*:/),
+    // "Rua: Rua das Acácias Nº 455" → rua e número (o nº é sempre só dígitos, para não confundir com "NOGUEIRA")
+    ...(() => {
+      const bruta = pegar(/\brua\s*:/)
+      const m = /^(.*?)[\s,]+n[º°o]\.?\s*:?\s*(\d{1,6}[a-z]?)\b/i.exec(bruta)
+      if (m) return { rua: m[1], numero: m[2] }
+      const soNumero = linhas.map((l) => /\bn[º°]\s*:?\s*(\d{1,6})\b/i.exec(l)?.[1]).find(Boolean)
+      return { rua: bruta, numero: soNumero ?? '' }
+    })(),
+    bairro: pegar(/\bbairro\s*:/),
+    cep: pegar(/\bcep\s*:/),
+    cidade: pegar(/\bcidade\s*:/),
+    nomePai: pegar(/\bnome do pai\s*:/),
+    nomeMae: pegar(/\bnome da mae\s*:/),
+    modelo: pegar(/\bmodelo\s*:/),
+    numeroFicha: pegar(/\bn[ºo°]\s*da ficha\s*:/),
+    valorTotal: numero(pegar(/\bvalor total da compra\s*:/)) ?? 0,
+    entrada: numero(pegar(/\bentrada\s*:/)) ?? 0,
+    formaParcelamento: pegar(/\bforma de parcelamento\s*:/),
+    dataVencimento: dataISO(pegar(/\bdata de vencimento\s*:/)) ?? '',
+    duvidas: [],
+  }
+  const r = normalizarLeituraVenda(bruto)
+  return { ...r, texto }
+}

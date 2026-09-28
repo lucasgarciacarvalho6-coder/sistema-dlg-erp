@@ -311,7 +311,7 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
 |---|---|---|
 | **`/app/producao`** | Equipe da Produção (setor `producao`) | Informa os **books feitos no dia**, com a escola opcional. Mostra a meta do dia, o piso, o mês e os últimos dias úteis. Dá para corrigir o lançamento do próprio dia. |
 | **`/app/vendedor`** — contrato | Vendedor de **contrato** (setor `externo`) | Fotografa o contrato da escola com a câmera, sem passar pelo WhatsApp. O contrato vai para **Contratos de Escola › Em conferência** com o selo 📱 APP, e a leitura automática roda ao abrir. Também mostra "Minhas escolas". |
-| **`/app/vendedor`** — books | Vendedor de **books** (setor `externo`) | Registra a venda (família, valor, PIX, dinheiro, cartão ou boleto, parcelas) e envia **documentos**. Informa os **books devolvidos** (não vendidos), que seguem para as vendas internas. |
+| **`/app/vendedor`** — books | Vendedor de **books** (setor `externo`) | Venda em 5 etapas: ① foto do **Contrato de Compra** (papel), que a IA lê e usa para preencher tudo; ② revisão e **assinatura do cliente com o dedo** (data, hora e local); ③ **documento** frente e verso; ④ foto da **promissória**; ⑤ envio ao **Financeiro**. Também envia documentos avulsos e os **books devolvidos**. |
 
 - **Cadastro e login dos vendedores:** em **ADM › Vendedores externos** (tipo contrato ou books → "Criar acesso"). Cada vendedor vê só o que é dele; o banco bloqueia o resto do ERP.
 - **GPS:**
@@ -319,8 +319,12 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
   - A localização é registrada **enquanto o app está aberto**: ao abrir, a cada ~3 min e em cada ação. O vendedor não vê mapa nem rota.
   - O Operacional acompanha em **GPS dos Vendedores**: um card por vendedor, a última posição de todos e a rota do dia (Leaflet + OpenStreetMap).
   - O histórico fica guardado por 90 dias.
+- **Conferência (Financeiro › Conferência de vendas):** a venda externa chega "Aguardando conferência", com todos os anexos. O Financeiro pode:
+  - **Conferir:** aí nascem as parcelas.
+  - **Devolver com o motivo:** a venda volta ao vendedor, que **corrige no app** e reenvia.
 - **Vendas de books:**
-  - **Boleto** gera parcelas mensais em aberto em Contas a Receber, e a Cobrança acompanha os atrasos.
+  - **Entrada** fica registrada como paga.
+  - **Boleto** gera parcelas mensais em aberto em Contas a Receber, e a Cobrança acompanha os atrasos. PIX e dinheiro parcelados também.
   - **PIX, dinheiro e cartão** ficam registrados como recebidos na venda. O sistema só registra; o pagamento é feito no sistema de fora.
   - Tudo aparece em **Financeiro › Vendas de books**.
 - **Código:**
@@ -338,6 +342,7 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
 2. `docs/supabase/002_realtime_completo.sql`, `003_fotos_perfil.sql` e `004_operacional.sql`: só para bancos criados com versões anteriores do schema.
    - `docs/supabase/005_metas_piso_dias_uteis.sql`: rodar **sempre** depois do schema (novo ou antigo). Traz metas por mês com piso, dias úteis, fichas na RMC e parâmetros editáveis.
    - `docs/supabase/006_cancelar_excluir_contrato.sql`: rodar depois do 005. Permite **cancelar** e **excluir** um contrato de escola. O cancelamento também tira a visita da agenda e a ordem que aguardava fotos. As duas ações são bloqueadas se a escola já foi fotografada.
+   - `docs/supabase/009_venda_books_conferencia.sql`: rodar depois do 008. Cria os campos do **Contrato de Compra** e os anexos (contrato, assinatura, documento e promissória), e a **conferência do Financeiro**, que gera as parcelas só quando confere. Depois dele, atualize a Edge Function `ler-contrato`, que agora também lê o contrato de venda.
    - `docs/supabase/008_apps_vendedores_producao_gps.sql`: rodar depois do 007. Cria:
      - o setor `externo` (vendedores externos com login);
      - as tabelas de documentos, devoluções e GPS (`localizacoes`, fora do Realtime);
@@ -436,9 +441,10 @@ ERP
 ├── 08b. APPS DOS VENDEDORES EXTERNOS (PWA)
 │   ├── ✅ Cadastro e login pelo ADM (vendedor de contrato / vendedor de books)
 │   ├── ✅ Foto do contrato pela câmera → Operações (leitura automática) · ✅ Minhas escolas
-│   ├── ✅ Venda de books (forma de pagamento e parcelas) · ✅ Documentos · ✅ Books devolvidos
+│   ├── ✅ Venda de books: foto do contrato → IA preenche → revisão → assinatura do cliente no app → documento → promissória → Financeiro confere
+│   ├── ✅ Documentos · ✅ Books devolvidos
 │   ├── ✅ GPS obrigatório (só com o app aberto) → Operacional › GPS dos Vendedores
-│   └── ⬜ Contrato de venda gerado pelo sistema + assinatura do pai no celular + cópia por e-mail (aguarda modelo e domínio)
+│   └── ⬜ Cópia do contrato por e-mail ao cliente (deixado de lado a pedido: o cliente fica com a via em papel)
 │
 ├── (EXTRA) ÁREA FINANCEIRA
 │   └── ✅ Dashboard · ✅ Contas a pagar · ✅ Comissões das escolas · ✅ Fluxo de caixa · ✅ Histórico

@@ -156,7 +156,7 @@ export default function AppVendedoresPage() {
                       <td className="px-4 py-3 whitespace-nowrap text-white font-bold">{nomeVendedor(s, v.vendedorExternoId)}</td>
                       <td className="px-4 py-3 text-xs">{String(v.escola)}</td>
                       <td className="px-4 py-3 min-w-[200px]">
-                        <p className="text-white text-xs font-bold">{String(v.aluno)}</p>
+                        <p className="text-white text-xs font-bold">{v.numeroFicha ? `Ficha ${String(v.numeroFicha)}` : String(v.aluno || "")}</p>
                         <p className="text-[11px] text-zinc-500">
                           {String(v.responsavel)} • {String(v.telefone || '')}
                         </p>

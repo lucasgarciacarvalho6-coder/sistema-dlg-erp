@@ -127,7 +127,7 @@ export default function VendasBooksFinanceiroPage() {
                       </td>
                       <td className="px-4 py-3 text-xs">{String(v.escola)}</td>
                       <td className="px-4 py-3 min-w-[200px]">
-                        <p className="text-white text-xs font-bold">{String(v.aluno)}</p>
+                        <p className="text-white text-xs font-bold">{v.numeroFicha ? `Ficha ${String(v.numeroFicha)}` : String(v.aluno || "")}</p>
                         <p className="text-[11px] text-zinc-500">
                           {String(v.responsavel)}
                           {v.telefone ? ` • ${String(v.telefone)}` : ''}

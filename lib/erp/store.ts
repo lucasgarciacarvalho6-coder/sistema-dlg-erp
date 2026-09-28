@@ -876,7 +876,36 @@ export const enviarContratoApp = (d: { escola: string; cidade: string; observaca
     'Contrato enviado para Operações.',
   )
 
-export const registrarVendaExterna = (d: Record<string, Valor>) => registrarDoApp('vendas_ebooks', { ...d, canal: 'Externo', pacote: 'Book' }, 'Venda registrada.')
+// Venda externa: vai para a conferência do Financeiro (os títulos só nascem quando ele confere)
+export const registrarVendaExterna = (d: Record<string, Valor>) =>
+  registrarDoApp('vendas_ebooks', { ...d, canal: 'Externo', pacote: 'Book', conferencia: 'Aguardando conferência' }, 'Venda enviada ao Financeiro.')
+
+// O vendedor corrige a venda que o Financeiro devolveu e reenvia
+export async function reenviarVendaExterna(id: string, d: Record<string, Valor>): Promise<string | null> {
+  const dados = { ...d, conferencia: 'Aguardando conferência', conferenciaMotivo: '' }
+  if (MODO === 'supabase') return gravar(() => sb().from('vendas_ebooks').update(registroParaBanco('vendas_ebooks', dados)).eq('id', id), 'Venda reenviada ao Financeiro.')
+  mutar((s, ctx) => {
+    const v = F.col(s, 'vendas_ebooks').find((x) => x.id === id)
+    if (!v || v.conferencia !== 'Devolvida') return
+    Object.assign(v, dados)
+    F.notificar(s, ctx, { setores: ['financeiro', 'adm'], tipo: 'aprovacao', titulo: 'Venda corrigida para conferir', descricao: `${v.responsavel} (${v.escola}) — o vendedor corrigiu e reenviou.`, link: '/financeiro/conferencia' })
+    F.auditar(s, ctx, 'EDITAR', `Venda de book reenviada: ${v.responsavel}`, 'financeiro')
+  })
+  avisar('Venda reenviada ao Financeiro.', 'ok')
+  return null
+}
+
+// Financeiro: conferir (gera as parcelas) ou devolver ao vendedor com o motivo
+export async function conferirVendaBook(id: string, acao: 'conferir' | 'devolver', motivo = ''): Promise<string | null> {
+  const ok = acao === 'conferir' ? 'Venda conferida: parcelas geradas.' : 'Venda devolvida ao vendedor.'
+  if (MODO === 'supabase') return gravar(() => sb().rpc('conferir_venda_book', { p_id: id, p_acao: acao, p_motivo: motivo || null }), ok)
+  let erro: string | null = null
+  mutar((s, ctx) => {
+    erro = F.conferirVendaBook(s, id, acao, motivo, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
 
 export const enviarDocumentoApp = (d: { tipo: string; escola: string; descricao: string }, paginas: string[]) =>
   registrarDoApp('documentos_externos', { ...d, paginas: JSON.stringify(paginas), status: 'Recebido' }, 'Documento enviado para Operações.')
@@ -1024,9 +1053,10 @@ export async function criarAcessoVendedor(pjId: string, email: string, senha: st
 export async function lerContratoComIA(
   paginas: string[],
   vendedores: string[],
+  modelo: 'escola' | 'venda' = 'escola',
 ): Promise<{ campos: Record<string, unknown> } | { erro: string; indisponivel?: boolean }> {
   if (MODO !== 'supabase') return { erro: 'Modo demonstração', indisponivel: true }
-  const { data, error } = await sb().functions.invoke('ler-contrato', { body: { paginas, vendedores } })
+  const { data, error } = await sb().functions.invoke('ler-contrato', { body: { paginas, vendedores, modelo } })
   if (error) {
     let msg = error.message
     let codigo = ''

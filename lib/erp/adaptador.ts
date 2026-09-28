@@ -15,7 +15,10 @@ export const COLUNAS: Record<string, string[]> = {
   tarefas_operacionais: ['titulo', 'escola', 'cidade', 'responsavel_id', 'prioridade', 'prazo', 'status'],
   ordens_producao: ['escola', 'alunos', 'fotos', 'etapa', 'responsavel_id', 'prazo'],
   qualidade: ['ordem', 'tipo', 'descricao', 'quantidade', 'responsavel_id', 'data'],
-  vendas_ebooks: ['responsavel', 'aluno', 'escola', 'telefone', 'pacote', 'valor', 'parcelas', 'cobrador_id', 'data', 'canal', 'vendedor_externo_id', 'forma_pagamento', 'cpf', 'email', 'endereco', 'quantidade', 'primeiro_vencimento', 'observacao'],
+  vendas_ebooks: ['responsavel', 'aluno', 'escola', 'telefone', 'pacote', 'valor', 'parcelas', 'cobrador_id', 'data', 'canal', 'vendedor_externo_id', 'forma_pagamento', 'cpf', 'email', 'endereco', 'quantidade', 'primeiro_vencimento', 'observacao',
+    // contrato de compra (app do vendedor de books) + conferência do Financeiro
+    'numero_ficha', 'modelo', 'qtd_maletas', 'qtd_fotos', 'qtd_molduras', 'rg', 'data_nascimento', 'whatsapp', 'referencias', 'bairro', 'cep', 'cidade', 'nome_pai', 'nome_mae',
+    'entrada', 'forma_parcelamento', 'anexos', 'assinatura', 'assinatura_em', 'assinatura_lat', 'assinatura_lng', 'conferencia', 'conferencia_motivo'],
   titulos: ['cliente', 'aluno', 'escola', 'telefone', 'parcela', 'valor', 'vencimento', 'status', 'cobrador_id', 'forma_pagamento'],
   acordos: ['cliente', 'escola', 'telefone', 'titulo_id', 'valor_original', 'valor_acordo', 'parcelas', 'primeiro_vencimento', 'status'],
   contas_pagar: ['descricao', 'fornecedor', 'categoria', 'valor', 'vencimento', 'favorecido', 'pix_chave', 'pix_banco'],
@@ -38,7 +41,7 @@ export const COLUNAS: Record<string, string[]> = {
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade
-const COLUNAS_JSON: Record<string, string[]> = { fechamentos: ['ajudantes', 'beneficiarios'], contratos_escola: ['paginas'], documentos_externos: ['paginas'] }
+const COLUNAS_JSON: Record<string, string[]> = { fechamentos: ['ajudantes', 'beneficiarios'], contratos_escola: ['paginas'], documentos_externos: ['paginas'], vendas_ebooks: ['referencias', 'anexos'] }
 
 export const TABELAS_COLECAO = Object.keys(COLUNAS)
 

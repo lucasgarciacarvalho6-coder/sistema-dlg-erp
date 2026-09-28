@@ -9,6 +9,7 @@ import {
   APOS_CRIAR,
   baixarTitulo,
   col,
+  conferirVendaBook,
   confirmarContratoEscola,
   encerrarVisita,
   enviarFechamento,
@@ -22,7 +23,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 6 // v6: apps (vendedor externo e produção), GPS, vendas externas de books
+export const VERSAO_DADOS = 7 // v7: venda de books com contrato, assinatura e conferência do Financeiro
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -461,13 +462,15 @@ export function gerarSeed(): ErpState {
       ['ESCOLA MUNICIPAL SOL NASCENTE', 'Miguel Santos', 'Fernanda Santos', 'Dinheiro', 1, 150, 0],
       ['ESCOLA MUNICIPAL SOL NASCENTE', 'Helena Costa', 'Ricardo Costa', 'Boleto', 2, 200, 0],
     ] as [string, string, string, string, number, number, number][]
-  ).forEach(([escola, aluno, responsavel, forma, parcelas, valor, dias]) => {
+  ).forEach(([escola, aluno, responsavel, forma, parcelas, valor, dias], i) => {
     const v = inserir(s, 'vendas_ebooks', {
-      responsavel, aluno, escola, telefone: '(44) 99900-0000', pacote: 'Book', valor, parcelas, cobradorId: '', data: addDias(hojeISO, dias),
-      canal: 'Externo', vendedorExternoId: rafaela.id, formaPagamento: forma, cpf: '', email: '', endereco: '', quantidade: 1,
-      primeiroVencimento: forma === 'Boleto' ? addDias(hojeISO, dias + 30) : '', observacao: '',
+      responsavel, aluno: '', numeroFicha: String(1040 + i), escola, telefone: '(44) 99900-0000', whatsapp: '(44) 99900-0000', pacote: 'Book', valor, parcelas, cobradorId: '', data: addDias(hojeISO, dias),
+      canal: 'Externo', vendedorExternoId: rafaela.id, formaPagamento: forma, cpf: '', email: '', endereco: '', quantidade: 1, qtdMaletas: 1, qtdFotos: 10, qtdMolduras: 1,
+      primeiroVencimento: forma === 'Boleto' ? addDias(hojeISO, dias + 30) : '', observacao: `Criança: ${aluno}`, anexos: '{}', referencias: '[]',
     })
     APOS_CRIAR.vendas_ebooks(s, v, ctxExt)
+    // as 3 primeiras já foram conferidas pelo Financeiro; as outras aguardam a conferência
+    if (i < 3) conferirVendaBook(s, v.id, 'conferir', '', { ...ctx, autorId: 'u-fi1', autorNome: 'Eduardo Nunes', autorSetor: 'financeiro' })
   })
   inserir(s, 'devolucoes_books', { vendedorId: rafaela.id, escola: 'PROJETO ESPAÇO CRIANÇA', quantidade: 12, data: addDias(hojeISO, -1), observacao: 'Pais não estavam em casa em 5 endereços.', status: 'Devolvido' })
   inserir(s, 'documentos_externos', { vendedorId: rafaela.id, tipo: 'Comprovante', escola: 'ESCOLA MUNICIPAL SOL NASCENTE', descricao: 'Comprovante PIX da venda da Ana Beatriz', paginas: '[]', status: 'Recebido' })

@@ -206,6 +206,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Dashboard Financeiro', href: '/financeiro', icone: 'dashboard' },
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
+        { label: 'Conferência de Vendas', href: '/financeiro/conferencia', icone: 'check' },
         { label: 'Vendas de Books', href: '/financeiro/vendas-books', icone: 'book' },
         { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-caixa', icone: 'chart' },
         { label: 'Histórico', href: '/financeiro/historico', icone: 'log' },

@@ -9,6 +9,7 @@ import { useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import AppShell, { botaoApp, cardApp, inputApp, labelApp } from '@/components/app/AppShell'
 import CapturaPaginas from '@/components/app/CapturaPaginas'
+import VendaWizard from '@/components/app/VendaWizard'
 import { useGps } from '@/components/app/useGps'
 import {
   aceitarMonitoramentoGps,
@@ -17,16 +18,14 @@ import {
   enviarPaginasApp,
   meuVendedorExterno,
   registrarDevolucaoBooks,
-  registrarVendaExterna,
   useErp,
   useUsuario,
 } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { addDias, brl, dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
+import { brl, dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
 
 type ErpState = ReturnType<typeof useErp>
 
-const FORMAS = ['PIX', 'Dinheiro', 'Cartão de crédito', 'Cartão de débito', 'Boleto'] as const
 const TIPOS_DOC = ['Contrato de venda', 'Comprovante', 'Outro'] as const
 
 export default function AppVendedorPage() {
@@ -38,6 +37,10 @@ export default function AppVendedorPage() {
   const gps = useGps(!!vend && aceitou)
   const livros = vend?.tipo === 'Books'
   const [aba, setAba] = useState('inicio')
+  // venda: nova (a chave reinicia o assistente) ou correção de uma devolvida pelo Financeiro
+  const [corrigir, setCorrigir] = useState<Registro | null>(null)
+  const [vendaOk, setVendaOk] = useState(false)
+  const [novaVenda, setNovaVenda] = useState(0)
 
   const nav = livros
     ? [
@@ -123,12 +126,57 @@ export default function AppVendedorPage() {
     )
   }
 
+  const irPara = (id: string) => {
+    if (id === 'venda' && aba !== 'venda') {
+      setCorrigir(null)
+      setVendaOk(false)
+      setNovaVenda((k) => k + 1)
+    }
+    setAba(id)
+  }
+
   return (
-    <AppShell setor="externo" titulo={titulo} subtitulo={subtitulo} nav={nav} ativa={aba} onNav={setAba}>
-      {aba === 'inicio' && (livros ? <InicioBooks s={s} vend={vend} /> : <InicioContrato s={s} vend={vend} onEnviar={() => setAba('contrato')} />)}
+    <AppShell setor="externo" titulo={titulo} subtitulo={subtitulo} nav={nav} ativa={aba} onNav={irPara}>
+      {aba === 'inicio' &&
+        (livros ? (
+          <InicioBooks
+            s={s}
+            vend={vend}
+            onCorrigir={(v) => {
+              setCorrigir(v)
+              setVendaOk(false)
+              setAba('venda')
+            }}
+          />
+        ) : (
+          <InicioContrato s={s} vend={vend} onEnviar={() => setAba('contrato')} />
+        ))}
       {aba === 'contrato' && <EnviarContrato onEnviado={(escola) => gps.registrarAcao(`Contrato enviado: ${escola}`)} />}
       {aba === 'escolas' && <MinhasEscolas s={s} vend={vend} />}
-      {aba === 'venda' && <NovaVenda s={s} onRegistrada={(nome) => gps.registrarAcao(`Venda registrada: ${nome}`)} />}
+      {aba === 'venda' &&
+        (vendaOk ? (
+          <Sucesso
+            titulo="Venda enviada!"
+            texto="O Financeiro vai conferir o contrato, a assinatura, o documento e a promissória. Se faltar algo, a venda volta para você corrigir."
+            rotulo="Registrar outra venda"
+            onNovo={() => {
+              setVendaOk(false)
+              setCorrigir(null)
+              setNovaVenda((k) => k + 1)
+            }}
+          />
+        ) : (
+          <VendaWizard
+            key={corrigir ? `c-${corrigir.id}` : `n-${novaVenda}`}
+            escolas={escolasFotografadas(s)}
+            devolvida={corrigir}
+            onAcao={gps.registrarAcao}
+            onConcluida={() => {
+              setVendaOk(true)
+              setCorrigir(null)
+            }}
+          />
+        ))}
       {aba === 'documento' && <EnviarDocumento s={s} onEnviado={(tipo) => gps.registrarAcao(`Documento enviado: ${tipo}`)} />}
       {aba === 'devolucao' && <Devolucao s={s} vend={vend} onRegistrada={(escola) => gps.registrarAcao(`Devolução: ${escola}`)} />}
     </AppShell>
@@ -290,8 +338,15 @@ function MinhasEscolas({ s, vend }: { s: ErpState; vend: Registro }) {
 
 // ---------------------------------------------------------------------------
 // VENDEDOR DE BOOKS
-function InicioBooks({ s, vend }: { s: ErpState; vend: Registro }) {
+const SITUACAO_VENDA: Record<string, { texto: string; cor: string }> = {
+  'Aguardando conferência': { texto: 'No Financeiro', cor: 'text-orange-400' },
+  Conferida: { texto: 'Conferida', cor: 'text-emerald-400' },
+  Devolvida: { texto: 'Devolvida', cor: 'text-red-400' },
+}
+
+function InicioBooks({ s, vend, onCorrigir }: { s: ErpState; vend: Registro; onCorrigir: (v: Registro) => void }) {
   const mes = mesAtual()
+  const devolvidas = colecao(s, 'vendas_ebooks').filter((v) => v.vendedorExternoId === vend.id && v.conferencia === 'Devolvida')
   const vendas = colecao(s, 'vendas_ebooks')
     .filter((v) => v.vendedorExternoId === vend.id)
     .sort((a, b) => `${b.data}${b.criadoEm}`.localeCompare(`${a.data}${a.criadoEm}`))
@@ -303,6 +358,22 @@ function InicioBooks({ s, vend }: { s: ErpState; vend: Registro }) {
     .reduce((a, d) => a + Number(d.quantidade || 0), 0)
   return (
     <>
+      {devolvidas.length > 0 && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-3xl p-4 space-y-3">
+          <p className="text-sm font-black text-red-400">⚠ {devolvidas.length} venda(s) devolvida(s) pelo Financeiro</p>
+          {devolvidas.map((v) => (
+            <div key={v.id} className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">{String(v.responsavel)}</p>
+                <p className="text-[11px] text-zinc-300">{String(v.conferenciaMotivo || 'Revise e reenvie')}</p>
+              </div>
+              <button onClick={() => onCorrigir(v)} className="shrink-0 px-4 py-2.5 rounded-xl bg-red-500/20 text-red-300 text-xs font-black uppercase tracking-widest">
+                Corrigir
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Kpi rotulo="Vendas hoje" valor={hojeV.length} detalhe={brl(hojeV.reduce((a, v) => a + Number(v.valor || 0), 0))} />
         <Kpi rotulo="Vendas no mês" valor={doMes.length} detalhe={brl(valorMes)} />
@@ -317,8 +388,11 @@ function InicioBooks({ s, vend }: { s: ErpState; vend: Registro }) {
             <div className="min-w-0">
               <p className="text-sm font-bold truncate">{String(v.responsavel)}</p>
               <p className="text-[11px] text-zinc-500 truncate">
-                {String(v.aluno)} • {String(v.escola)} • {dataBR(String(v.data))}
+                {v.numeroFicha ? `Ficha ${String(v.numeroFicha)}` : String(v.aluno || '')} • {String(v.escola)} • {dataBR(String(v.data))}
               </p>
+              {SITUACAO_VENDA[String(v.conferencia)] && (
+                <p className={`text-[10px] font-black uppercase tracking-wider ${SITUACAO_VENDA[String(v.conferencia)].cor}`}>● {SITUACAO_VENDA[String(v.conferencia)].texto}</p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-black">{brl(Number(v.valor || 0))}</p>
@@ -353,126 +427,6 @@ function SeletorEscola({ s, valor, onChange }: { s: ErpState; valor: string; onC
           <option value="__outra__">Outra escola (digitar)</option>
         </select>
       )}
-    </div>
-  )
-}
-
-const VENDA_VAZIA = { escola: '', aluno: '', responsavel: '', cpf: '', telefone: '', email: '', endereco: '', quantidade: '1', valor: '', formaPagamento: 'PIX', parcelas: '1', primeiroVencimento: '', observacao: '' }
-
-function NovaVenda({ s, onRegistrada }: { s: ErpState; onRegistrada: (nome: string) => void }) {
-  const [f, setF] = useState({ ...VENDA_VAZIA, primeiroVencimento: addDias(hoje(), 30) })
-  const [erro, setErro] = useState('')
-  const [enviando, setEnviando] = useState(false)
-  const [ok, setOk] = useState(false)
-  const set = (k: keyof typeof VENDA_VAZIA, v: string) => setF({ ...f, [k]: v })
-  const parcelavel = f.formaPagamento === 'Boleto' || f.formaPagamento === 'Cartão de crédito'
-  const valor = Number(String(f.valor).replace(',', '.'))
-
-  if (ok) {
-    return (
-      <Sucesso
-        titulo="Venda registrada!"
-        texto="Ela já aparece no Financeiro. Se for boleto, as parcelas ficam com a Cobrança."
-        rotulo="Registrar outra venda"
-        onNovo={() => {
-          setOk(false)
-          setF({ ...VENDA_VAZIA, escola: f.escola, primeiroVencimento: addDias(hoje(), 30) })
-        }}
-      />
-    )
-  }
-
-  const salvar = async () => {
-    if (!f.escola.trim() || !f.aluno.trim() || !f.responsavel.trim() || !f.telefone.trim()) return setErro('Preencha escola, criança, responsável e telefone.')
-    if (!(valor > 0)) return setErro('Informe o valor da venda.')
-    if (f.formaPagamento === 'Boleto' && !f.primeiroVencimento) return setErro('Informe o vencimento do 1º boleto.')
-    setErro('')
-    setEnviando(true)
-    const falha = await registrarVendaExterna({
-      escola: f.escola.trim(),
-      aluno: f.aluno.trim(),
-      responsavel: f.responsavel.trim(),
-      cpf: f.cpf.trim(),
-      telefone: f.telefone.trim(),
-      email: f.email.trim(),
-      endereco: f.endereco.trim(),
-      quantidade: Math.max(1, Number(f.quantidade) || 1),
-      valor,
-      formaPagamento: f.formaPagamento,
-      parcelas: parcelavel ? Math.min(12, Math.max(1, Number(f.parcelas) || 1)) : 1,
-      primeiroVencimento: f.formaPagamento === 'Boleto' ? f.primeiroVencimento : '',
-      observacao: f.observacao.trim(),
-      data: hoje(),
-      cobradorId: '',
-    })
-    setEnviando(false)
-    if (falha) return setErro(falha)
-    onRegistrada(f.responsavel.trim())
-    setOk(true)
-  }
-
-  const campo = (k: keyof typeof VENDA_VAZIA, rotulo: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => (
-    <div className="space-y-2">
-      <label className={labelApp}>{rotulo}</label>
-      <input value={f[k]} onChange={(e) => set(k, e.target.value)} className={inputApp} {...extra} />
-    </div>
-  )
-
-  return (
-    <div className={`${cardApp} space-y-4`}>
-      <p className="text-lg font-black">Nova venda de book</p>
-      <SeletorEscola s={s} valor={f.escola} onChange={(v) => set('escola', v)} />
-      {campo('aluno', 'Nome da criança *', { placeholder: 'Como está no book' })}
-      {campo('responsavel', 'Responsável (pai/mãe) *')}
-      <div className="grid grid-cols-2 gap-3">
-        {campo('telefone', 'Telefone *', { inputMode: 'tel', placeholder: '(00) 00000-0000' })}
-        {campo('cpf', 'CPF', { inputMode: 'numeric' })}
-      </div>
-      {campo('email', 'E-mail', { type: 'email', inputMode: 'email', placeholder: 'Para receber o contrato' })}
-      {campo('endereco', 'Endereço')}
-
-      <div className="pt-2 border-t border-white/[0.06] space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          {campo('quantidade', 'Books', { type: 'number', inputMode: 'numeric', min: 1 })}
-          {campo('valor', 'Valor total (R$) *', { type: 'number', inputMode: 'decimal', min: 0, step: '0.01', placeholder: '0,00' })}
-        </div>
-        <div className="space-y-2">
-          <label className={labelApp}>Forma de pagamento *</label>
-          <div className="grid grid-cols-2 gap-2">
-            {FORMAS.map((fp) => (
-              <button
-                key={fp}
-                type="button"
-                onClick={() => setF({ ...f, formaPagamento: fp, parcelas: fp === 'Boleto' || fp === 'Cartão de crédito' ? f.parcelas : '1' })}
-                className={`py-3 rounded-2xl text-xs font-bold border transition-all ${f.formaPagamento === fp ? 'border-blue-500/60 bg-blue-500/15 text-blue-300' : 'border-white/[0.08] text-zinc-400'}`}
-              >
-                {fp}
-              </button>
-            ))}
-          </div>
-        </div>
-        {parcelavel && (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <label className={labelApp}>Parcelas</label>
-              <select value={f.parcelas} onChange={(e) => set('parcelas', e.target.value)} className={`${inputApp} appearance-none`}>
-                {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((p) => (
-                  <option key={p} value={p}>
-                    {p}x {valor > 0 ? `de ${brl(valor / Number(p))}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {f.formaPagamento === 'Boleto' && campo('primeiroVencimento', '1º vencimento', { type: 'date' })}
-          </div>
-        )}
-        {campo('observacao', 'Observação')}
-      </div>
-      <p className="text-[11px] text-zinc-500 leading-relaxed">O contrato de venda com assinatura do responsável no celular entra em breve, quando o modelo da empresa for cadastrado.</p>
-      {erro && <p className="text-sm font-bold text-red-400">{erro}</p>}
-      <button onClick={salvar} disabled={enviando} className={botaoApp}>
-        {enviando ? 'Salvando...' : `Registrar venda${valor > 0 ? ` • ${brl(valor)}` : ''}`}
-      </button>
     </div>
   )
 }

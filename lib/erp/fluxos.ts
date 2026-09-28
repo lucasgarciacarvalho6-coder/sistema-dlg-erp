@@ -105,44 +105,23 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
 
   // VENDA DE E-BOOK AOS PAIS → Contas a receber (parcelas).
   // (A escola NÃO recebe % sobre a venda: ela recebe a bonificação por ficha no fechamento operacional.)
-  // Canal Interno (equipe da empresa) conta na meta da Cobrança; Externo (vendedor de books do app) não.
-  // Boleto → parcelas mensais em aberto; PIX, dinheiro e cartão → registrado como recebido na venda.
+  // Canal Interno (equipe da empresa): meta da Cobrança e títulos na hora.
+  // Canal Externo (app do vendedor de books): espera a CONFERÊNCIA do Financeiro para gerar os títulos (mesma regra do SQL 009).
   vendas_ebooks(d, r, ctx) {
-    const data = String(r.data || hoje())
-    const valor = Number(r.valor) || 0
-    const parcelas = Math.max(1, Number(r.parcelas) || 1)
     const canal = String(r.canal || 'Interno')
-    const forma = String(r.formaPagamento || 'Boleto')
     r.canal = canal
-    r.formaPagamento = forma
+    r.formaPagamento = String(r.formaPagamento || 'Boleto')
     if (!r.pacote) r.pacote = 'Book'
+    const valor = Number(r.valor) || 0
     if (canal === 'Interno') {
-      lancar(d, ctx, { setor: 'cobranca', indicador: 'ebooks_vendidos', colaboradorId: String(r.cobradorId ?? ''), quantidade: Number(r.quantidade) || 1, descricao: `${r.pacote} — ${r.responsavel}`, data })
-    }
-    const base = { cliente: r.responsavel, aluno: r.aluno, escola: r.escola, telefone: r.telefone, cobradorId: r.cobradorId ?? '', vendaId: r.id, formaPagamento: forma }
-    if (forma === 'Boleto') {
-      const parcela = Math.round((valor / parcelas) * 100) / 100
-      for (let i = 1; i <= parcelas; i++) {
-        inserir(d, 'titulos', {
-          ...base,
-          parcela: `${i}/${parcelas}`,
-          valor: i === parcelas ? Math.round((valor - parcela * (parcelas - 1)) * 100) / 100 : parcela,
-          vencimento: addMeses(String(r.primeiroVencimento || data), i - 1),
-          status: 'Aberto',
-          dataPagamento: '',
-        })
-      }
+      r.conferencia = r.conferencia || 'Conferida'
+      lancar(d, ctx, { setor: 'cobranca', indicador: 'ebooks_vendidos', colaboradorId: String(r.cobradorId ?? ''), quantidade: Number(r.quantidade) || 1, descricao: `${r.pacote} — ${r.responsavel}`, data: String(r.data || hoje()) })
+      gerarTitulosVenda(d, r, ctx)
+      notificar(d, ctx, { setores: ['cobranca', 'financeiro', 'adm'], tipo: 'info', titulo: 'Venda interna de book', descricao: `${r.responsavel} (${r.escola}) • ${r.formaPagamento} • R$ ${valor.toFixed(2).replace('.', ',')}`, link: '/financeiro/vendas-books' })
     } else {
-      inserir(d, 'titulos', { ...base, parcela: forma === 'Cartão de crédito' && parcelas > 1 ? `${parcelas}x no cartão` : '1/1', valor, vencimento: data, status: 'Pago', dataPagamento: data })
-      if (canal === 'Interno') lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(r.cobradorId ?? ''), quantidade: valor, descricao: `Recebido na venda — ${r.responsavel}`, data })
+      r.conferencia = r.conferencia || 'Aguardando conferência'
+      notificar(d, ctx, { setores: ['financeiro', 'adm'], tipo: 'aprovacao', titulo: 'Venda externa para conferir', descricao: `${r.responsavel} (${r.escola}) • R$ ${valor.toFixed(2).replace('.', ',')} — confira contrato, assinatura, documento e promissória.`, link: '/financeiro/conferencia' })
     }
-    notificar(d, ctx, {
-      setores: ['cobranca', 'financeiro', 'adm'],
-      tipo: 'info',
-      titulo: `${canal === 'Externo' ? 'Venda externa' : 'Venda interna'} de book`,
-      descricao: `${r.responsavel} (${r.escola}) • ${forma} • R$ ${valor.toFixed(2).replace('.', ',')}`,
-      link: '/financeiro/vendas-books',
-    })
   },
 
   acordos(d, r, ctx) {
@@ -347,6 +326,60 @@ export function confirmarContratoEscola(d: ErpState, id: string, ctx: Contexto):
   })
   APOS_CRIAR.agenda_visitas(d, visita, ctx)
   auditar(d, ctx, 'EDITAR', `Contrato confirmado e enviado para a agenda: ${c.escola}`, 'operacional')
+  return null
+}
+
+// ---- Títulos (parcelas) de uma venda de book — mesma regra do SQL 009 (idempotente) ----
+// entrada → pago • cartão → pago • boleto → parcelas em aberto • PIX/dinheiro → pago à vista; parcelado → em aberto
+export function gerarTitulosVenda(d: ErpState, v: Registro, ctx: Contexto) {
+  if (col(d, 'titulos').some((t) => t.vendaId === v.id)) return
+  const data = String(v.data || hoje())
+  const forma = String(v.formaPagamento || 'Boleto')
+  const n = Math.max(1, Number(v.parcelas) || 1)
+  const entrada = Number(v.entrada) || 0
+  const restante = Math.round(((Number(v.valor) || 0) - entrada) * 100) / 100
+  const primeiro = String(v.primeiroVencimento || data)
+  const interno = v.canal !== 'Externo'
+  const base = { cliente: v.responsavel, aluno: v.aluno ?? '', escola: v.escola, telefone: v.telefone, cobradorId: v.cobradorId ?? '', vendaId: v.id, formaPagamento: forma }
+  const recebido = (valor: number, descricao: string) => {
+    if (interno) lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(v.cobradorId ?? ''), quantidade: valor, descricao, data })
+  }
+  if (entrada > 0) {
+    inserir(d, 'titulos', { ...base, parcela: 'Entrada', valor: entrada, vencimento: data, status: 'Pago', dataPagamento: data })
+    recebido(entrada, `Entrada — ${v.responsavel}`)
+  }
+  if (restante <= 0) return
+  const aberto = forma === 'Boleto' || ((forma === 'PIX' || forma === 'Dinheiro') && (n > 1 || primeiro > data))
+  if (aberto) {
+    const parcela = Math.round((restante / n) * 100) / 100
+    for (let i = 1; i <= n; i++) {
+      inserir(d, 'titulos', {
+        ...base,
+        parcela: `${i}/${n}`,
+        valor: i === n ? Math.round((restante - parcela * (n - 1)) * 100) / 100 : parcela,
+        vencimento: addMeses(primeiro, i - 1),
+        status: 'Aberto',
+        dataPagamento: '',
+      })
+    }
+  } else {
+    inserir(d, 'titulos', { ...base, parcela: forma === 'Cartão de crédito' && n > 1 ? `${n}x no cartão` : '1/1', valor: restante, vencimento: data, status: 'Pago', dataPagamento: data })
+    recebido(restante, `Recebido na venda — ${v.responsavel}`)
+  }
+}
+
+// Conferência da venda externa pelo Financeiro: conferir (gera os títulos) ou devolver ao vendedor com o motivo
+export function conferirVendaBook(d: ErpState, id: string, acao: 'conferir' | 'devolver', motivo: string, ctx: Contexto): string | null {
+  const v = col(d, 'vendas_ebooks').find((x) => x.id === id)
+  if (!v) return 'Venda não encontrada.'
+  if (v.conferencia !== 'Aguardando conferência') return 'Esta venda não está aguardando conferência.'
+  if (acao === 'devolver' && !motivo.trim()) return 'Informe o motivo da devolução.'
+  v.conferencia = acao === 'conferir' ? 'Conferida' : 'Devolvida'
+  v.conferenciaMotivo = acao === 'conferir' ? '' : motivo.trim()
+  v.conferidoPor = ctx.autorId
+  v.conferidoEm = agora()
+  if (acao === 'conferir') gerarTitulosVenda(d, v, ctx)
+  auditar(d, ctx, 'EDITAR', `Venda de book ${acao === 'conferir' ? 'conferida' : `devolvida (${motivo.trim()})`}: ${v.responsavel}`, 'financeiro')
   return null
 }
 

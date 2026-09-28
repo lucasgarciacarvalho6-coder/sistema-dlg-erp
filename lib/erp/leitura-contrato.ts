@@ -5,7 +5,7 @@
 //       + interpretador de rótulos. Bom para contrato digitado; letra à mão fica fraca.
 // Na leitura do navegador, a primeira vez baixa o idioma português (~2 MB); depois fica em cache.
 
-import { interpretarContrato, normalizarLeituraIA, type CamposContrato } from './contrato-parser'
+import { interpretarContrato, interpretarContratoVenda, normalizarLeituraIA, normalizarLeituraVenda, type CamposContrato, type LeituraVenda } from './contrato-parser'
 import { lerContratoComIA } from './store'
 
 export type LeituraContrato =
@@ -60,7 +60,8 @@ async function abrirPdf(arquivo: File) {
 
 // ---------------- Leitura no navegador (OCR) ----------------
 
-async function ocr(imagens: HTMLCanvasElement[], progresso: Progresso): Promise<string> {
+// psm '4' = texto em colunas: lê bem formulários com tabela (ex.: o Contrato de Compra)
+async function ocr(imagens: HTMLCanvasElement[], progresso: Progresso, psm?: string): Promise<string> {
   const { createWorker } = await import('tesseract.js')
   let pagina = 0
   const worker = await createWorker('por', 1, {
@@ -69,6 +70,7 @@ async function ocr(imagens: HTMLCanvasElement[], progresso: Progresso): Promise<
     },
   })
   try {
+    if (psm) await worker.setParameters({ tessedit_pageseg_mode: psm as never })
     const textos: string[] = []
     for (; pagina < imagens.length; pagina++) {
       const { data } = await worker.recognize(imagens[pagina])
@@ -80,7 +82,7 @@ async function ocr(imagens: HTMLCanvasElement[], progresso: Progresso): Promise<
   }
 }
 
-async function lerNoNavegador(arquivo: File, paginas: HTMLCanvasElement[], vendedores: string[], progresso: Progresso) {
+async function lerNoNavegador(arquivo: File, paginas: HTMLCanvasElement[], vendedores: string[], progresso: Progresso, psm?: string) {
   let texto = ''
   if (arquivo.type === 'application/pdf') {
     // PDF digital: usa o texto do próprio arquivo; escaneado: OCR das páginas
@@ -94,6 +96,7 @@ async function lerNoNavegador(arquivo: File, paginas: HTMLCanvasElement[], vende
     texto = await ocr(
       paginas.map((p) => redimensionar(p, MAX_LADO_OCR, 'grayscale(1) contrast(1.35)')),
       progresso,
+      psm,
     )
   }
   return texto
@@ -132,5 +135,36 @@ export async function lerContratoLocal(entrada: File | File[], vendedores: strin
   } catch (e) {
     console.error('Leitura do contrato', e)
     return { erro: 'Não foi possível ler o arquivo agora (verifique a internet). Preencha à mão ou tente de novo.' }
+  }
+}
+
+// ---------------- Contrato de Compra (venda de books, app do vendedor) ----------------
+
+export type LeituraContratoVenda = (LeituraVenda & { fonte: 'ia' | 'local'; aviso?: string }) | { erro: string }
+
+export async function lerContratoVenda(fotos: File[], progresso: Progresso = () => {}): Promise<LeituraContratoVenda> {
+  if (!fotos.length) return { erro: 'Fotografe o contrato.' }
+  try {
+    let paginas: HTMLCanvasElement[] = []
+    try {
+      for (const f of fotos) paginas = paginas.concat(await paginasDoArquivo(f))
+    } catch {
+      return { erro: 'Não consegui abrir a foto. Tire de novo.' }
+    }
+    progresso(0.15, 'Lendo com IA')
+    const jpegs = paginas.map((p) => redimensionar(p, MAX_LADO_IA).toDataURL('image/jpeg', 0.85).split(',')[1])
+    const ia = await lerContratoComIA(jpegs, [], 'venda')
+    if ('campos' in ia) {
+      progresso(1, 'Pronto')
+      return { ...normalizarLeituraVenda(ia.campos), fonte: 'ia' }
+    }
+    progresso(0, 'Lendo o texto')
+    const texto = await lerNoNavegador(fotos[0], paginas, [], progresso, '4')
+    const aviso = ia.indisponivel ? undefined : `Leitor com IA: ${ia.erro} Usei a leitura básica.`
+    if (texto.replace(/\s/g, '').length < 20) return { erro: `${aviso ? `${aviso} ` : ''}Não encontrei texto legível. Tire a foto mais de perto, com boa luz e o papel reto.` }
+    return { ...interpretarContratoVenda(texto), fonte: 'local', aviso }
+  } catch (e) {
+    console.error('Leitura do contrato de venda', e)
+    return { erro: 'Não foi possível ler agora (verifique a internet). Preencha à mão ou tente de novo.' }
   }
 }

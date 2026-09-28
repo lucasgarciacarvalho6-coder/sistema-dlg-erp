@@ -5,7 +5,7 @@
 // Segredos (Supabase → Edge Functions → Secrets):
 //   GEMINI_API_KEY → chave grátis criada em aistudio.google.com (NUNCA vai para o navegador)
 //   GEMINI_MODEL   → opcional; se não informado tenta gemini-2.5-flash e depois gemini-flash-latest
-// Só quem pode CRIAR no Operacional consegue usar (confere com a função pode() do banco).
+// Quem usa: o Operacional (contratos de escola) e o vendedor externo pelo app (modelo 'venda' = Contrato de Compra).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
@@ -83,13 +83,65 @@ Leia com MUITA atenção a letra à mão: prefira o que está escrito a suposiç
 e liste em "duvidas" o que ficou incerto. Não invente: campo que não aparece fica vazio (ou 0).
 Vendedores cadastrados na DLG: ${vendedores.length ? vendedores.join('; ') : '(nenhum)'}.`
 
-async function chamarGemini(chave: string, modelo: string, partes: unknown[]) {
+// ---------- "CONTRATO DE COMPRA" (venda de books aos pais, preenchido à mão pelo vendedor de books) ----------
+const inteiro = (descricao: string) => ({ type: 'INTEGER', description: descricao })
+const ESQUEMA_VENDA = {
+  type: 'OBJECT',
+  properties: {
+    comprador: texto('Nome do COMPRADOR (linha "Comprador:" da tabela, ou a linha "de outro lado, ___ doravante denominado COMPRADOR")'),
+    cpf: texto('CPF do comprador, formato 000.000.000-00'),
+    rg: texto('RG do comprador'),
+    dataNascimento: texto('Data de nascimento do comprador, AAAA-MM-DD'),
+    whatsapp: texto('Telefone WhatsApp do comprador, formato (DD) NNNNN-NNNN'),
+    referencias: {
+      type: 'ARRAY',
+      description: 'Linhas "Referência:" + "Telefone:" preenchidas (até 3)',
+      items: { type: 'OBJECT', properties: { nome: texto('Nome da referência'), telefone: texto('Telefone da referência') } },
+    },
+    rua: texto('Linha "Rua:"'),
+    numero: texto('Linha "Nº"'),
+    bairro: texto('Linha "Bairro:"'),
+    cep: texto('Linha "CEP:", formato 00000-000'),
+    cidade: texto('Linha "Cidade:" (cidade e, se houver, a UF)'),
+    nomePai: texto('Linha "Nome do Pai:"'),
+    nomeMae: texto('Linha "Nome da Mãe:"'),
+    qtdMaletas: inteiro('Número escrito antes de "maleta de luxo" em "Declaro ter recebido ___ maleta"'),
+    qtdFotos: inteiro('Número escrito antes de "fotos reveladas em papel fotográfico ... 20x25"'),
+    qtdMolduras: inteiro('Número escrito antes de "foto moldurada ... 20x35"'),
+    modelo: texto('Linha "Modelo:"'),
+    numeroFicha: texto('Linha "nº da ficha:" (número da ficha da criança)'),
+    valorTotal: numero('"Valor total da compra" em reais, só o número (ex.: 2600)'),
+    entrada: numero('"Entrada" em reais, só o número (0 se vazio)'),
+    formaParcelamento: texto('Texto da linha "Forma de parcelamento", como escrito (ex.: "10x de 260 no boleto")'),
+    formaPagamento: texto('Forma de pagamento do restante: uma destas — PIX, Dinheiro, Cartão de crédito, Cartão de débito, Boleto (deduza do texto; boleto/carnê = Boleto)'),
+    parcelas: inteiro('Quantidade de parcelas do restante (1 se à vista)'),
+    dataVencimento: texto('"Data de Vencimento" (1º vencimento), AAAA-MM-DD'),
+    local: texto('Linha "Local:" do rodapé'),
+    data: texto('Data do rodapé (Data __/__/__), AAAA-MM-DD'),
+    duvidas: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Nomes dos campos acima com letra difícil, rasura ou incerteza' },
+  },
+  required: ['comprador', 'duvidas'],
+}
+
+const INSTRUCAO_VENDA = `Você lê o "CONTRATO DE COMPRA" usado pelos vendedores de books da DLG Photos (venda de álbuns fotográficos aos pais).
+É uma folha IMPRESSA (cabeçalho com razão social fixa — ignore o cabeçalho) com lacunas preenchidas À MÃO.
+Onde fica cada dado:
+- Parágrafo inicial: "... de outro lado, ___ doravante denominado COMPRADOR" (nome do comprador).
+- "Declaro ter recebido ___ maleta de luxo ..., ___ fotos reveladas ... 20x25 e ___ foto moldurada ... 20x35" (quantidades).
+- "Modelo: ___" e "nº da ficha: ___".
+- Tabela: Comprador, CPF, RG, Data de Nascimento, Telefone Whatsapp, 3 linhas Referência + Telefone, Rua, Nº, Bairro, CEP,
+  Cidade, Nome do Pai, Nome da Mãe, Valor total da compra, Entrada, Forma de parcelamento, Data de Vencimento.
+- Rodapé: Assinaturas, Data e Local.
+Leia com MUITA atenção a letra à mão, confira CPF (11 dígitos) e telefones, e liste em "duvidas" o que ficou incerto.
+Não invente: campo que não aparece fica vazio (ou 0). Datas com ano de 2 dígitos: "26" = 2026.`
+
+async function chamarGemini(chave: string, modelo: string, partes: unknown[], esquema: unknown) {
   return await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': chave, 'content-type': 'application/json' },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: partes }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: ESQUEMA },
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: esquema },
     }),
   })
 }
@@ -106,10 +158,12 @@ Deno.serve(async (req) => {
   })
   const { data: auth } = await chamador.auth.getUser()
   if (!auth.user) return json({ erro: 'Sessão inválida' }, 401)
+  // Operacional (contratos de escola) ou vendedor externo pelo app (contratos de venda)
   const { data: pode } = await chamador.rpc('pode', { p_modulo: 'operacional', p_acao: 'criar' })
-  if (pode !== true) return json({ erro: 'Sem permissão para importar contratos' }, 403)
+  const { data: externo } = await chamador.rpc('meu_vendedor_externo')
+  if (pode !== true && !externo) return json({ erro: 'Sem permissão para ler contratos' }, 403)
 
-  let body: { paginas?: string[]; vendedores?: string[] }
+  let body: { paginas?: string[]; vendedores?: string[]; modelo?: string }
   try {
     body = await req.json()
   } catch {
@@ -119,15 +173,16 @@ Deno.serve(async (req) => {
   if (!paginas.length) return json({ erro: 'Envie a imagem do contrato.' }, 400)
   if (paginas.some((p) => typeof p !== 'string' || p.length * 0.75 > MAX_BYTES_PAGINA)) return json({ erro: 'Imagem muito grande.' }, 400)
 
+  const venda = body.modelo === 'venda'
   const partes = [
     ...paginas.map((data) => ({ inline_data: { mime_type: 'image/jpeg', data } })),
-    { text: INSTRUCAO((body.vendedores ?? []).slice(0, 200)) },
+    { text: venda ? INSTRUCAO_VENDA : INSTRUCAO((body.vendedores ?? []).slice(0, 200)) },
   ]
 
   const modelos = [Deno.env.get('GEMINI_MODEL'), 'gemini-2.5-flash', 'gemini-flash-latest'].filter((m, i, a): m is string => !!m && a.indexOf(m) === i)
   let ultimoErro = ''
   for (const modelo of modelos) {
-    const r = await chamarGemini(chave, modelo, partes)
+    const r = await chamarGemini(chave, modelo, partes, venda ? ESQUEMA_VENDA : ESQUEMA)
     if (r.status === 404) {
       ultimoErro = `Modelo ${modelo} indisponível`
       continue // modelo descontinuado → tenta o próximo
