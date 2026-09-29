@@ -365,10 +365,10 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
   return (
     <Cartao titulo="Agenda futura • 20 dias" modo={modo}>
       <div className="flex flex-wrap gap-2">
-        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Total alunos: {num(a.total)}</span>
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Fichas confirmadas: {num(a.total)}</span>
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Dias: {a.comAgenda}/{a.dias.length}</span>
         {a.capacidade !== null && (
-          <span className={`${chip} border-blue-500/30 bg-blue-500/10 text-blue-300`} title="Alunos agendados ÷ o que a meta pede nesses dias">
+          <span className={`${chip} border-blue-500/30 bg-blue-500/10 text-blue-300`} title="Fichas confirmadas ÷ o que a meta pede nesses dias">
             Capacidade: {Math.round(a.capacidade)}%
           </span>
         )}

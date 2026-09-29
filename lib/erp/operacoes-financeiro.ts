@@ -84,7 +84,7 @@ export interface FinanceiroOperacoes {
   dias: DiaOperacao[] // dias com viagem realizada, em ordem
   realizado: Custos & { visitas: number; escolas: number; diasViagem: number; operacoes: number; semCarro: number }
   porCarro: { veiculo: Registro; dias: number; alunos: number; fixo: number; valorDia: number }[]
-  previsto: Custos & { visitas: number; contratosConferencia: number; porDia: Record<string, number> } // porDia = fichas marcadas por data
+  previsto: Custos & { visitas: number; contratosConferencia: number }
   projecao: Custos & { custoAluno: number; receitaAluno: number; receita: number; resultado: number; temVendas: boolean }
   agenda: { feitas: number; agendadas: number; canceladas: number }
 }
@@ -141,19 +141,16 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
   realizado.diasViagem = dias.length
 
   // ---- previsto: fichas fechadas ainda por fotografar ----
-  const previsto = { ...zero(), visitas: futuras.length, contratosConferencia: 0, porDia: {} as Record<string, number> }
-  const marcar = (data: string, fichas: number) => (previsto.porDia[data.slice(0, 10)] = (previsto.porDia[data.slice(0, 10)] ?? 0) + fichas)
+  const previsto = { ...zero(), visitas: futuras.length, contratosConferencia: 0 }
   for (const v of futuras) {
     const fichas = n(v.fichasPrevistas)
     somar(previsto, { alunos: fichas, variavel: ctx.variavel(fichas) })
-    marcar(t(v.data), fichas)
   }
   for (const [k, info] of diaCarro) if (!info.realizada) somar(previsto, { fixo: fixoDe(k.split('|')[1]) })
   // contratos fechados com data no mês que ainda estão em conferência (sem carro definido: só o variável)
   for (const c of ctx.contratos.filter((x) => x.status === 'Em conferência' && t(x.dataPrevista).startsWith(mes) && t(x.dataPrevista) >= hojeISO)) {
     const fichas = n(c.fichasPrevistas)
     previsto.contratosConferencia++
-    marcar(t(c.dataPrevista), fichas)
     somar(previsto, { alunos: fichas, variavel: ctx.variavel(fichas) })
   }
 
@@ -208,8 +205,8 @@ export const nomeCarro = (v: Registro | undefined) => (v ? `${t(v.modelo)}${v.pl
 // ---- Agenda futura: próximos N dias úteis a partir de hoje ----
 //  OK = dia com visita, fichas confirmadas pela escola e equipe completa (carro, motorista, fotógrafos)
 //  Pendente = tem visita, mas falta confirmar fichas ou montar a equipe • Vazio = dia útil sem visita
-//  Alunos = fichas confirmadas (ou as previstas, se a escola ainda não confirmou)
-//  Capacidade = alunos agendados ÷ o que a meta pede nesses dias (meta diária × dias)
+//  Alunos = só as fichas CONFIRMADAS pela escola (as previstas do contrato não contam: sem confirmação, fica 0)
+//  Capacidade = alunos confirmados ÷ o que a meta pede nesses dias (meta diária × dias)
 export type SituacaoDia = 'OK' | 'Pendente' | 'Vazio'
 export interface DiaAgenda {
   data: string
@@ -224,7 +221,7 @@ export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
   for (let d = hoje(); dias.length < quantos; d = addDias(d, 1)) {
     if (!ehDiaUtil(d)) continue
     const doDia = agendadas.filter((v) => t(v.data) === d)
-    const alunos = doDia.reduce((a, v) => a + (n(v.fichasConfirmadas) > 0 ? n(v.fichasConfirmadas) : n(v.fichasPrevistas)), 0)
+    const alunos = doDia.reduce((a, v) => a + n(v.fichasConfirmadas), 0)
     const tudoOk = doDia.every((v) => n(v.fichasConfirmadas) > 0 && equipeDaVisita(s, v).completa)
     dias.push({ data: d, alunos, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente' })
   }

@@ -1,15 +1,17 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diasDeMeta, equipeComMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
-import { formatar, iniciais, mesAtual } from '@/lib/erp/format'
+import { formatar, iniciais, mesAtual, nomeMes } from '@/lib/erp/format'
 import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
 import { GradeTV } from './CardsTV'
+import Icon from './Icon'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
 function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
@@ -153,10 +155,97 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
   )
 }
 
+type Item = { c: Colaborador; pct: number }
+
+const chip = (ativo: boolean) =>
+  `whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border ${
+    ativo ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' : 'text-zinc-500 hover:text-white hover:bg-white/[0.02] border-transparent'
+  }`
+
+// Abas por setor: Todos (n) • Operacional (n) • Produção (n)...
+function AbasSetor({ todos, filtro, onFiltro }: { todos: Item[]; filtro: Setor | ''; onFiltro: (f: Setor | '') => void }) {
+  return (
+    <div className="flex overflow-x-auto custom-scrollbar gap-1">
+      <button onClick={() => onFiltro('')} className={chip(filtro === '')}>
+        Todos ({todos.length})
+      </button>
+      {SETORES_PRODUTIVOS.map((x) => {
+        const qtd = todos.filter((t) => t.c.setor === x).length
+        if (!qtd) return null
+        return (
+          <button key={x} onClick={() => onFiltro(x)} className={chip(filtro === x)}>
+            {SETORES[x].nome} ({qtd})
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Tela cheia da Equipe: os cards na tela toda (sem rolar), com as abas para ver só um setor. Esc sai.
+// Os cards têm tamanho fixo (calculado pela equipe toda): ao filtrar, não esticam.
+function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState; mes: string; todos: Item[]; filtroInicial: Setor | ''; onSair: () => void }) {
+  const raiz = useRef<HTMLDivElement>(null)
+  const sairRef = useRef(onSair)
+  const [filtro, setFiltro] = useState<Setor | ''>(filtroInicial)
+  useEffect(() => {
+    sairRef.current = onSair
+  }, [onSair])
+  // tela cheia de verdade (o navegador pode recusar; a sobreposição funciona mesmo assim)
+  useEffect(() => {
+    raiz.current?.requestFullscreen?.().catch(() => undefined)
+    const aoMudar = () => {
+      if (!document.fullscreenElement) sairRef.current()
+    }
+    const tecla = (e: KeyboardEvent) => e.key === 'Escape' && sairRef.current()
+    document.addEventListener('fullscreenchange', aoMudar)
+    window.addEventListener('keydown', tecla)
+    return () => {
+      document.removeEventListener('fullscreenchange', aoMudar)
+      window.removeEventListener('keydown', tecla)
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
+    }
+  }, [])
+  const lista = filtro ? todos.filter((x) => x.c.setor === filtro) : todos
+  return createPortal(
+    <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white flex flex-col gap-5 px-8 py-6 2xl:px-10">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="DLG Photos" className="w-12 h-12 object-contain drop-shadow-[0_0_20px_rgba(37,99,235,0.6)]" />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">Ao vivo</span>
+            </div>
+            <h1 className="text-2xl font-black tracking-tight mt-0.5">
+              Equipe • metas individuais <span className="text-zinc-600 font-bold text-lg">• {filtro ? SETORES[filtro].nome : 'Todos os setores'} • {nomeMes(mes)}</span>
+            </h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <AbasSetor todos={todos} filtro={filtro} onFiltro={setFiltro} />
+          <button onClick={onSair} title="Sair (Esc)" className="p-3 rounded-full bg-white/[0.05] hover:bg-red-500/20 text-zinc-400 hover:text-white transition-all">
+            <Icon nome="x" className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0">
+        <GradeTV key={filtro || 'todos'} s={s} mes={mes} pessoas={lista.map(({ c }) => c)} base={todos.map(({ c }) => c)} ajustar />
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 // Grade com todos os colaboradores das áreas produtivas, filtrável por setor
 export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
   const [filtro, setFiltro] = useState<Setor | ''>('')
   const [aberto, setAberto] = useState<Colaborador | null>(null) // painel completo ao clicar no card
+  const [telaCheia, setTelaCheia] = useState(false)
 
   const todos = useMemo(
     () =>
@@ -180,11 +269,6 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
     )
   }
 
-  const chip = (ativo: boolean) =>
-    `whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border ${
-      ativo ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' : 'text-zinc-500 hover:text-white hover:bg-white/[0.02] border-transparent'
-    }`
-
   return (
     <div className="space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -193,21 +277,18 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
           <h2 className="text-sm font-black text-white uppercase tracking-widest">Equipe • metas individuais</h2>
           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ranking por % da meta mensal</span>
         </div>
-        <div className="flex overflow-x-auto custom-scrollbar gap-1">
-          <button onClick={() => setFiltro('')} className={chip(filtro === '')}>
-            Todos ({todos.length})
+        <div className="flex items-center gap-3 min-w-0">
+          <AbasSetor todos={todos} filtro={filtro} onFiltro={setFiltro} />
+          <button
+            onClick={() => setTelaCheia(true)}
+            title="Ver os cards em tela cheia (Esc sai)"
+            className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-blue-600 hover:bg-blue-500 text-white transition-all"
+          >
+            <Icon nome="expand" className="w-3.5 h-3.5" /> Tela cheia
           </button>
-          {SETORES_PRODUTIVOS.map((x) => {
-            const qtd = todos.filter((t) => t.c.setor === x).length
-            if (!qtd) return null
-            return (
-              <button key={x} onClick={() => setFiltro(x)} className={chip(filtro === x)}>
-                {SETORES[x].nome} ({qtd})
-              </button>
-            )
-          })}
         </div>
       </div>
+      {telaCheia && <TelaCheiaEquipe s={s} mes={mes} todos={todos} filtroInicial={filtro} onSair={() => setTelaCheia(false)} />}
       {/* Cards da TV: Operações é o card maior (com os mini-cards); cada pessoa com a cor da situação */}
       <GradeTV s={s} mes={mes} pessoas={lista.map(({ c }) => c)} onAbrir={(c) => setAberto(c)} />
 
