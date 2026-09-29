@@ -494,6 +494,45 @@ export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ct
   auditar(d, ctx, 'EDITAR', `Visita encerrada: ${v.escola} (${fichas} fichas)`, 'operacional')
 }
 
+// Retorno: as fichas que faltaram voltam para a agenda como uma visita nova (mesma escola e contrato)
+// — mesma regra do SQL 016 (agendar_retorno)
+export function agendarRetorno(d: ErpState, visitaId: string, fichas: number, data: string, ctx: Contexto): string | null {
+  const v = col(d, 'agenda_visitas').find((x) => x.id === visitaId)
+  if (!v) return 'Visita não encontrada.'
+  if (v.status !== 'Fotografada' && v.status !== 'Fechamento enviado') return 'Só dá para agendar o retorno de uma visita encerrada.'
+  if (!(fichas > 0)) return 'Informe quantas fichas ficaram para o retorno.'
+  if (!data) return 'Informe a data do retorno.'
+  if (data <= String(v.data)) return 'A data do retorno tem que ser depois da visita.'
+  const ja = col(d, 'agenda_visitas').find((x) => x.retornoDe === visitaId && x.status !== 'Cancelada')
+  if (ja) return `Esta visita já tem retorno agendado para ${String(ja.data).split('-').reverse().join('/')}.`
+  const nova = inserir(d, 'agenda_visitas', {
+    contratoId: v.contratoId,
+    escola: v.escola,
+    cidade: v.cidade,
+    uf: v.uf,
+    endereco: v.endereco,
+    telefone: v.telefone,
+    responsavel: v.responsavel,
+    vendedorId: v.vendedorId,
+    data,
+    fichasPrevistas: fichas,
+    fichasConfirmadas: 0,
+    fichasFotografadas: 0,
+    equipe: '',
+    carro: '',
+    fotografoIds: '',
+    motoristaId: '',
+    status: 'Agendada',
+    retornoDe: v.id,
+  })
+  const br = (iso: unknown) => String(iso).split('-').reverse().join('/')
+  inserir(d, 'agenda_historico', { visitaId: v.id, data: hoje(), tipo: 'Retorno agendado', fichasAntes: null, fichasDepois: null, descricao: `${fichas} fichas para o retorno em ${br(data)}.`, autor: ctx.autorNome })
+  inserir(d, 'agenda_historico', { visitaId: nova.id, data: hoje(), tipo: 'Retorno', fichasAntes: null, fichasDepois: null, descricao: `Retorno da visita de ${br(v.data)}: ${fichas} fichas que ficaram para o retorno.`, autor: ctx.autorNome })
+  APOS_CRIAR.agenda_visitas(d, nova, ctx)
+  auditar(d, ctx, 'CRIAR', `Retorno agendado: ${v.escola} (${fichas} fichas em ${br(data)})`, 'operacional')
+  return null
+}
+
 // Envia o fechamento: cada beneficiário vira uma conta a pagar no Financeiro (com os dados PIX)
 export function enviarFechamento(d: ErpState, id: string, ctx: Contexto): string | null {
   const f = col(d, 'fechamentos').find((x) => x.id === id)

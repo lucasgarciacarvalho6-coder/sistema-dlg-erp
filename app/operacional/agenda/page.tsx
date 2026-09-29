@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
-import { atualizarRegistro, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
+import { agendarRetorno, atualizarRegistro, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { MAX_FOTOGRAFOS, conflitosEquipe, contratoDaVisita, corEquipe, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, ultimaComposicao } from '@/lib/erp/operacional'
+import { MAX_FOTOGRAFOS, conflitosEquipe, contratoDaVisita, corEquipe, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
 import { addDias, dataBR, diasNoMes, hoje, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
@@ -214,6 +214,7 @@ export default function AgendaFotograficaPage() {
                             <span className={`text-[9px] font-black uppercase tracking-wider truncate ${eq.nome ? cor.texto : 'text-zinc-500'}`}>{eq.nome || 'Sem equipe'}</span>
                           </div>
                           <p className="text-[11px] font-bold text-white group-hover:text-blue-400 transition-colors leading-tight line-clamp-2">{String(v.escola)}</p>
+                          {v.retornoDe && <p className="text-[9px] font-black uppercase tracking-wider text-cyan-400">↺ Retorno</p>}
                           <p className="text-[10px] text-zinc-400 truncate">{String(v.cidade)}</p>
                           <div className="flex items-center justify-between gap-1 text-[9px] font-bold">
                             <span className="text-zinc-400">
@@ -297,6 +298,7 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
                       <p className="text-xs font-bold text-white truncate">{String(v.escola)}</p>
                       <p className="text-[10px] text-zinc-400">
                         {String(v.cidade)}-{String(v.uf)}
+                        {v.retornoDe && <span className="text-cyan-400 font-bold"> • ↺ Retorno</span>}
                         {diasDuplos.has(String(v.data)) && <span className="text-orange-400 font-bold"> • 2 cidades no mesmo dia</span>}
                         {v.status === 'Agendada' && !e.completa && <span className="text-orange-400 font-bold"> • falta {e.faltando.join(', ')}</span>}
                       </p>
@@ -327,7 +329,11 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
   const veiculos = colecao(s, 'veiculos').filter((v) => v.status !== 'Inativo' || v.id === visita.veiculoId)
   const nomesEquipes = [...new Set(colecao(s, 'agenda_visitas').map((v) => String(v.equipe || '').trim()).filter(Boolean))].sort()
   const agendada = visita.status === 'Agendada'
+  const encerrada = visita.status === 'Fotografada' || visita.status === 'Fechamento enviado'
   const atual = equipeDaVisita(s, visita)
+  const retorno = retornoDaVisita(s, visita)
+  const origem = visita.retornoDe ? colecao(s, 'agenda_visitas').find((v) => v.id === visita.retornoDe) : undefined
+  const [caixaRetorno, setCaixaRetorno] = useState<'encerrar' | 'agendar' | null>(null)
 
   const [equipe, setEquipe] = useState({
     data: String(visita.data),
@@ -386,7 +392,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
     <Modal
       aberto
       titulo={agendada ? 'Visita fotográfica agendada' : visita.status === 'Cancelada' ? 'Visita cancelada' : 'Visita fotográfica encerrada'}
-      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))}`}
+      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))}${origem ? ` • ↺ Retorno da visita de ${dataBR(String(origem.data))}` : ''}`}
       onFechar={onFechar}
       largura="max-w-3xl"
       rodape={
@@ -597,9 +603,10 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
                 <input type="number" min={1} value={fotografadas} onChange={(e) => setFotografadas(e.target.value)} className={inputCls} />
               </div>
               <button
-                onClick={async () => {
-                  const erro = await encerrarVisita(visita.id, Number(fotografadas))
-                  if (erro) setMsg({ ok: false, texto: erro })
+                onClick={() => {
+                  if (!(Number(fotografadas) > 0)) return setMsg({ ok: false, texto: 'Informe quantas fichas foram fotografadas.' })
+                  setMsg(null)
+                  setCaixaRetorno('encerrar') // pergunta se haverá retorno antes de encerrar
                 }}
                 className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
               >
@@ -632,7 +639,35 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
         </div>
       )}
 
+      {/* Retorno: fichas que ficaram para outro dia */}
+      {encerrada && retorno && (
+        <div className="bg-cyan-500/[0.05] border border-cyan-500/20 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-bold text-cyan-300">
+            ↺ Retorno agendado: <span className="text-white">{num(Number(retorno.fichasPrevistas))} fichas</span> em <span className="text-white">{dataBR(String(retorno.data))}</span>
+          </p>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{rotuloStatus(retorno.status)}</span>
+        </div>
+      )}
+      {encerrada && !retorno && podeEditar && (
+        <div className="bg-cyan-500/[0.05] border border-cyan-500/20 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <p className="text-xs text-zinc-300">Ficaram fichas para outro dia? Agende o retorno: ele entra na agenda como uma nova visita.</p>
+          <button onClick={() => setCaixaRetorno('agendar')} className={btnSecundario}>
+            ↺ Agendar retorno
+          </button>
+        </div>
+      )}
+
       {msg && <p className={`text-xs font-bold ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.texto}</p>}
+
+      {caixaRetorno && (
+        <CaixaRetorno
+          visita={visita}
+          modo={caixaRetorno}
+          fotografadas={Number(fotografadas)}
+          onFechar={() => setCaixaRetorno(null)}
+          onAviso={(texto) => setMsg({ ok: false, texto })}
+        />
+      )}
 
       {/* Histórico */}
       <div className="space-y-3">
@@ -659,6 +694,100 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
           </div>
         ))}
       </div>
+    </Modal>
+  )
+}
+
+// Caixa do retorno. modo 'encerrar': pergunta "Haverá retorno?" e encerra a visita (com ou sem retorno).
+// modo 'agendar': visita já encerrada, só agenda o retorno. O retorno vira uma visita nova na agenda.
+function CaixaRetorno({ visita, modo, fotografadas, onFechar, onAviso }: { visita: Registro; modo: 'encerrar' | 'agendar'; fotografadas: number; onFechar: () => void; onAviso: (texto: string) => void }) {
+  const [haRetorno, setHaRetorno] = useState<boolean | null>(modo === 'agendar' ? true : null)
+  const [fichas, setFichas] = useState('')
+  const [data, setData] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  const confirmar = async () => {
+    if (haRetorno === null) return setErro('Informe se haverá retorno.')
+    if (haRetorno) {
+      if (!(Number(fichas) > 0)) return setErro('Informe quantas fichas ficaram para o retorno.')
+      if (!data) return setErro('Informe a data do retorno.')
+      if (data <= String(visita.data)) return setErro('A data do retorno tem que ser depois da visita.')
+    }
+    setSalvando(true)
+    if (modo === 'encerrar') {
+      const e = await encerrarVisita(visita.id, fotografadas)
+      if (e) {
+        setSalvando(false)
+        return setErro(e)
+      }
+    }
+    if (haRetorno) {
+      const e = await agendarRetorno(visita.id, Number(fichas), data)
+      if (e) {
+        setSalvando(false)
+        if (modo === 'encerrar') {
+          // a visita já foi encerrada: o retorno pode ser agendado pelo botão "Agendar retorno"
+          onAviso(`Visita encerrada, mas o retorno não foi agendado: ${e} Use o botão "Agendar retorno".`)
+          return onFechar()
+        }
+        return setErro(e)
+      }
+    }
+    onFechar()
+  }
+
+  const opcao = (valor: boolean, rotulo: string) => (
+    <button
+      type="button"
+      onClick={() => (setHaRetorno(valor), setErro(''))}
+      className={`flex-1 px-5 py-4 rounded-2xl border text-sm font-black uppercase tracking-widest transition-all ${
+        haRetorno === valor ? (valor ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-300' : 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300') : 'border-white/[0.08] text-zinc-400 hover:text-white'
+      }`}
+    >
+      {rotulo}
+    </button>
+  )
+
+  return (
+    <Modal
+      aberto
+      titulo={modo === 'encerrar' ? 'Encerrar visita' : 'Agendar retorno'}
+      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))}${modo === 'encerrar' ? ` • ${num(fotografadas)} fichas fotografadas` : ''}`}
+      onFechar={onFechar}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Voltar</button>
+          <button onClick={confirmar} disabled={salvando} className={`${btnPrimario} disabled:opacity-50`}>
+            {salvando ? 'Salvando…' : modo === 'encerrar' ? 'Encerrar visita' : 'Agendar retorno'}
+          </button>
+        </>
+      }
+    >
+      {modo === 'encerrar' && (
+        <div className="space-y-3">
+          <p className="text-base font-black text-white">Haverá retorno?</p>
+          <div className="flex gap-3">
+            {opcao(false, 'Não')}
+            {opcao(true, 'Sim')}
+          </div>
+        </div>
+      )}
+      {haRetorno && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className={labelCls}>Fichas para o retorno</label>
+            <input type="number" min={1} value={fichas} onChange={(e) => setFichas(e.target.value)} placeholder="Ex.: 15" className={inputCls} autoFocus />
+          </div>
+          <div className="space-y-2">
+            <label className={labelCls}>Data do retorno</label>
+            <input type="date" min={addDias(String(visita.data), 1)} value={data} onChange={(e) => setData(e.target.value)} className={inputCls} />
+          </div>
+          <p className="md:col-span-2 text-[11px] text-zinc-500">O retorno entra direto na Agenda Fotográfica como uma nova visita da mesma escola. Depois é só montar a equipe e confirmar as fichas.</p>
+        </div>
+      )}
+      {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
     </Modal>
   )
 }

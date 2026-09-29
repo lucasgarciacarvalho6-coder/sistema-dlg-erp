@@ -1,10 +1,11 @@
-// O dinheiro de Operações, do jeito que o ADM pediu (informações simples):
-//  • gasto fixo de cada carro por DIA DE VIAGEM (tudo incluso: motorista, fotógrafos, alimentação...),
-//    editável pela coordenação e guardado por mês (mudar o valor não altera os meses passados).
+// O dinheiro de Operações, na regra do dono:
+//  • custo FIXO por operação = cada carro que sai num dia (padrão R$ 2.500: combustível, fotógrafos, motorista,
+//    veículo...). Editável por carro pela coordenação e guardado por mês (mudar não altera os meses passados).
 //    Dia em que o carro não sai não tem custo. As diárias dos fechamentos NÃO são somadas (já estão no fixo).
-//  • vendedor: fichas fotografadas × valor por ficha do vendedor (cadastro PJ);
-//  • escola: o Fechamento da escola que a coordenação preenche; sem fechamento, estima pela bonificação do contrato.
-//  • custo por aluno do dia = gasto do dia ÷ alunos fotografados no dia.
+//  • custo VARIÁVEL por ficha fotografada (padrão R$ 60: repasse da escola + comissão do vendedor).
+//    Editável pelo ADM/Gerência e guardado por mês.
+//  • custo total = operações × fixo + fichas × variável • custo por ficha = custo total ÷ fichas.
+//    Ex.: 1 dia, 100 fichas → 2.500 + 6.000 = R$ 8.500 → R$ 85 por ficha.
 //  • projeção pelas FICHAS FECHADAS nos contratos (visitas ainda por fazer + contratos em conferência do mês).
 //  • "quanto vai ganhar": receita real das vendas de books por aluno fotografado (últimos meses) × alunos projetados.
 
@@ -13,7 +14,6 @@ import { colecao } from './metrics'
 import { addDias, hoje, mesAtual } from './format'
 import { equipeDaVisita, lerJSON } from './operacional'
 import { ehDiaUtil } from './calendario'
-import { parametros } from './parametros'
 
 const n = (v: unknown) => Number(v) || 0
 const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
@@ -25,7 +25,10 @@ export function somarMes(mes: string, k: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-// Gasto fixo por dia do carro no mês: vale o último valor definido até aquele mês
+export const CUSTO_FIXO_PADRAO = 2500 // por operação (carro por dia de viagem), enquanto o carro não tem valor próprio
+export const CUSTO_VARIAVEL_PADRAO = 60 // por ficha: repasse da escola + comissão do vendedor
+
+// Gasto fixo por dia do carro no mês: vale o último valor definido até aquele mês (sem valor: o padrão)
 export function gastoFixoCarro(v: Registro | undefined, mes: string): number {
   if (!v) return 0
   const mapa = lerJSON<Record<string, number>>(v.gastoFixoMes, {})
@@ -33,46 +36,42 @@ export function gastoFixoCarro(v: Registro | undefined, mes: string): number {
     .filter((m) => m <= mes)
     .sort()
     .at(-1)
-  return chave ? n(mapa[chave]) : 0
+  return chave ? n(mapa[chave]) : CUSTO_FIXO_PADRAO
+}
+
+// Custo variável por ficha no mês: fica nos parâmetros da empresa, uma chave por mês (ops_variavel_AAAA-MM);
+// vale o último valor definido até aquele mês (sem valor: o padrão)
+const PREFIXO_VARIAVEL = 'ops_variavel_'
+export const chaveCustoVariavel = (mes: string) => `${PREFIXO_VARIAVEL}${mes}`
+export function custoVariavelFicha(s: ErpState, mes: string): number {
+  const salvos = s.empresa.parametros ?? {}
+  const chave = Object.keys(salvos)
+    .filter((k) => k.startsWith(PREFIXO_VARIAVEL) && k.slice(PREFIXO_VARIAVEL.length) <= mes)
+    .sort()
+    .at(-1)
+  return chave ? n(salvos[chave]) : CUSTO_VARIAVEL_PADRAO
 }
 
 export interface Custos {
   alunos: number
   fixo: number
-  vendedor: number
-  escola: number
+  variavel: number
   total: number
 }
-const zero = (): Custos => ({ alunos: 0, fixo: 0, vendedor: 0, escola: 0, total: 0 })
+const zero = (): Custos => ({ alunos: 0, fixo: 0, variavel: 0, total: 0 })
 const somar = (a: Custos, b: Partial<Custos>) => {
   a.alunos += b.alunos ?? 0
   a.fixo += b.fixo ?? 0
-  a.vendedor += b.vendedor ?? 0
-  a.escola += b.escola ?? 0
-  a.total = a.fixo + a.vendedor + a.escola
+  a.variavel += b.variavel ?? 0
+  a.total = a.fixo + a.variavel
 }
 export const custoPorAluno = (c: Custos) => (c.alunos > 0 ? c.total / c.alunos : 0)
 
-function contexto(s: ErpState) {
+function contexto(s: ErpState, mes: string) {
   const veiculos = colecao(s, 'veiculos')
-  const vendedores = colecao(s, 'pj_vendedores')
   const contratos = colecao(s, 'contratos_escola')
-  const fechEscola = new Map(colecao(s, 'fechamentos').filter((f) => f.tipo === 'escola').map((f) => [t(f.refId), f]))
-  const bonifPadrao = parametros(s).bonificacaoEscolaMin
-  const valorFicha = (vendedorId: unknown) => n(vendedores.find((v) => v.id === vendedorId)?.valorPorFicha)
-  const bonificacao = (contratoId: unknown) => {
-    const c = contratos.find((x) => x.id === contratoId)
-    return c && n(c.bonificacaoPorFicha) > 0 ? n(c.bonificacaoPorFicha) : bonifPadrao
-  }
-  return { veiculos, contratos, fechEscola, valorFicha, bonificacao }
-}
-
-// Custos variáveis de uma visita (vendedor + escola), com as fichas informadas
-function variaveis(ctx: ReturnType<typeof contexto>, v: Registro, fichas: number, realizada: boolean) {
-  const vendedor = fichas * ctx.valorFicha(v.vendedorId)
-  const fech = realizada ? ctx.fechEscola.get(v.id) : undefined
-  const escola = fech ? n(fech.total) : fichas * ctx.bonificacao(v.contratoId)
-  return { vendedor, escola, escolaEstimada: !fech }
+  const porFicha = custoVariavelFicha(s, mes)
+  return { veiculos, contratos, porFicha, variavel: (fichas: number) => fichas * porFicha }
 }
 
 export interface DiaOperacao extends Custos {
@@ -83,7 +82,7 @@ export interface DiaOperacao extends Custos {
 export interface FinanceiroOperacoes {
   mes: string
   dias: DiaOperacao[] // dias com viagem realizada, em ordem
-  realizado: Custos & { visitas: number; escolas: number; diasViagem: number; escolaEstimada: number; semCarro: number }
+  realizado: Custos & { visitas: number; escolas: number; diasViagem: number; operacoes: number; semCarro: number }
   porCarro: { veiculo: Registro; dias: number; alunos: number; fixo: number; valorDia: number }[]
   previsto: Custos & { visitas: number; contratosConferencia: number; porDia: Record<string, number> } // porDia = fichas marcadas por data
   projecao: Custos & { custoAluno: number; receitaAluno: number; receita: number; resultado: number; temVendas: boolean }
@@ -91,7 +90,7 @@ export interface FinanceiroOperacoes {
 }
 
 export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): FinanceiroOperacoes {
-  const ctx = contexto(s)
+  const ctx = contexto(s, mes)
   const hojeISO = hoje()
   const visitas = colecao(s, 'agenda_visitas').filter((v) => t(v.data).startsWith(mes))
   const realizadas = visitas.filter((v) => REALIZADA.includes(t(v.status)))
@@ -109,13 +108,11 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
 
   // ---- realizado, por dia ----
   const porDia = new Map<string, DiaOperacao>()
-  const realizado = { ...zero(), visitas: realizadas.length, escolas: new Set(realizadas.map((v) => t(v.escola))).size, diasViagem: 0, escolaEstimada: 0, semCarro: 0 }
+  const realizado = { ...zero(), visitas: realizadas.length, escolas: new Set(realizadas.map((v) => t(v.escola))).size, diasViagem: 0, operacoes: 0, semCarro: 0 }
   for (const v of realizadas) {
     const fichas = n(v.fichasFotografadas)
-    const vv = variaveis(ctx, v, fichas, true)
     const d = porDia.get(t(v.data)) ?? { ...zero(), data: t(v.data), carros: [] }
-    somar(d, { alunos: fichas, vendedor: vv.vendedor, escola: vv.escola })
-    if (vv.escolaEstimada && t(v.status) === 'Fotografada') realizado.escolaEstimada++ // fechamento da escola ainda pendente
+    somar(d, { alunos: fichas, variavel: ctx.variavel(fichas) })
     if (!v.veiculoId) realizado.semCarro++
     porDia.set(d.data, d)
   }
@@ -130,6 +127,7 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
       d.carros.push(veiculoId)
     }
     const c = porCarroMap.get(veiculoId) ?? { dias: 0, alunos: 0, fixo: 0 }
+    realizado.operacoes++
     c.dias++
     c.fixo += valor
     porCarroMap.set(veiculoId, c)
@@ -147,8 +145,7 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
   const marcar = (data: string, fichas: number) => (previsto.porDia[data.slice(0, 10)] = (previsto.porDia[data.slice(0, 10)] ?? 0) + fichas)
   for (const v of futuras) {
     const fichas = n(v.fichasPrevistas)
-    const vv = variaveis(ctx, v, fichas, false)
-    somar(previsto, { alunos: fichas, vendedor: vv.vendedor, escola: vv.escola })
+    somar(previsto, { alunos: fichas, variavel: ctx.variavel(fichas) })
     marcar(t(v.data), fichas)
   }
   for (const [k, info] of diaCarro) if (!info.realizada) somar(previsto, { fixo: fixoDe(k.split('|')[1]) })
@@ -157,7 +154,7 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
     const fichas = n(c.fichasPrevistas)
     previsto.contratosConferencia++
     marcar(t(c.dataPrevista), fichas)
-    somar(previsto,{ alunos: fichas, vendedor: fichas * ctx.valorFicha(c.vendedorId), escola: fichas * (n(c.bonificacaoPorFicha) || parametros(s).bonificacaoEscolaMin) })
+    somar(previsto, { alunos: fichas, variavel: ctx.variavel(fichas) })
   }
 
   // ---- projeção e receita (vendas reais por aluno fotografado) ----

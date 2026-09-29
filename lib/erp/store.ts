@@ -20,6 +20,7 @@ import { colaboradorDoBanco, registroParaBanco } from './adaptador'
 import { carregarDoSupabase, traduzirErro } from './supabase-sync'
 import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
 import { lerJSON } from './operacional'
+import { chaveCustoVariavel } from './operacoes-financeiro'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -735,6 +736,19 @@ export async function encerrarVisita(visitaId: string, fichas: number): Promise<
   return null
 }
 
+// Retorno: as fichas que faltaram viram uma visita nova na agenda (mesma escola), na data informada
+export async function agendarRetorno(visitaId: string, fichas: number, data: string): Promise<string | null> {
+  if (!(fichas > 0)) return 'Informe quantas fichas ficaram para o retorno.'
+  if (!data) return 'Informe a data do retorno.'
+  if (MODO === 'supabase') return gravar(() => sb().rpc('agendar_retorno', { p_visita: visitaId, p_fichas: fichas, p_data: data }), 'Retorno agendado na agenda.')
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.agendarRetorno(d, visitaId, fichas, data, ctx)
+  })
+  avisar(erro ?? 'Retorno agendado na agenda.', erro ? 'erro' : 'ok')
+  return erro
+}
+
 // Fechamento → Financeiro: cada beneficiário vira uma conta a pagar com os dados PIX
 export async function enviarFechamento(id: string): Promise<string | null> {
   if (MODO === 'supabase') {
@@ -968,6 +982,13 @@ export async function salvarGastoFixoCarros(valores: Record<string, number>, mes
   }
   avisar('Gasto fixo dos carros salvo.', 'ok')
   return null
+}
+
+// Custo variável por ficha (escola + vendedor), a partir do mês informado — fica nos parâmetros da empresa (ADM/Gerência)
+export async function salvarCustoVariavel(valor: number, mes: string): Promise<string | null> {
+  const erro = await salvarParametros({ [chaveCustoVariavel(mes)]: Math.max(0, valor) })
+  if (!erro && MODO !== 'supabase') avisar('Custo variável por ficha salvo.', 'ok')
+  return erro
 }
 
 // ---------------- Vendas Rebolo ----------------

@@ -63,6 +63,11 @@ export function contratoDaVisita(s: ErpState, visita: Registro) {
   return colecao(s, 'contratos_escola').find((c) => c.id === visita.contratoId)
 }
 
+// Retorno agendado a partir desta visita (as fichas que ficaram para outro dia); cancelado não conta
+export function retornoDaVisita(s: ErpState, visita: Registro) {
+  return colecao(s, 'agenda_visitas').find((v) => v.retornoDe === visita.id && v.status !== 'Cancelada')
+}
+
 export const fotografosDa = (visita: Registro) => t(visita.fotografoIds).split(',').filter(Boolean)
 
 // ---------------- Equipe da viagem (veículo + motorista + 1 a 4 fotógrafos) ----------------

@@ -9,8 +9,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState } from '@/lib/erp/types'
 import { colecao, diasDeMeta, resumo } from '@/lib/erp/metrics'
 import { brl, hoje, iniciais, mesAtual, nomeMes, num } from '@/lib/erp/format'
-import { agendaFutura, custoPorAluno, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro, type SituacaoDia } from '@/lib/erp/operacoes-financeiro'
-import { salvarGastoFixoCarros, usePode } from '@/lib/erp/store'
+import { agendaFutura, custoPorAluno, custoVariavelFicha, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro, type SituacaoDia } from '@/lib/erp/operacoes-financeiro'
+import { salvarCustoVariavel, salvarGastoFixoCarros, usePode } from '@/lib/erp/store'
 import Icon from './Icon'
 import { Avatar, btnPrimario } from './ui'
 import { STATUS } from './status'
@@ -106,7 +106,7 @@ function Barras({ dias, valores, fmt, cor, destaque, altura = 'h-44' }: { dias: 
       <div className="flex-1 min-h-0 flex items-end gap-[3px]">
         {valores.map((v, i) => (
           <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}: ${v === null ? 'sem viagem' : fmt(v)}`}>
-            {v !== null && v > 0 && <span className="hidden @2xs:block text-[8px] @xs:text-[9px] font-bold text-zinc-300 mb-0.5 whitespace-nowrap">{fmt(v)}</span>}
+            {v !== null && v > 0 && <span className="hidden @2xs:block text-[8px] @xs:text-[9px] font-bold text-zinc-300 mb-0.5 whitespace-pre-line text-center leading-tight">{fmt(v)}</span>}
             <div
               className={`w-full max-w-[26px] rounded-t-md ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
               style={{ height: v === null ? '3px' : `${Math.max(v > 0 ? 3 : 0, (v / max) * 100)}%`, backgroundColor: v === null ? 'rgba(127,127,127,0.12)' : cor(v) }}
@@ -229,7 +229,7 @@ function CardCusto({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =>
       </div>
       <div className={modo === 'coluna' ? 'flex-1 min-h-0 flex flex-col' : ''}>
         <p className="text-xs font-bold text-zinc-400 mb-1">Oscilação diária (dias úteis)</p>
-        <Barras dias={x.uteis} valores={x.serieCusto} fmt={(v) => String(Math.round(v))} cor={(v) => (v > x.custoMes * 1.03 ? '#ef4444' : '#3b82f6')} destaque={x.atual ? x.hojeISO : undefined} altura={modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-44'} />
+        <Barras dias={x.uteis} valores={x.serieCusto} fmt={(v) => `R$\n${Math.round(v)}`} cor={(v) => (v > x.custoMes * 1.03 ? '#ef4444' : '#3b82f6')} destaque={x.atual ? x.hojeISO : undefined} altura={modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-44'} />
       </div>
       <div className={`flex gap-3 bg-white/[0.03] border border-white/[0.05] rounded-2xl px-4 py-3 ${modo === 'coluna' ? 'flex-col gap-0.5' : 'items-center justify-between'}`}>
         <p className="text-sm font-bold text-zinc-200">Custo médio do mês</p>
@@ -247,15 +247,14 @@ function CardGastos({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =
       <div>
         <p className={`font-black text-white tracking-tighter ${modo === 'mini' ? 'text-3xl' : modo === 'coluna' ? 'text-3xl 2xl:text-4xl' : 'text-5xl'}`}>{reais(f.realizado.total)}</p>
         <p className="text-sm text-zinc-400 mt-1">
-          {num(f.realizado.alunos)} alunos • {f.realizado.diasViagem} dia(s) de viagem
+          {num(f.realizado.alunos)} fichas • {f.realizado.operacoes} operação(ões) em {f.realizado.diasViagem} dia(s)
         </p>
       </div>
       <Rosca
         modo={modo}
         fatias={[
-          { rotulo: 'Carros (gasto fixo)', valor: f.realizado.fixo, cor: '#3b82f6' },
-          { rotulo: 'Vendedores', valor: f.realizado.vendedor, cor: '#f59e0b' },
-          { rotulo: 'Escolas', valor: f.realizado.escola, cor: '#10b981' },
+          { rotulo: 'Fixo (operações)', valor: f.realizado.fixo, cor: '#3b82f6' },
+          { rotulo: 'Variável (escola + vendedor)', valor: f.realizado.variavel, cor: '#f59e0b' },
         ]}
       />
       {modo !== 'mini' && (
@@ -279,7 +278,6 @@ function CardGastos({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =
             </div>
           ))}
           {f.realizado.semCarro > 0 && <p className="text-[11px] text-yellow-400">⚠ {f.realizado.semCarro} visita(s) sem carro na agenda: sem gasto fixo.</p>}
-          {f.realizado.escolaEstimada > 0 && <p className="text-[11px] text-zinc-500">{f.realizado.escolaEstimada} escola(s) sem fechamento: custo estimado pelo contrato.</p>}
         </div>
       )}
     </Cartao>
@@ -413,12 +411,52 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
 function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
   const podeFazer = usePode()
   const editavel = podeFazer('operacional', 'editar')
+  const variavelEditavel = podeFazer('cadastros', 'editar') // o variável é regra do dono: ADM/Gerência
   const carros = colecao(s, 'veiculos').filter((v) => v.status !== 'Inativo')
   const [valores, setValores] = useState<Record<string, string>>(() => Object.fromEntries(carros.map((v) => [v.id, String(gastoFixoCarro(v, mes) || '')])))
+  const [variavel, setVariavel] = useState(() => String(custoVariavelFicha(s, mes)))
   const [salvando, setSalvando] = useState(false)
-  if (!carros.length) return <p className="text-sm text-zinc-500">Cadastre os carros em Operações › Controle operacional › Veículos.</p>
+  const salvarVariavel = async () => {
+    setSalvando(true)
+    await salvarCustoVariavel(Number(variavel) || 0, mes)
+    setSalvando(false)
+  }
+  const campoVariavel = (
+    <div className="space-y-2 border-b border-white/[0.06] pb-4">
+      <div className="flex items-center gap-3">
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-bold text-white">Custo variável por ficha</span>
+          <span className="block text-[10px] text-zinc-500">Repasse da escola + comissão do vendedor</span>
+        </span>
+        <span className="text-xs text-zinc-500">R$</span>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          disabled={!variavelEditavel}
+          value={variavel}
+          onChange={(e) => setVariavel(e.target.value)}
+          className="w-32 bg-black/50 border border-white/[0.06] rounded-xl px-3 py-2.5 text-sm font-bold text-white text-right outline-none focus:border-blue-500/50 disabled:opacity-60"
+        />
+        <span className="text-xs text-zinc-500 w-10">/ ficha</span>
+      </div>
+      {variavelEditavel && (
+        <button disabled={salvando} onClick={salvarVariavel} className={`${btnPrimario} w-full`}>
+          {salvando ? 'Salvando...' : 'Salvar custo variável'}
+        </button>
+      )}
+    </div>
+  )
+  if (!carros.length)
+    return (
+      <div className="space-y-3">
+        {campoVariavel}
+        <p className="text-sm text-zinc-500">Cadastre os carros em Operações › Controle operacional › Veículos.</p>
+      </div>
+    )
   return (
     <div className="space-y-3">
+      {campoVariavel}
       {carros.map((v) => (
         <div key={v.id} className="flex items-center gap-3">
           <span className="flex-1 min-w-0">
@@ -439,7 +477,9 @@ function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
           <span className="text-xs text-zinc-500 w-10">/ dia</span>
         </div>
       ))}
-      <p className="text-[11px] text-zinc-500">Tudo incluso (motorista, fotógrafos, alimentação...). Conta só nos dias em que o carro sai. Vale a partir de {mesCurto(mes).toLowerCase()}.</p>
+      <p className="text-[11px] text-zinc-500">
+        Fixo por operação (carro por dia): tudo incluso (combustível, fotógrafos, motorista, veículo...). Conta só nos dias em que o carro sai. Os valores valem a partir de {mesCurto(mes).toLowerCase()}.
+      </p>
       {editavel && (
         <button
           disabled={salvando}
@@ -488,7 +528,7 @@ export default function PainelOperacoes({ s, colaborador, mes = mesAtual() }: { 
         <CardGastos x={x} modo="grade" />
         <CardProjecao x={x} modo="grade" />
         <CardResumo x={x} modo="grade" />
-        <Cartao titulo="Gasto fixo dos carros (por dia de viagem)" modo="grade">
+        <Cartao titulo="Custos da operação (fixo por carro/dia + variável por ficha)" modo="grade">
           <GastoFixoCarros key={mes} s={s} mes={mes} />
         </Cartao>
       </div>
