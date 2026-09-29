@@ -10,8 +10,9 @@
 
 import type { ErpState, Registro } from './types'
 import { colecao } from './metrics'
-import { hoje, mesAtual } from './format'
-import { lerJSON } from './operacional'
+import { addDias, hoje, mesAtual } from './format'
+import { equipeDaVisita, lerJSON } from './operacional'
+import { ehDiaUtil } from './calendario'
 import { parametros } from './parametros'
 
 const n = (v: unknown) => Number(v) || 0
@@ -203,3 +204,39 @@ export function historicoOperacoes(s: ErpState, mes: string, quantos = 4) {
 }
 
 export const nomeCarro = (v: Registro | undefined) => (v ? `${t(v.modelo)}${v.placa ? ` • ${t(v.placa)}` : ''}` : 'Sem carro')
+
+// ---- Agenda futura: próximos N dias úteis a partir de hoje ----
+//  OK = dia com visita, fichas confirmadas pela escola e equipe completa (carro, motorista, fotógrafos)
+//  Pendente = tem visita, mas falta confirmar fichas ou montar a equipe • Vazio = dia útil sem visita
+//  Alunos = fichas confirmadas (ou as previstas, se a escola ainda não confirmou)
+//  Capacidade = alunos agendados ÷ o que a meta pede nesses dias (meta diária × dias)
+export type SituacaoDia = 'OK' | 'Pendente' | 'Vazio'
+export interface DiaAgenda {
+  data: string
+  alunos: number
+  visitas: number
+  situacao: SituacaoDia
+}
+
+export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
+  const agendadas = colecao(s, 'agenda_visitas').filter((v) => t(v.status) === 'Agendada')
+  const dias: DiaAgenda[] = []
+  for (let d = hoje(); dias.length < quantos; d = addDias(d, 1)) {
+    if (!ehDiaUtil(d)) continue
+    const doDia = agendadas.filter((v) => t(v.data) === d)
+    const alunos = doDia.reduce((a, v) => a + (n(v.fichasConfirmadas) > 0 ? n(v.fichasConfirmadas) : n(v.fichasPrevistas)), 0)
+    const tudoOk = doDia.every((v) => n(v.fichasConfirmadas) > 0 && equipeDaVisita(s, v).completa)
+    dias.push({ data: d, alunos, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente' })
+  }
+  const total = dias.reduce((a, d) => a + d.alunos, 0)
+  const esperado = metaDiaria * quantos
+  return {
+    dias,
+    total,
+    comAgenda: dias.filter((d) => d.visitas > 0).length,
+    ok: dias.filter((d) => d.situacao === 'OK').length,
+    pendentes: dias.filter((d) => d.situacao === 'Pendente').length,
+    vazios: dias.filter((d) => d.situacao === 'Vazio').length,
+    capacidade: esperado > 0 ? (total / esperado) * 100 : null,
+  }
+}

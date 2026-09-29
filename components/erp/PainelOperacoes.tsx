@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState } from '@/lib/erp/types'
 import { colecao, diasDeMeta, resumo } from '@/lib/erp/metrics'
 import { brl, hoje, iniciais, mesAtual, nomeMes, num } from '@/lib/erp/format'
-import { custoPorAluno, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro } from '@/lib/erp/operacoes-financeiro'
+import { agendaFutura, custoPorAluno, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro, type SituacaoDia } from '@/lib/erp/operacoes-financeiro'
 import { salvarGastoFixoCarros, usePode } from '@/lib/erp/store'
 import Icon from './Icon'
 import { Avatar, btnPrimario } from './ui'
@@ -71,6 +71,7 @@ function useDados(s: ErpState, colaborador: Colaborador | undefined, mes: string
       faltaPiso: r ? Math.max(0, r.piso - r.mes) : 0,
       restantes,
       contratosConf: colecao(s, 'contratos_escola').filter((c) => c.status === 'Em conferência').length,
+      agenda: agendaFutura(s, r?.meta.diaria ?? 0, 20),
     }
   }, [s, colaborador, mes])
 }
@@ -194,26 +195,26 @@ function CardAlunos({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =
   return (
     <Cartao titulo="Alunos fotografados" modo={modo} onClick={onClick}>
       <div className="flex items-center gap-3">
-        <span className="text-4xl font-black" style={{ color: subiu ? STATUS.bom.cor : STATUS.critico.cor }} aria-hidden="true">
+        <span className={`font-black ${modo === 'mini' ? 'text-2xl' : 'text-4xl'}`} style={{ color: subiu ? STATUS.bom.cor : STATUS.critico.cor }} aria-hidden="true">
           {subiu ? '↗' : '↘'}
         </span>
         <div>
           <p className={`font-black leading-none tracking-tighter ${modo === 'grade' ? 'text-7xl' : tituloGrande(modo)}`} style={{ color: x.corHoje }}>{num(x.alunosHoje)}</p>
-          <p className="text-base font-bold text-zinc-300 mt-1">{x.atual ? 'Alunos fotografados hoje' : 'Último dia útil do mês'}</p>
+          <p className={`font-bold text-zinc-300 mt-1 ${modo === 'mini' ? 'text-xs' : 'text-base'}`}>{x.atual ? 'Alunos fotografados hoje' : 'Último dia útil do mês'}</p>
         </div>
       </div>
-      <Barras dias={x.uteis} valores={x.serieAlunos} fmt={(v) => num(v)} cor={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : '#3b82f6')} destaque={x.atual ? x.hojeISO : undefined} altura={modo === 'coluna' ? 'flex-1 min-h-[120px]' : 'h-44'} />
+      <Barras dias={x.uteis} valores={x.serieAlunos} fmt={(v) => num(v)} cor={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : '#3b82f6')} destaque={x.atual ? x.hojeISO : undefined} altura={modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-44'} />
       {r && (
         <div>
-          <p className="text-sm font-bold text-zinc-200 mb-2">Acumulado e meta mensal ({num(r.meta.mensal)})</p>
-          <div className="relative h-10 rounded-2xl bg-white/[0.06] overflow-hidden">
+          <p className={`font-bold text-zinc-200 mb-2 ${modo === 'mini' ? 'text-xs' : 'text-sm'}`}>Acumulado e meta mensal ({num(r.meta.mensal)})</p>
+          <div className={`relative rounded-2xl bg-white/[0.06] overflow-hidden ${modo === 'mini' ? 'h-7' : 'h-10'}`}>
             <div className="h-full rounded-2xl transition-all duration-700" style={{ width: `${Math.min(100, r.pctMes)}%`, backgroundColor: STATUS[r.mes >= r.meta.mensal ? 'bom' : r.mes >= r.piso ? 'atencao' : 'critico'].cor }}></div>
             {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute inset-y-0 w-0.5 bg-white/70" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }} title={`Piso ${num(r.piso)}`}></div>}
-            <span className="absolute inset-0 flex items-center justify-center text-2xl font-black text-white drop-shadow">{num(r.mes)}</span>
+            <span className={`absolute inset-0 flex items-center justify-center font-black text-white drop-shadow ${modo === 'mini' ? 'text-base' : 'text-2xl'}`}>{num(r.mes)}</span>
           </div>
         </div>
       )}
-      <Historico modo={modo} itens={x.hist.map((h) => ({ rotulo: mesCurto(h.mes), valor: num(h.alunos), vazio: h.alunos === 0 }))} />
+      {modo !== 'mini' && <Historico modo={modo} itens={x.hist.map((h) => ({ rotulo: mesCurto(h.mes), valor: num(h.alunos), vazio: h.alunos === 0 }))} />}
     </Cartao>
   )
 }
@@ -356,6 +357,59 @@ function CardResumo({ x, modo }: { x: Dados; modo: Modo }) {
 }
 
 // Espaço da coordenação para o gasto fixo por dia de cada carro (vale a partir do mês escolhido)
+// ---------------- Agenda futura (próximos 20 dias úteis) ----------------
+const COR_SITUACAO: Record<SituacaoDia, string> = { OK: '#10b981', Pendente: '#f59e0b', Vazio: '#ef4444' }
+
+function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
+  const a = x.agenda
+  const max = Math.max(1, ...a.dias.map((d) => d.alunos)) * 1.18
+  const chip = modo === 'mini' ? 'px-2 py-1 rounded-lg text-[11px] font-black border' : 'px-3 py-1.5 rounded-xl text-sm font-black border'
+  return (
+    <Cartao titulo="Agenda futura • 20 dias" modo={modo}>
+      <div className="flex flex-wrap gap-2">
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Total alunos: {num(a.total)}</span>
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Dias: {a.comAgenda}/{a.dias.length}</span>
+        {a.capacidade !== null && (
+          <span className={`${chip} border-blue-500/30 bg-blue-500/10 text-blue-300`} title="Alunos agendados ÷ o que a meta pede nesses dias">
+            Capacidade: {Math.round(a.capacidade)}%
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <span className={`${chip} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>{a.ok} OK</span>
+        <span className={`${chip} border-yellow-500/30 bg-yellow-500/10 text-yellow-300`}>{a.pendentes} Pend.</span>
+        <span className={`${chip} border-red-500/30 bg-red-500/10 text-red-300`}>{a.vazios} Vazio</span>
+      </div>
+      <div className={`flex flex-col @container ${modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-64'}`}>
+        <div className="flex-1 min-h-0 flex items-end gap-[3px]">
+          {a.dias.map((d) => (
+            <div
+              key={d.data}
+              className="flex-1 h-full flex flex-col justify-end items-center min-w-0"
+              title={`${d.data.slice(8)}/${d.data.slice(5, 7)}: ${d.situacao}${d.visitas ? ` • ${d.visitas} visita(s) • ${d.alunos} alunos` : ' • sem visita'}`}
+            >
+              {d.alunos > 0 && <span className="hidden @2xs:block text-[8px] @xs:text-[9px] font-bold text-zinc-300 mb-0.5 whitespace-nowrap">{num(d.alunos)}</span>}
+              <div className="w-full max-w-[26px] rounded-t-md" style={{ height: d.alunos > 0 ? `${Math.max(3, (d.alunos / max) * 100)}%` : '6px', backgroundColor: COR_SITUACAO[d.situacao] }}></div>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-[3px] mt-1.5 border-t border-white/[0.06] pt-1">
+          {a.dias.map((d, i) => (
+            <span key={d.data} className={`flex-1 text-center text-[9px] font-bold min-w-0 text-zinc-500 ${i % 2 ? 'hidden @xs:block' : ''}`}>
+              {Number(d.data.slice(8))}
+            </span>
+          ))}
+        </div>
+      </div>
+      {modo !== 'mini' && (
+        <p className="text-[11px] text-zinc-500">
+          Verde: fichas confirmadas e equipe montada • Amarelo: falta confirmar fichas ou montar a equipe • Vermelho: dia útil sem visita
+        </p>
+      )}
+    </Cartao>
+  )
+}
+
 function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
   const podeFazer = usePode()
   const editavel = podeFazer('operacional', 'editar')
@@ -437,6 +491,34 @@ export default function PainelOperacoes({ s, colaborador, mes = mesAtual() }: { 
         <Cartao titulo="Gasto fixo dos carros (por dia de viagem)" modo="grade">
           <GastoFixoCarros key={mes} s={s} mes={mes} />
         </Cartao>
+      </div>
+    </div>
+  )
+}
+
+// Visão TV do ADM: CARD de Operações (maior que os outros), sempre aberto, com 3 mini-cards dentro:
+// Alunos fotografados • Custo médio por aluno • Agenda futura (20 dias)
+export function CardOperacoesTV({ s, colaborador, mes = mesAtual() }: { s: ErpState; colaborador: Colaborador | undefined; mes?: string }) {
+  const x = useDados(s, colaborador, mes)
+  return (
+    <div className="bg-painel/80 border border-cyan-500/25 rounded-3xl p-4 relative overflow-hidden h-full">
+      <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500 opacity-80"></div>
+      <div className="flex items-center gap-3 mb-3">
+        <Avatar texto={iniciais(colaborador?.nome ?? 'Operações')} foto={colaborador?.foto} tamanho="w-10 h-10" arredondado="rounded-full" textoCls="text-xs" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">Operações</p>
+          <p className="text-sm font-bold text-white truncate">{colaborador?.nome ?? '—'}</p>
+        </div>
+        {x.r && x.r.meta.mensal > 0 && (
+          <p className="text-[11px] font-bold text-zinc-400 whitespace-nowrap">
+            Piso <span className="text-white">{num(x.r.piso)}</span> • Meta <span className="text-white">{num(x.r.meta.mensal)}</span>
+          </p>
+        )}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <CardAlunos x={x} modo="mini" />
+        <CardCusto x={x} modo="mini" />
+        <CardAgendaFutura x={x} modo="mini" />
       </div>
     </div>
   )

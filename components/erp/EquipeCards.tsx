@@ -9,7 +9,7 @@ import { formatar, iniciais, mesAtual } from '@/lib/erp/format'
 import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
-import { CardsOperacoes, TelaOperacoes } from './PainelOperacoes'
+import { CardOperacoesTV } from './PainelOperacoes'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
 function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
@@ -209,16 +209,17 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
-        {lista.map(({ c }) => (
-          <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={todos.findIndex((t) => t.c.id === c.id) + 1} onAbrir={() => setAberto(c)} />
-        ))}
-        {/* aba Operacional: ao lado da coordenação, custo por aluno, gastos e projeção (clicar abre a tela cheia) */}
-        {filtro === 'operacional' &&
-          lista.slice(0, 1).map(({ c }) => <CardsOperacoes key={`ops-${c.id}`} s={s} colaborador={c} mes={mes} onAbrir={() => setAberto(c)} />)}
+        {/* Operações (coordenação/RMC) é um card maior, junto com os outros, com os mini-cards abertos dentro */}
+        {lista.map(({ c }) =>
+          c.setor === 'operacional' ? (
+            <div key={c.id} className="md:col-span-2">
+              <CardOperacoesTV s={s} colaborador={c} mes={mes} />
+            </div>
+          ) : (
+            <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={todos.findIndex((t) => t.c.id === c.id) + 1} onAbrir={() => setAberto(c)} />
+          ),
+        )}
       </div>
-
-      {/* Operações (coordenação/RMC): tudo em tela cheia, em colunas, sem rolar */}
-      {aberto?.setor === 'operacional' && <TelaOperacoes s={s} colaborador={aberto} mes={mes} onSair={() => setAberto(null)} />}
 
       <Modal
         aberto={!!aberto && aberto.setor !== 'operacional'}

@@ -12,6 +12,7 @@ import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, setoresComMeta, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { CardColaborador } from './EquipeCards'
+import { CardOperacoesTV } from './PainelOperacoes'
 import Icon from './Icon'
 import { LegendaSituacao, PillSituacao, STATUS } from './status'
 import { ehDiaUtil } from '@/lib/erp/calendario'
@@ -384,9 +385,15 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
     const lista = pessoas.slice(pagina * POR_PAGINA_EQUIPE, (pagina + 1) * POR_PAGINA_EQUIPE)
     conteudo = (
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-5">
-        {lista.map((c, i) => (
-          <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={pagina * POR_PAGINA_EQUIPE + i + 1} />
-        ))}
+        {lista.map((c, i) =>
+          c.setor === 'operacional' ? (
+            <div key={c.id} className="col-span-2">
+              <CardOperacoesTV s={s} colaborador={c} mes={mes} />
+            </div>
+          ) : (
+            <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={pagina * POR_PAGINA_EQUIPE + i + 1} />
+          ),
+        )}
       </div>
     )
   } else {

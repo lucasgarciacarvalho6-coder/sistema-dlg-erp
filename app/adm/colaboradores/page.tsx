@@ -8,8 +8,9 @@ import { dataBR, hoje, iniciais } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Avatar, Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
-// vendedores externos são cadastrados em ADM › Vendedores externos
-const SETORES_IDS = SETORES_ERP
+// vendedores externos são cadastrados em ADM › Vendedores externos.
+// Não existe setor "Vendas" interno na DLG (a venda interna é o Vendas Rebolo): fica fora do cadastro.
+const SETORES_IDS = SETORES_ERP.filter((x) => x !== 'vendas')
 
 type Form = {
   nome: string
@@ -24,7 +25,7 @@ type Form = {
   semMeta: boolean
 }
 
-const vazio = (): Form => ({ nome: '', cpf: '', email: '', telefone: '', setor: 'vendas', funcao: SETORES.vendas.funcoes[0], dataAdmissao: hoje(), senha: '', status: 'ATIVO', semMeta: false })
+const vazio = (): Form => ({ nome: '', cpf: '', email: '', telefone: '', setor: 'operacional', funcao: SETORES.operacional.funcoes[0], dataAdmissao: hoje(), senha: '', status: 'ATIVO', semMeta: false })
 
 export default function ColaboradoresPage() {
   const s = useErp()
