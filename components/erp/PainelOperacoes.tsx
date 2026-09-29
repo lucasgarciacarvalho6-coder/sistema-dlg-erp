@@ -25,7 +25,7 @@ type Modo = 'grade' | 'coluna' | 'mini'
 
 // ---------------- Dados (calculados uma vez e usados por todos os cards) ----------------
 
-function useDados(s: ErpState, colaborador: Colaborador | undefined, mes: string) {
+export function useDados(s: ErpState, colaborador: Colaborador | undefined, mes: string) {
   return useMemo(() => {
     const f = financeiroOperacoes(s, mes)
     const hist = historicoOperacoes(s, mes, 3)
@@ -75,7 +75,7 @@ function useDados(s: ErpState, colaborador: Colaborador | undefined, mes: string
     }
   }, [s, colaborador, mes])
 }
-type Dados = ReturnType<typeof useDados>
+export type Dados = ReturnType<typeof useDados>
 
 // ---------------- Peças visuais ----------------
 

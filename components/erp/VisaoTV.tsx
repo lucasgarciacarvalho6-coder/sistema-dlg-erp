@@ -11,8 +11,7 @@ import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, setoresComMeta, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
-import { CardColaborador } from './EquipeCards'
-import { CardOperacoesTV } from './PainelOperacoes'
+import { GradeTV } from './CardsTV'
 import Icon from './Icon'
 import { LegendaSituacao, PillSituacao, STATUS } from './status'
 import { ehDiaUtil } from '@/lib/erp/calendario'
@@ -271,7 +270,6 @@ export function GradeEvolucao({ s, mes, grande = false }: { s: ErpState; mes: st
 // ---------------------------------------------------------------------------
 // MODO TV — tela cheia só com a Visão TV, com rotação automática de telas
 // ---------------------------------------------------------------------------
-const POR_PAGINA_EQUIPE = 8
 const SEGUNDOS_POR_TELA = 20
 
 function RelogioTV() {
@@ -320,10 +318,10 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
         .map((x) => x.c),
     [s, mes],
   )
-  const paginasEquipe = Math.max(1, Math.ceil(pessoas.length / POR_PAGINA_EQUIPE))
   const telas = [
     { id: 'resumo', titulo: 'Resumo das áreas' },
-    ...Array.from({ length: pessoas.length ? paginasEquipe : 0 }, (_, i) => ({ id: `equipe-${i}`, titulo: paginasEquipe > 1 ? `Equipe • ${i + 1}/${paginasEquipe}` : 'Equipe' })),
+    // toda a equipe numa tela só: os cards se encaixam e diminuem conforme entra gente
+    ...(pessoas.length ? [{ id: 'equipe', titulo: 'Equipe' }] : []),
     { id: 'evolucao', titulo: 'Evolução do mês' },
   ]
   const atual = telas[indice % telas.length]
@@ -380,20 +378,10 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
         <PlacarAreas s={s} mes={mes} grande />
       </div>
     )
-  } else if (atual.id.startsWith('equipe')) {
-    const pagina = Number(atual.id.split('-')[1])
-    const lista = pessoas.slice(pagina * POR_PAGINA_EQUIPE, (pagina + 1) * POR_PAGINA_EQUIPE)
+  } else if (atual.id === 'equipe') {
     conteudo = (
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-5">
-        {lista.map((c, i) =>
-          c.setor === 'operacional' ? (
-            <div key={c.id} className="col-span-2">
-              <CardOperacoesTV s={s} colaborador={c} mes={mes} />
-            </div>
-          ) : (
-            <CardColaborador key={c.id} s={s} c={c} mes={mes} posicao={pagina * POR_PAGINA_EQUIPE + i + 1} />
-          ),
-        )}
+      <div className="h-[calc(100vh-12rem)] 2xl:h-[calc(100vh-13.5rem)]">
+        <GradeTV s={s} mes={mes} pessoas={pessoas} ajustar />
       </div>
     )
   } else {
