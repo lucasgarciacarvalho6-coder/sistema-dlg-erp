@@ -359,6 +359,11 @@ São dois apps instaláveis pelo navegador. No celular, é só abrir o link e to
      - a venda do rebolo em `vendas_ebooks` (canal `Rebolo`, "Aguardando contrato" → "Aguardando conferência"), com parcelas e meta só quando o Financeiro confere;
      - a pasta `contratos/rebolo/<usuário>/` no Storage para os contratos assinados.
      O histórico de "books vendidos" da Cobrança passa para o Rebolo.
+   - `docs/supabase/014_pendencias_resolucoes.sql`: rodar depois do 013. Registra o que a coordenação fez com cada **pendência do dia** (Controle operacional › Gestão diária):
+     - **Resolvido:** sai da lista e volta no dia seguinte se o problema continuar. No vendedor, registra o contato no histórico e atualiza o último contato; na tarefa, conclui a tarefa;
+     - **Contato sem sucesso:** volta amanhã;
+     - **Excluída:** sai de vez;
+     - todas as opções com observação.
    - `docs/supabase/013_gasto_fixo_carros.sql`: rodar depois do 012. Cria o **gasto fixo por dia de viagem** de cada carro (guardado por mês), usado no painel do dinheiro de Operações.
    - `docs/supabase/010_parcelas_ate_24.sql`: rodar depois do 009. Passa o limite da venda de books de 12 para **entrada + 24 parcelas** (até 25 pagamentos) e corrige o erro `vendas_ebooks_parcelas_check`.
    - Venda em andamento no app do vendedor: um rascunho fica salvo **no celular** (IndexedDB) com os dados, as fotos e a assinatura. Se o app fechar sem querer, a venda volta de onde parou. O rascunho é apagado quando a venda é enviada ou quando o vendedor toca em "Descartar e começar de novo".

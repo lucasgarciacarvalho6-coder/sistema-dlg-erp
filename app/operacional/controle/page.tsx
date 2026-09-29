@@ -5,9 +5,9 @@ import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
 import { STATUS_VENDEDOR_PJ } from '@/lib/erp/config'
 import { parametros } from '@/lib/erp/parametros'
-import { atualizarRegistro, criarRegistro, useErp, usePode, useUsuario } from '@/lib/erp/store'
+import { atualizarRegistro, criarRegistro, resolverPendencia, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao, diaReferencia, esperadoAteHoje, resumo, serieMes, somar } from '@/lib/erp/metrics'
-import { STATUS_VEICULO, nomePJ, pendenciasDoDia, responsavelOperacional } from '@/lib/erp/operacional'
+import { STATUS_VEICULO, nomePJ, pendenciasDoDia, resolucoesDoDia, responsavelOperacional, type AcaoPendencia, type Pendencia } from '@/lib/erp/operacional'
 import { ehDiaUtil } from '@/lib/erp/calendario'
 import PainelMeta from '@/components/erp/PainelMeta'
 import { addDias, dataBR, hoje, inicioSemana, mesAtual, nomeMes, num, pct, rotuloSemana } from '@/lib/erp/format'
@@ -50,7 +50,7 @@ export default function ControleOperacionalPage() {
         descricao="O que precisa ser resolvido hoje, metas, rotas dos vendedores e cadastro das equipes de campo."
       />
       <Tabs abas={ABAS} ativa={aba} onChange={setAba} />
-      {aba === 'gestao' && <GestaoDiaria />}
+      {aba === 'gestao' && <GestaoDiaria irPara={setAba} />}
       {aba === 'dashboard' && <DashboardOperacional />}
       {aba === 'rota' && <ControleRota />}
       {aba === 'vendedores' && <VendedoresContrato />}
@@ -62,13 +62,111 @@ export default function ControleOperacionalPage() {
 }
 
 // ---------------------------------------------------------------------------
-// GESTÃO DIÁRIA — só pendências acionáveis; resolvida na origem, some sozinha
+// GESTÃO DIÁRIA — pendências acionáveis. Somem sozinhas quando resolvidas na origem,
+// ou pelo "Resolver": Resolvido • Contato sem sucesso (volta amanhã) • Excluir (sai de vez), com observação
 // ---------------------------------------------------------------------------
-function GestaoDiaria() {
+const OPCOES_RESOLVER: { id: AcaoPendencia; t: string; d: string; cls: string }[] = [
+  { id: 'Resolvido', t: '✅ Resolvido', d: 'Sai da lista. Se o problema continuar, volta amanhã.', cls: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' },
+  { id: 'Sem sucesso', t: '📵 Contato sem sucesso', d: 'Sai de hoje e volta amanhã para tentar de novo.', cls: 'border-orange-500/50 bg-orange-500/10 text-orange-300' },
+  { id: 'Excluída', t: '🗑 Excluir pendência', d: 'Sai de vez: este item não volta mais.', cls: 'border-red-500/50 bg-red-500/10 text-red-300' },
+]
+const TOM_ACAO: Record<string, 'emerald' | 'orange' | 'red'> = { Resolvido: 'emerald', 'Sem sucesso': 'orange', 'Excluída': 'red' }
+
+function ResolverPendencia({ p, onFechar, irPara }: { p: Pendencia; onFechar: () => void; irPara: (a: Aba) => void }) {
+  const [acao, setAcao] = useState<AcaoPendencia | ''>('')
+  const [obs, setObs] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const ultima = p.ultima
+  // a tela de origem pode ser outra aba desta mesma página (ex.: Vendedores de contrato)
+  const abaDoLink = p.link.startsWith('/operacional/controle?aba=') ? (p.link.split('aba=')[1] as Aba) : null
+
+  const confirmar = async () => {
+    if (!acao) return setErro('Escolha o que aconteceu.')
+    if (acao !== 'Resolvido' && !obs.trim()) return setErro('Escreva a observação.')
+    setErro('')
+    setSalvando(true)
+    const e = await resolverPendencia(p, acao, obs)
+    setSalvando(false)
+    if (e) return setErro(e)
+    onFechar()
+  }
+
+  return (
+    <Modal
+      aberto
+      titulo="Resolver pendência"
+      subtitulo={p.area}
+      onFechar={onFechar}
+      rodape={
+        <>
+          {abaDoLink ? (
+            <button onClick={() => (irPara(abaDoLink), onFechar())} className="mr-auto px-4 py-3 text-xs font-bold uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl">
+              Abrir tela de origem →
+            </button>
+          ) : (
+            <Link href={p.link} className="mr-auto px-4 py-3 text-xs font-bold uppercase tracking-widest text-blue-400 hover:bg-blue-500/10 rounded-xl">
+              Abrir tela de origem →
+            </Link>
+          )}
+          <button onClick={onFechar} className={btnSecundario}>Cancelar</button>
+          <button onClick={() => void confirmar()} disabled={salvando} className={acao === 'Excluída' ? 'px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-50' : btnPrimario}>
+            {salvando ? 'Salvando...' : acao === 'Excluída' ? 'Excluir pendência' : 'Confirmar'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
+          <p className="text-base font-black text-white">{p.titulo}</p>
+          <p className="text-sm text-zinc-400 mt-1">{p.detalhe}</p>
+          {ultima && (
+            <p className="text-xs text-zinc-400 mt-3 pt-3 border-t border-white/[0.05]">
+              <Badge texto={String(ultima.acao)} tom={TOM_ACAO[String(ultima.acao)] ?? 'zinc'} /> em {dataBR(String(ultima.data))}
+              {ultima.autor ? ` por ${ultima.autor}` : ''}
+              {ultima.observacao ? <span className="block mt-1 text-zinc-300">“{String(ultima.observacao)}”</span> : null}
+            </p>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {OPCOES_RESOLVER.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setAcao(o.id)}
+              className={`text-left p-3 rounded-xl border transition-all ${acao === o.id ? o.cls : 'border-white/[0.06] text-zinc-300 hover:bg-white/[0.02]'}`}
+            >
+              <p className="text-sm font-black">{o.t}</p>
+              <p className="text-[10px] text-zinc-500 mt-1">{o.d}</p>
+            </button>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Observação {acao && acao !== 'Resolvido' ? '*' : ''}</label>
+          <textarea
+            value={obs}
+            onChange={(e) => setObs(e.target.value)}
+            rows={4}
+            className={inputCls}
+            placeholder={acao === 'Excluída' ? 'Por que está excluindo esta pendência?' : acao === 'Sem sucesso' ? 'Ex.: liguei 2 vezes, não atendeu; mandei WhatsApp.' : 'O que foi feito?'}
+          />
+          {p.area === 'Vendedores' && acao && acao !== 'Excluída' && <p className="text-[11px] text-zinc-500">Fica registrado também no histórico de contatos do vendedor.</p>}
+          {p.area === 'Tarefas' && acao === 'Resolvido' && <p className="text-[11px] text-zinc-500">A tarefa fica como concluída.</p>}
+        </div>
+        {erro && <p className="text-sm font-bold text-red-400">{erro}</p>}
+      </div>
+    </Modal>
+  )
+}
+
+function GestaoDiaria({ irPara }: { irPara: (a: Aba) => void }) {
   const s = useErp()
+  const podeFazer = usePode()
   const pendencias = useMemo(() => pendenciasDoDia(s), [s])
+  const resolvidasHoje = useMemo(() => resolucoesDoDia(s), [s])
   const altas = pendencias.filter((p) => p.prioridade === 'alta')
   const areas = ['Contratos', 'Agenda', 'Fechamento', 'Vendedores', 'Tarefas'] as const
+  const [resolvendo, setResolvendo] = useState<Pendencia | null>(null)
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -78,7 +176,7 @@ function GestaoDiaria() {
           <StatCard key={a} label={a} valor={pendencias.filter((p) => p.area === a).length} tom="zinc" />
         ))}
       </div>
-      <Panel semPadding titulo="Pendências do dia" subtitulo="Cada item sai da lista automaticamente quando é resolvido na tela de origem">
+      <Panel semPadding titulo="Pendências do dia" subtitulo="Resolva pelo botão (com observação) ou na tela de origem: o item sai da lista sozinho">
         {pendencias.length === 0 ? (
           <EmptyState titulo="Tudo em dia 🎉" descricao="Nenhuma pendência entre contratos, agenda e fechamentos." />
         ) : (
@@ -93,15 +191,51 @@ function GestaoDiaria() {
                   </div>
                   <p className="text-sm font-bold text-white mt-1.5">{p.titulo}</p>
                   <p className="text-[11px] text-zinc-500">{p.detalhe}</p>
+                  {p.ultima && (
+                    <p className="text-[11px] text-orange-300 mt-1">
+                      ↺ {String(p.ultima.acao)} em {dataBR(String(p.ultima.data))}
+                      {p.ultima.observacao ? `: ${String(p.ultima.observacao)}` : ''}
+                    </p>
+                  )}
                 </div>
-                <Link href={p.link} className="shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
-                  Resolver →
-                </Link>
+                {podeFazer('operacional', 'criar') ? (
+                  <button onClick={() => setResolvendo(p)} className="shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
+                    Resolver →
+                  </button>
+                ) : (
+                  <Link href={p.link} className="shrink-0 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
+                    Ver →
+                  </Link>
+                )}
               </div>
             ))}
           </div>
         )}
       </Panel>
+
+      <Panel semPadding titulo={`Resolvidas hoje • ${resolvidasHoje.length}`} subtitulo="O que a coordenação fez com as pendências hoje">
+        {resolvidasHoje.length === 0 ? (
+          <p className="p-6 text-xs text-zinc-500">Nenhuma pendência resolvida hoje ainda.</p>
+        ) : (
+          <div className="divide-y divide-white/[0.03]">
+            {resolvidasHoje.map((r) => (
+              <div key={r.id} className="px-6 py-3.5 flex items-start gap-4">
+                <Badge texto={String(r.acao)} tom={TOM_ACAO[String(r.acao)] ?? 'zinc'} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-white">{String(r.titulo)}</p>
+                  {r.observacao ? <p className="text-[11px] text-zinc-400">{String(r.observacao)}</p> : null}
+                </div>
+                <p className="text-[10px] text-zinc-500 whitespace-nowrap text-right">
+                  {new Date(String(r.criadoEm)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  {r.autor ? <span className="block">{String(r.autor)}</span> : null}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      {resolvendo && <ResolverPendencia p={resolvendo} onFechar={() => setResolvendo(null)} irPara={irPara} />}
     </div>
   )
 }

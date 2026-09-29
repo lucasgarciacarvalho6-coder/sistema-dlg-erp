@@ -42,3 +42,6 @@ next-env.d.ts
 
 # modelo de variáveis (sem segredos) pode ir para o Git
 !.env.example
+
+# importações com dados pessoais (telefones, observações): rodar no Supabase, nunca versionar
+/docs/supabase/importacao/

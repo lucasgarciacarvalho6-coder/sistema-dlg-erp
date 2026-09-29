@@ -918,6 +918,42 @@ export const enviarDocumentoApp = (d: { tipo: string; escola: string; descricao:
 export const registrarDevolucaoBooks = (d: { escola: string; quantidade: number; observacao: string }) =>
   registrarDoApp('devolucoes_books', { ...d, data: hoje(), status: 'Devolvido' }, 'Devolução registrada.')
 
+// ---------------- Pendências do dia (Controle operacional) ----------------
+
+// Resolvido / Sem sucesso: sai da lista e volta amanhã se o problema continuar • Excluída: sai de vez.
+// Vendedor: registra o contato no histórico dele (Resolvido também atualiza o último contato).
+// Tarefa: Resolvido conclui a tarefa.
+export async function resolverPendencia(
+  p: { id: string; area: string; titulo: string; refId?: string },
+  acao: 'Resolvido' | 'Sem sucesso' | 'Excluída',
+  observacao: string,
+): Promise<string | null> {
+  const obs = observacao.trim()
+  if (acao !== 'Resolvido' && !obs) return 'Escreva a observação.'
+  const autor = carregar().colaboradores.find((c) => c.id === lerSessao()?.colaboradorId)?.nome ?? ''
+  const hj = hoje()
+  if (p.area === 'Vendedores' && p.refId && acao !== 'Excluída') {
+    const assunto = `${acao === 'Resolvido' ? 'Contato feito' : 'Contato sem sucesso'}${obs ? `: ${obs}` : ''}`
+    const erro = await criarRegistro('historico_contatos', { pessoaId: p.refId, data: hj, assunto, autor }, 'operacional')
+    if (erro) return erro
+    if (acao === 'Resolvido') {
+      const e2 = await atualizarRegistro('pj_vendedores', p.refId, { ultimoContato: hj }, 'operacional')
+      if (e2) return e2
+    }
+  }
+  if (p.area === 'Tarefas' && p.refId && acao === 'Resolvido') {
+    const erro = await atualizarRegistro('tarefas_operacionais', p.refId, { status: 'Concluída' }, 'operacional')
+    if (erro) return erro
+  }
+  const erro = await criarRegistro(
+    'pendencias_resolucoes',
+    { pendenciaId: p.id, area: p.area, titulo: p.titulo, acao, observacao: obs, data: hj, voltaEm: acao === 'Excluída' ? '' : addDias(hj, 1), autor },
+    'operacional',
+  )
+  if (!erro) avisar(acao === 'Excluída' ? 'Pendência excluída.' : acao === 'Resolvido' ? 'Pendência resolvida.' : 'Registrado: tenta de novo amanhã.', 'ok')
+  return erro
+}
+
 // ---------------- Dinheiro de Operações ----------------
 
 // Gasto fixo por dia de viagem de cada carro, a partir do mês informado (os meses anteriores ficam como estavam)

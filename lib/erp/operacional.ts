@@ -226,6 +226,8 @@ export function fechamentoExistente(s: ErpState, tipo: string, refId: string, pe
 
 // ---------------- Gestão diária: somente pendências acionáveis ----------------
 
+export type AcaoPendencia = 'Resolvido' | 'Sem sucesso' | 'Excluída'
+
 export interface Pendencia {
   id: string
   prioridade: 'alta' | 'media'
@@ -233,10 +235,40 @@ export interface Pendencia {
   titulo: string
   detalhe: string
   link: string
+  refId?: string // vendedor PJ (Vendedores) ou tarefa (Tarefas): o "Resolvido" também age na origem
+  ultima?: Registro // última resolução registrada (ação + observação), se houver
 }
 
-// Calculada a partir dos dados: quando a pendência é resolvida na origem, ela some sozinha.
+// Última resolução de cada pendência (a mais recente vale)
+function ultimasResolucoes(s: ErpState) {
+  const m = new Map<string, Registro>()
+  for (const r of colecao(s, 'pendencias_resolucoes')) {
+    const atual = m.get(t(r.pendenciaId))
+    if (!atual || t(r.criadoEm) > t(atual.criadoEm)) m.set(t(r.pendenciaId), r)
+  }
+  return m
+}
+
+export const resolucoesDoDia = (s: ErpState, dia = hoje()) =>
+  colecao(s, 'pendencias_resolucoes')
+    .filter((r) => t(r.data) === dia)
+    .sort((a, b) => t(b.criadoEm).localeCompare(t(a.criadoEm)))
+
+// Pendências calculadas a partir dos dados: quando o problema é resolvido na origem, ela some sozinha.
+// A coordenação também resolve pela lista: Resolvido/Sem sucesso escondem até o dia seguinte; Excluída, de vez.
 export function pendenciasDoDia(s: ErpState): Pendencia[] {
+  const resolucoes = ultimasResolucoes(s)
+  return calcularPendencias(s)
+    .map((p) => ({ ...p, ultima: resolucoes.get(p.id) }))
+    .filter((p) => {
+      const r = p.ultima
+      if (!r) return true
+      if (r.acao === 'Excluída') return false
+      return !t(r.voltaEm) || t(r.voltaEm) <= hoje()
+    })
+}
+
+function calcularPendencias(s: ErpState): Pendencia[] {
   const hj = hoje()
   const lista: Pendencia[] = []
 
@@ -291,13 +323,13 @@ export function pendenciasDoDia(s: ErpState): Pendencia[] {
 
   for (const vd of colecao(s, 'pj_vendedores')) {
     if (vd.status === 'Ativo' && (!t(vd.ultimoContato) || t(vd.ultimoContato) < addDias(hj, -7))) {
-      lista.push({ id: `vend-${vd.id}`, prioridade: 'media', area: 'Vendedores', titulo: `Falar com o vendedor: ${vd.nome}`, detalhe: vd.ultimoContato ? `Último contato em ${dataBR(t(vd.ultimoContato))}.` : 'Nenhum contato registrado.', link: '/operacional/controle?aba=vendedores' })
+      lista.push({ id: `vend-${vd.id}`, prioridade: 'media', area: 'Vendedores', titulo: `Falar com o vendedor: ${vd.nome}`, detalhe: vd.ultimoContato ? `Último contato em ${dataBR(t(vd.ultimoContato))}.` : 'Nenhum contato registrado.', link: '/operacional/controle?aba=vendedores', refId: vd.id })
     }
   }
 
   for (const tf of colecao(s, 'tarefas_operacionais')) {
     if (tf.status !== 'Concluída' && t(tf.prazo) && t(tf.prazo) <= hj) {
-      lista.push({ id: `tarefa-${tf.id}`, prioridade: t(tf.prazo) < hj ? 'alta' : 'media', area: 'Tarefas', titulo: t(tf.titulo), detalhe: `${tf.escola ? `${tf.escola} • ` : ''}prazo ${dataBR(t(tf.prazo))}`, link: '/operacional/tarefas' })
+      lista.push({ id: `tarefa-${tf.id}`, prioridade: t(tf.prazo) < hj ? 'alta' : 'media', area: 'Tarefas', titulo: t(tf.titulo), detalhe: `${tf.escola ? `${tf.escola} • ` : ''}prazo ${dataBR(t(tf.prazo))}`, link: '/operacional/tarefas', refId: tf.id })
     }
   }
 
