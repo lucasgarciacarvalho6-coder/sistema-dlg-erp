@@ -144,7 +144,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
 }
 
 // ---------------- Card de Operações (maior, com 3 mini-cards) ----------------
-function MiniTV({ titulo, cor, children }: { titulo: string; cor: string; children: ReactNode }) {
+function MiniTV({ titulo, cor, children }: { titulo: ReactNode; cor: string; children: ReactNode }) {
   return (
     <div style={tamanho} className="h-full min-h-0 min-w-0">
       <div className="h-full rounded-2xl border-2 bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden" style={tinta(cor)}>
@@ -169,10 +169,24 @@ function Linha({ rotulo, valor, cor }: { rotulo: string; valor: string; cor?: st
   )
 }
 
-function MesTV({ titulo, valor, meta, piso, legenda, children }: { titulo: string; valor: number; meta: number; piso: number; legenda: string; children: ReactNode }) {
+interface BarrasMes {
+  dias: string[]
+  valores: (number | null)[]
+  cor: (v: number, i: number) => string
+  destaque?: string
+}
+
+function MesTV({ titulo, valor, meta, piso, legenda, barras, children }: { titulo: string; valor: number; meta: number; piso: number; legenda: string; barras: BarrasMes; children: ReactNode }) {
   const cor = corMeta(valor, meta, piso)
   return (
-    <MiniTV titulo={titulo} cor={cor}>
+    <MiniTV
+      cor={cor}
+      titulo={
+        <>
+          <span className="text-[1.6em] leading-none align-middle">📅</span> {titulo}
+        </>
+      }
+    >
       <div className="flex items-baseline gap-[1.5cqmin] min-w-0">
         <span className="font-black leading-none tracking-tighter text-[clamp(16px,14cqmin,64px)]" style={{ color: cor }}>{num(valor)}</span>
         {meta > 0 && <span className="font-black text-zinc-400 text-[clamp(9px,6cqmin,26px)]">/ {num(meta)}</span>}
@@ -184,7 +198,8 @@ function MesTV({ titulo, valor, meta, piso, legenda, children }: { titulo: strin
           {piso > 0 && <div className="absolute -inset-y-1 w-[3px] rounded bg-white/80" style={{ left: `${Math.min(100, (piso / meta) * 100)}%` }} title={`Piso ${num(piso)}`}></div>}
         </div>
       )}
-      <div className="flex-1 min-h-0 flex flex-col justify-end gap-[1cqmin]">{children}</div>
+      <BarrasTV dias={barras.dias} valores={barras.valores} rotulo={(v) => num(v)} cor={barras.cor} destaque={barras.destaque} />
+      <div className="flex flex-col gap-[1cqmin]">{children}</div>
     </MiniTV>
   )
 }
@@ -206,12 +221,28 @@ export function CardOperacoesTV({ s, c, mes }: { s: ErpState; c: Colaborador; me
     const prox = somarMes(mes, 1)
     const rA = resumo(s, 'operacional', ind, ant, c.id)
     const rP = resumo(s, 'operacional', ind, prox, c.id)
+    const fA = financeiroOperacoes(s, ant)
     const fP = financeiroOperacoes(s, prox)
     const feitos = x.r?.mes ?? 0
+    // barrinhas por dia útil: até hoje = feitos (lançamentos) • de hoje em diante = fichas marcadas (mais claras)
+    const hj = hoje()
+    const barras = (mesX: string, porDia: Record<string, number>): BarrasMes => {
+      const d = diasDeMeta(s, 'operacional', ind, c.id, mesX)
+      const valores = d.uteis.map((dia) => {
+        const valor = (dia <= hj ? (d.serie[Number(dia.slice(8)) - 1] ?? 0) : 0) + (porDia[dia] ?? 0)
+        return dia > hj && !valor ? null : valor
+      })
+      return {
+        dias: d.uteis,
+        valores,
+        cor: (v, i) => corDoDia(v, d.metaDiaria, d.pisoDiario) + (d.uteis[i] > hj ? '99' : ''),
+        destaque: mesX === hj.slice(0, 7) ? hj : undefined,
+      }
+    }
     return {
-      anterior: { mes: ant, alunos: rA.mes, meta: rA.meta.mensal, piso: rA.piso, custo: custoPorAluno(financeiroOperacoes(s, ant).realizado) },
-      atual: { feitos, marcados: x.f.previsto.alunos, alunos: feitos + x.f.previsto.alunos, meta: x.r?.meta.mensal ?? 0, piso: x.r?.piso ?? 0, custo: x.f.projecao.custoAluno },
-      proximo: { mes: prox, alunos: fP.previsto.alunos, visitas: fP.previsto.visitas + fP.previsto.contratosConferencia, meta: rP.meta.mensal, piso: rP.piso, custo: custoPorAluno(fP.previsto) },
+      anterior: { mes: ant, alunos: rA.mes, meta: rA.meta.mensal, piso: rA.piso, custo: custoPorAluno(fA.realizado), barras: barras(ant, fA.previsto.porDia) },
+      atual: { feitos, marcados: x.f.previsto.alunos, alunos: feitos + x.f.previsto.alunos, meta: x.r?.meta.mensal ?? 0, piso: x.r?.piso ?? 0, custo: x.f.projecao.custoAluno, barras: barras(mes, x.f.previsto.porDia) },
+      proximo: { mes: prox, alunos: fP.previsto.alunos, visitas: fP.previsto.visitas + fP.previsto.contratosConferencia, meta: rP.meta.mensal, piso: rP.piso, custo: custoPorAluno(fP.previsto), barras: barras(prox, fP.previsto.porDia) },
     }
   }, [s, c.id, mes, x])
   return (
@@ -236,7 +267,7 @@ export function CardOperacoesTV({ s, c, mes }: { s: ErpState; c: Colaborador; me
             </div>
           )}
         </div>
-        <div className="flex-1 min-h-0 grid grid-cols-3 gap-[1.6cqmin]" style={{ gridTemplateRows: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
+        <div className="flex-1 min-h-0 grid grid-cols-3 gap-[1.6cqmin]" style={{ gridTemplateRows: 'minmax(0, 1.25fr) minmax(0, 1fr)' }}>
           {/* alunos fotografados */}
           <MiniTV titulo="Alunos fotografados" cor={corAlunos}>
             <div className="flex items-end gap-[2cqmin]">
@@ -291,15 +322,15 @@ export function CardOperacoesTV({ s, c, mes }: { s: ErpState; c: Colaborador; me
           </MiniTV>
 
           {/* mês a mês */}
-          <MesTV titulo={`Mês anterior • ${nomeCurto(m.anterior.mes)}`} valor={m.anterior.alunos} meta={m.anterior.meta} piso={m.anterior.piso} legenda="alunos fotografados">
+          <MesTV titulo={`Mês anterior • ${nomeCurto(m.anterior.mes)}`} barras={m.anterior.barras} valor={m.anterior.alunos} meta={m.anterior.meta} piso={m.anterior.piso} legenda="alunos fotografados">
             <Linha rotulo="Custo por aluno" valor={m.anterior.custo > 0 ? reais(m.anterior.custo) : '—'} />
           </MesTV>
-          <MesTV titulo={`${x.atual ? 'Mês atual' : 'Mês'} • ${nomeCurto(mes)}`} valor={m.atual.alunos} meta={m.atual.meta} piso={m.atual.piso} legenda="feitos + fichas marcadas">
+          <MesTV titulo={`${x.atual ? 'Mês atual' : 'Mês'} • ${nomeCurto(mes)}`} barras={m.atual.barras} valor={m.atual.alunos} meta={m.atual.meta} piso={m.atual.piso} legenda="feitos + fichas marcadas">
             <Linha rotulo="Feitos" valor={num(m.atual.feitos)} />
             <Linha rotulo="Marcados" valor={num(m.atual.marcados)} />
             <Linha rotulo="Custo previsto" valor={m.atual.custo > 0 ? reais(m.atual.custo) : '—'} />
           </MesTV>
-          <MesTV titulo={`Próximo mês • ${nomeCurto(m.proximo.mes)}`} valor={m.proximo.alunos} meta={m.proximo.meta} piso={m.proximo.piso} legenda="fichas já marcadas">
+          <MesTV titulo={`Próximo mês • ${nomeCurto(m.proximo.mes)}`} barras={m.proximo.barras} valor={m.proximo.alunos} meta={m.proximo.meta} piso={m.proximo.piso} legenda="fichas já marcadas">
             <Linha rotulo="Visitas marcadas" valor={num(m.proximo.visitas)} />
             {m.proximo.piso > 0 && (
               <Linha

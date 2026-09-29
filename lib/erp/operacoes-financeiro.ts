@@ -85,7 +85,7 @@ export interface FinanceiroOperacoes {
   dias: DiaOperacao[] // dias com viagem realizada, em ordem
   realizado: Custos & { visitas: number; escolas: number; diasViagem: number; escolaEstimada: number; semCarro: number }
   porCarro: { veiculo: Registro; dias: number; alunos: number; fixo: number; valorDia: number }[]
-  previsto: Custos & { visitas: number; contratosConferencia: number }
+  previsto: Custos & { visitas: number; contratosConferencia: number; porDia: Record<string, number> } // porDia = fichas marcadas por data
   projecao: Custos & { custoAluno: number; receitaAluno: number; receita: number; resultado: number; temVendas: boolean }
   agenda: { feitas: number; agendadas: number; canceladas: number }
 }
@@ -143,18 +143,21 @@ export function financeiroOperacoes(s: ErpState, mes: string = mesAtual()): Fina
   realizado.diasViagem = dias.length
 
   // ---- previsto: fichas fechadas ainda por fotografar ----
-  const previsto = { ...zero(), visitas: futuras.length, contratosConferencia: 0 }
+  const previsto = { ...zero(), visitas: futuras.length, contratosConferencia: 0, porDia: {} as Record<string, number> }
+  const marcar = (data: string, fichas: number) => (previsto.porDia[data.slice(0, 10)] = (previsto.porDia[data.slice(0, 10)] ?? 0) + fichas)
   for (const v of futuras) {
     const fichas = n(v.fichasPrevistas)
     const vv = variaveis(ctx, v, fichas, false)
     somar(previsto, { alunos: fichas, vendedor: vv.vendedor, escola: vv.escola })
+    marcar(t(v.data), fichas)
   }
   for (const [k, info] of diaCarro) if (!info.realizada) somar(previsto, { fixo: fixoDe(k.split('|')[1]) })
   // contratos fechados com data no mês que ainda estão em conferência (sem carro definido: só o variável)
   for (const c of ctx.contratos.filter((x) => x.status === 'Em conferência' && t(x.dataPrevista).startsWith(mes) && t(x.dataPrevista) >= hojeISO)) {
     const fichas = n(c.fichasPrevistas)
     previsto.contratosConferencia++
-    somar(previsto, { alunos: fichas, vendedor: fichas * ctx.valorFicha(c.vendedorId), escola: fichas * (n(c.bonificacaoPorFicha) || parametros(s).bonificacaoEscolaMin) })
+    marcar(t(c.dataPrevista), fichas)
+    somar(previsto,{ alunos: fichas, vendedor: fichas * ctx.valorFicha(c.vendedorId), escola: fichas * (n(c.bonificacaoPorFicha) || parametros(s).bonificacaoEscolaMin) })
   }
 
   // ---- projeção e receita (vendas reais por aluno fotografado) ----
