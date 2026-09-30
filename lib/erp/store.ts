@@ -970,8 +970,17 @@ export async function resolverPendencia(
 
 // ---------------- Dinheiro de Operações ----------------
 
+// Custos da operação (fixo do carro e variável por ficha): regra do dono, somente o ADM altera.
+// No Supabase o banco também barra (SQL 017); aqui a mesma regra vale para o modo demonstração.
+const SO_ADM_CUSTOS = 'Somente o ADM altera os custos da operação.'
+const souAdmAgora = () => carregar().colaboradores.find((c) => c.id === lerSessao()?.colaboradorId)?.perfil === 'ADM'
+
 // Gasto fixo por dia de viagem de cada carro, a partir do mês informado (os meses anteriores ficam como estavam)
 export async function salvarGastoFixoCarros(valores: Record<string, number>, mes: string): Promise<string | null> {
+  if (!souAdmAgora()) {
+    avisar(SO_ADM_CUSTOS)
+    return SO_ADM_CUSTOS
+  }
   const s = carregar()
   for (const [id, valor] of Object.entries(valores)) {
     const v = F.col(s, 'veiculos').find((x) => x.id === id)
@@ -984,8 +993,12 @@ export async function salvarGastoFixoCarros(valores: Record<string, number>, mes
   return null
 }
 
-// Custo variável por ficha (escola + vendedor), a partir do mês informado — fica nos parâmetros da empresa (ADM/Gerência)
+// Custo variável por ficha (escola + vendedor), a partir do mês informado — fica nos parâmetros da empresa (só o ADM)
 export async function salvarCustoVariavel(valor: number, mes: string): Promise<string | null> {
+  if (!souAdmAgora()) {
+    avisar(SO_ADM_CUSTOS)
+    return SO_ADM_CUSTOS
+  }
   const erro = await salvarParametros({ [chaveCustoVariavel(mes)]: Math.max(0, valor) })
   if (!erro && MODO !== 'supabase') avisar('Custo variável por ficha salvo.', 'ok')
   return erro

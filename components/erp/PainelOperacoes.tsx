@@ -10,7 +10,7 @@ import type { Colaborador, ErpState } from '@/lib/erp/types'
 import { colecao, diasDeMeta, resumo } from '@/lib/erp/metrics'
 import { brl, hoje, iniciais, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import { agendaFutura, custoPorAluno, custoVariavelFicha, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro, type SituacaoDia } from '@/lib/erp/operacoes-financeiro'
-import { salvarCustoVariavel, salvarGastoFixoCarros, usePode } from '@/lib/erp/store'
+import { salvarCustoVariavel, salvarGastoFixoCarros, useUsuario } from '@/lib/erp/store'
 import Icon from './Icon'
 import { Avatar, btnPrimario } from './ui'
 import { STATUS } from './status'
@@ -408,10 +408,11 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
   )
 }
 
+// Custos da operação (R$ 2.500 por carro/dia e R$ 60 por ficha): regra do dono, SOMENTE o ADM altera
 function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
-  const podeFazer = usePode()
-  const editavel = podeFazer('operacional', 'editar')
-  const variavelEditavel = podeFazer('cadastros', 'editar') // o variável é regra do dono: ADM/Gerência
+  const souAdm = useUsuario()?.perfil === 'ADM'
+  const editavel = souAdm
+  const variavelEditavel = souAdm
   const carros = colecao(s, 'veiculos').filter((v) => v.status !== 'Inativo')
   const [valores, setValores] = useState<Record<string, string>>(() => Object.fromEntries(carros.map((v) => [v.id, String(gastoFixoCarro(v, mes) || '')])))
   const [variavel, setVariavel] = useState(() => String(custoVariavelFicha(s, mes)))
@@ -480,6 +481,7 @@ function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
       <p className="text-[11px] text-zinc-500">
         Fixo por operação (carro por dia): tudo incluso (combustível, fotógrafos, motorista, veículo...). Conta só nos dias em que o carro sai. Os valores valem a partir de {mesCurto(mes).toLowerCase()}.
       </p>
+      {!souAdm && <p className="text-[11px] font-bold text-yellow-400">🔒 Valores definidos pelo ADM: somente o ADM altera.</p>}
       {editavel && (
         <button
           disabled={salvando}

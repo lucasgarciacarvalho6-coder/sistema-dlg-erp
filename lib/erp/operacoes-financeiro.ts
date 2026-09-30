@@ -1,9 +1,9 @@
 // O dinheiro de Operações, na regra do dono:
 //  • custo FIXO por operação = cada carro que sai num dia (padrão R$ 2.500: combustível, fotógrafos, motorista,
-//    veículo...). Editável por carro pela coordenação e guardado por mês (mudar não altera os meses passados).
+//    veículo...). Guardado por carro e por mês (mudar não altera os meses passados). SÓ o ADM altera.
 //    Dia em que o carro não sai não tem custo. As diárias dos fechamentos NÃO são somadas (já estão no fixo).
 //  • custo VARIÁVEL por ficha fotografada (padrão R$ 60: repasse da escola + comissão do vendedor).
-//    Editável pelo ADM/Gerência e guardado por mês.
+//    Guardado por mês. SÓ o ADM altera (SQL 017 barra no banco).
 //  • custo total = operações × fixo + fichas × variável • custo por ficha = custo total ÷ fichas.
 //    Ex.: 1 dia, 100 fichas → 2.500 + 6.000 = R$ 8.500 → R$ 85 por ficha.
 //  • projeção pelas FICHAS FECHADAS nos contratos (visitas ainda por fazer + contratos em conferência do mês).
