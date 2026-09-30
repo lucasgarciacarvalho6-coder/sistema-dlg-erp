@@ -37,7 +37,7 @@ export function FunilDoMes({ s, mes }: { s: ErpState; mes: string }) {
   const etapas: Etapa[] = [
     { rotulo: 'Contratos de escola', valor: num(contratos), detalhe: 'recebidos no mês', tom: 'blue', link: '/operacional/contratos' },
     { rotulo: 'Escolas fotografadas', valor: num(visitas.length), detalhe: `${num(fichas)} fichas`, tom: 'cyan', link: '/operacional/agenda' },
-    { rotulo: 'Books produzidos', valor: num(books), detalhe: 'lançados pela Produção', tom: 'violet', link: '/producao' },
+    { rotulo: 'Álbuns revelados', valor: num(books), detalhe: 'lançados pela Revelação', tom: 'violet', link: '/producao' },
     { rotulo: 'Books vendidos', valor: num(externas + internas), detalhe: `${num(externas)} na rua • ${num(internas)} internas`, tom: 'emerald', link: '/financeiro/vendas-books' },
     { rotulo: 'Valor vendido', valor: brl(vendido), tom: 'emerald', link: '/financeiro/vendas-books' },
     { rotulo: 'Recebido', valor: brl(recebido), detalhe: 'vendas de books', tom: 'emerald', link: '/financeiro/vendas-books' },

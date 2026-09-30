@@ -10,6 +10,7 @@ import { diasDeMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { formatar, iniciais, pct } from '@/lib/erp/format'
 import { Avatar, EmptyState } from './ui'
 import { PillSituacao, STATUS } from './status'
+import { LinhaBonus } from '@/components/edicao/Bonus'
 
 const dec = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -215,6 +216,8 @@ export default function PainelMeta({
                 <p className="text-base font-black text-white">{f(r.projecao)}</p>
               </div>
             </div>
+            {/* Produção: bônus do mês pelos álbuns entregues */}
+            {colaborador.setor === 'edicao' && <LinhaBonus albuns={r.mes} />}
           </div>
         </div>
 

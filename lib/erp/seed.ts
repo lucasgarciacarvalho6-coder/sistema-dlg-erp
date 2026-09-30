@@ -11,10 +11,12 @@ import {
   baixarTitulo,
   col,
   conferirVendaBook,
+  criarLoteProducao,
   confirmarContratoEscola,
   encerrarVisita,
   enviarFechamento,
   inserir,
+  lancar,
   negociarTitulo,
   pagarConta,
   registrarContatoRebolo,
@@ -25,7 +27,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 9 // v9: gasto fixo dos carros e histórico de viagens (painel do dinheiro de Operações)
+export const VERSAO_DADOS = 10 // v10: setor Produção novo (editores e escolas em cada etapa); a antiga Produção virou Revelação
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -50,6 +52,10 @@ const COLABORADORES: [string, string, string, Setor, string][] = [
   ['u-op1', 'Flávia Alves Roquini', 'operacional@dlgphotos.com', 'operacional', 'Coordenação / RMC'],
   ['u-op2', 'Diego Lima', 'diego.foto@dlgphotos.com', 'operacional', 'Fotógrafo(a)'],
   ['u-op3', 'Rafael Costa', 'rafael.foto@dlgphotos.com', 'operacional', 'Fotógrafo(a)'],
+  // Produção (id 'edicao'): recebe as fotos, manda ao editor e faz a análise de qualidade
+  ['u-ed1', 'Aline Castro', 'fotos@dlgphotos.com', 'edicao', 'Análise de qualidade'],
+  ['u-ed2', 'Marina Lopes', 'marina.fotos@dlgphotos.com', 'edicao', 'Análise de qualidade'],
+  // Revelação (id 'producao', a antiga Produção): informa os álbuns revelados pelo app
   ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Produtor(a) de books'],
   ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Montador(a) de álbuns'],
   ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador(a)'],
@@ -71,6 +77,7 @@ export const CONTAS_DEMO = [
   { setor: 'gerencia' as Setor, email: 'gerente@dlgphotos.com' },
   { setor: 'vendas' as Setor, email: 'ana.vendas@dlgphotos.com' },
   { setor: 'operacional' as Setor, email: 'operacional@dlgphotos.com' },
+  { setor: 'edicao' as Setor, email: 'fotos@dlgphotos.com' },
   { setor: 'producao' as Setor, email: 'producao@dlgphotos.com' },
   { setor: 'financeiro' as Setor, email: 'financeiro@dlgphotos.com' },
   { setor: 'cobranca' as Setor, email: 'cobranca@dlgphotos.com' },
@@ -120,7 +127,9 @@ export function gerarSeed(): ErpState {
             id === 'u-re0'
             ? {}
             : { valor_vendido: { mensal: 5000, diaria: 0, piso: 3334 }, books_vendidos: { mensal: 6, diaria: 0, piso: 4 } }
-          : Object.fromEntries(SETORES[setor].indicadores.map((ind) => [ind.id, { mensal: ind.metaPadrao.mensal, diaria: 0, piso: Math.round(ind.metaPadrao.mensal * 0.8) }])),
+          : setor === 'edicao'
+            ? { albuns_entregues: { mensal: 1000, diaria: 0, piso: 0 } } // meta do bônus (1.000 álbuns); sem piso
+            : Object.fromEntries(SETORES[setor].indicadores.map((ind) => [ind.id, { mensal: ind.metaPadrao.mensal, diaria: 0, piso: Math.round(ind.metaPadrao.mensal * 0.8) }])),
     semMeta: setor === 'financeiro' || setor === 'gerencia' || id === 'u-re0',
     criadoEm: criado,
   }))
@@ -424,6 +433,49 @@ export function gerarSeed(): ErpState {
     }
   }
 
+  // ---- PRODUÇÃO (setor 'edicao'): editores (não usam o sistema) e as escolas em cada etapa ----
+  const editores = ['Estúdio Luz', 'Carol Dias', 'Pedro Alves', 'Arte & Foto', 'Bia Montagens', 'Rafa Edições'].map((nome, i) =>
+    inserir(s, 'editores', { nome, telefone: `(44) 9981${i}-22${i}${i}`, observacao: '', status: 'Ativo' }),
+  )
+  const recentes = col(s, 'agenda_visitas')
+    .filter((v) => v.status === 'Fechamento enviado')
+    .sort((a, b) => String(b.data).localeCompare(String(a.data)))
+    .slice(0, 14)
+  // da mais nova para a mais antiga: quanto mais antiga a foto, mais adiante está na produção
+  const etapasDemo = ['Aguardando fotos', 'Em edição', 'Em edição', 'Em edição', 'Análise de qualidade', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Aguardando revelação', 'Revelando', 'Na caixa', 'Na caixa', 'Na caixa', 'Na caixa']
+  recentes.forEach((v, i) => {
+    const l = criarLoteProducao(s, v, ctxOp, 'Chegou das Operações')
+    if (!l) return
+    const etapa = etapasDemo[i]
+    const ordem = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'].indexOf(etapa)
+    const d0 = String(v.data)
+    const ate = (n: number) => (addDias(d0, n) > hoje() ? hoje() : addDias(d0, n)) // nenhuma data depois de hoje
+    const passou = (n: number) => ordem >= n
+    const quem = i % 2 ? 'u-ed2' : 'u-ed1'
+    Object.assign(l, {
+      etapa,
+      fotosRecebidasEm: passou(1) || i === 0 ? ate(1) : '',
+      editorId: passou(1) ? editores[i % editores.length].id : '',
+      enviadoEditorEm: passou(1) ? ate(2) : '',
+      devolvidoEditorEm: passou(2) ? ate(8) : '',
+      voltas: i === 5 || i === 11 ? 1 : 0,
+      reprovados: i === 5 ? 4 : i === 11 ? 2 : 0,
+      aprovadoQualidadeEm: passou(3) ? ate(9) : '',
+      aprovadoQualidadePor: passou(3) ? quem : '',
+      confirmadoEm: passou(4) ? ate(10) : '',
+      confirmadoPor: passou(4) ? 'u-adm' : '',
+      revelandoEm: passou(5) ? ate(12) : '',
+      naCaixaEm: passou(6) ? ate(15) : '',
+      posteres: i === 7 ? 2 : 0,
+      albuns: Number(l.alunos) - (i === 7 ? 2 : 0),
+    })
+    // conferência final feita: os álbuns entraram na meta de quem aprovou a qualidade (1 vez por escola)
+    if (passou(4)) {
+      lancar(s, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: quem, quantidade: Number(l.albuns), descricao: `Álbuns entregues: ${l.escola}`, data: String(l.confirmadoEm) })
+      l.albunsContados = Number(l.albuns)
+    }
+  })
+
   // Fechamento diário: um já enviado ao financeiro, um em rascunho (o terceiro fica pendente)
   const montarFechamento = (escola: string, ajudantes: { nome: string; valor: number; pixChave: string; pixBanco: string }[]) => {
     const v = porEscola(escola)
@@ -623,7 +675,7 @@ export function gerarSeed(): ErpState {
   s.notificacoes.push({
     id: 'n-boas-vindas',
     data: criado,
-    setores: ['adm', 'gerencia', 'vendas', 'operacional', 'producao', 'rebolo', 'financeiro', 'cobranca'],
+    setores: ['adm', 'gerencia', 'vendas', 'operacional', 'edicao', 'producao', 'rebolo', 'financeiro', 'cobranca'],
     tipo: 'info',
     titulo: 'Bem-vindo ao DLG Photos ERP',
     descricao: 'Ambiente de demonstração com dados fictícios. Todos os setores estão integrados ao painel do ADM.',

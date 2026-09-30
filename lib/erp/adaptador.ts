@@ -48,6 +48,10 @@ export const COLUNAS: Record<string, string[]> = {
     'whatsapp1', 'whatsapp2', 'whatsapp3', 'telefone', 'nome_pai', 'nome_mae', 'horario', 'observacao'],
   // contatos, situação, desconto e envio mudam só pelas funções do banco (registrar_contato_rebolo etc.)
   rebolo_contatos: [],
+  // ---- Produção (setor 'edicao'): editores são só um cadastro; os lotes mudam pelas funções do banco (SQL 020) ----
+  editores: ['nome', 'telefone', 'observacao', 'status'],
+  producao_lotes: [],
+  producao_historico: [],
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade

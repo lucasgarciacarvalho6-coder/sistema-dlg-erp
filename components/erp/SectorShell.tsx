@@ -22,7 +22,7 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
   const usuario = useUsuario()
   const [menuAberto, setMenuAberto] = useState(false)
 
-  // Equipe da Produção e vendedores externos usam SÓ o celular (apps): o ERP fica para ADM/Gerência
+  // Equipe da Revelação (id 'producao') e vendedores externos usam SÓ o celular (apps): o ERP fica para ADM/Gerência
   const soCelular = !!usuario && usuario.perfil === 'COLABORADOR' && (usuario.setor === 'producao' || usuario.setor === 'externo')
   const permitido = !soCelular && pode(usuario, s.permissoes, setor, 'visualizar')
 

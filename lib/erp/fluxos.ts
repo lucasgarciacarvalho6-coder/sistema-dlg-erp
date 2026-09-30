@@ -8,6 +8,7 @@ import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
 import { addDias, addMeses, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
+import { ETAPAS_LOTE, ETAPA_DA_ACAO, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 
 export interface Contexto {
   autorId: string
@@ -492,6 +493,237 @@ export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ct
     link: '/operacional/agenda',
   })
   auditar(d, ctx, 'EDITAR', `Visita encerrada: ${v.escola} (${fichas} fichas)`, 'operacional')
+  // A escola entra na PRODUÇÃO (aguardando as fotos) — mesma regra do SQL 020
+  if (criarLoteProducao(d, v, ctx, 'Chegou das Operações'))
+    notificar(d, ctx, { setores: ['edicao'], tipo: 'info', titulo: 'Escola chegou na Produção', descricao: `${v.escola}: ${fichas} alunos fotografados. Aguardando as fotos.`, link: '/edicao' })
+}
+
+// ---------------- PRODUÇÃO (setor 'edicao') ----------------
+// Cada visita encerrada vira um lote: a base que a Produção recebe das Operações (escola, data, vendedor, alunos).
+// Não duplica: a mesma visita nunca entra duas vezes.
+export function criarLoteProducao(d: ErpState, v: Registro, ctx: Contexto, origem: string): Registro | null {
+  if (col(d, 'producao_lotes').some((l) => l.visitaId === v.id)) return null
+  const alunos = Number(v.fichasFotografadas) || 0
+  const vendedor = col(d, 'pj_vendedores').find((p) => p.id === v.vendedorId)
+  const lote = inserir(d, 'producao_lotes', {
+    visitaId: v.id,
+    escola: v.escola,
+    cidade: v.cidade,
+    uf: v.uf,
+    dataFoto: v.data,
+    vendedorId: v.vendedorId ?? '',
+    vendedor: vendedor ? String(vendedor.nome) : '',
+    retorno: !!v.retornoDe,
+    alunos,
+    albuns: alunos,
+    posteres: 0,
+    etapa: 'Aguardando fotos',
+    fotosRecebidasEm: '',
+    editorId: '',
+    enviadoEditorEm: '',
+    devolvidoEditorEm: '',
+    voltas: 0,
+    reprovados: 0,
+    aprovadoQualidadeEm: '',
+    aprovadoQualidadePor: '',
+    confirmadoEm: '',
+    confirmadoPor: '',
+    revelandoEm: '',
+    naCaixaEm: '',
+    observacao: '',
+    albunsContados: 0, // álbuns que já entraram na meta (na conferência final, 1 vez por escola)
+  })
+  inserir(d, 'producao_historico', {
+    loteId: lote.id,
+    data: agora(),
+    etapa: 'Aguardando fotos',
+    acao: origem,
+    quantidade: alunos,
+    descricao: `${alunos} alunos fotografados em ${String(v.data).split('-').reverse().join('/')}${v.retornoDe ? ' (retorno)' : ''}.`,
+    autor: ctx.autorNome,
+  })
+  return lote
+}
+
+// Traz para a Produção as visitas já encerradas antes (escolas que estavam em andamento na planilha)
+export function trazerParaProducao(d: ErpState, visitaIds: string[], ctx: Contexto): number {
+  let n = 0
+  for (const id of visitaIds) {
+    const v = col(d, 'agenda_visitas').find((x) => x.id === id)
+    if (!v || (v.status !== 'Fotografada' && v.status !== 'Fechamento enviado')) continue
+    if (criarLoteProducao(d, v, ctx, 'Trazida para a Produção')) n++
+  }
+  if (n) auditar(d, ctx, 'CRIAR', `${n} escola(s) trazida(s) para a Produção`, 'edicao')
+  return n
+}
+
+const SO_ADM_CONFERENCIA = 'Só o ADM faz a conferência final.'
+
+function historicoLote(d: ErpState, l: Registro, ctx: Contexto, h: { etapa: string; acao: string; quantidade: number | null; descricao: string }) {
+  inserir(d, 'producao_historico', { loteId: l.id, data: agora(), ...h, autor: ctx.autorNome })
+  auditar(d, ctx, 'EDITAR', `Produção • ${l.escola}: ${h.acao}`, 'edicao')
+}
+
+// Botões das etapas da Produção — mesmas regras do SQL 021 (producao_avancar).
+// Na conferência final (só o ADM) os álbuns entram na meta de quem aprovou a análise de qualidade, 1 vez por escola.
+export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: DadosAcaoLote, ctx: Contexto): string | null {
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada na Produção.'
+  if (etapaDoLote(l) !== ETAPA_DA_ACAO[acao]) return `Esta escola está em "${etapaDoLote(l)}": atualize a tela.`
+  const eu = d.colaboradores.find((c) => c.id === ctx.autorId)
+  const daProducao = (id: string) => d.colaboradores.find((c) => c.id === id && c.setor === 'edicao' && c.status === 'ATIVO')
+  const nomeEditor = String(col(d, 'editores').find((e) => e.id === l.editorId)?.nome ?? '')
+  const dia = hoje()
+  const albuns = Number(l.albuns) || 0
+  let h: { etapa: EtapaLote; acao: string; quantidade: number | null; descricao: string }
+
+  switch (acao) {
+    case 'fotos':
+      if (l.fotosRecebidasEm) return 'As fotos já foram marcadas como recebidas.'
+      l.fotosRecebidasEm = dia
+      h = { etapa: 'Aguardando fotos', acao: 'Fotos recebidas', quantidade: null, descricao: 'Fotos recebidas dos fotógrafos.' }
+      break
+    case 'enviar_editor': {
+      const ed = col(d, 'editores').find((e) => e.id === dados.editorId && e.status === 'Ativo')
+      if (!ed) return 'Escolha o editor.'
+      Object.assign(l, { editorId: ed.id, enviadoEditorEm: dia, devolvidoEditorEm: '', fotosRecebidasEm: l.fotosRecebidasEm || dia, etapa: 'Em edição' })
+      h = { etapa: 'Em edição', acao: 'Enviado ao editor', quantidade: null, descricao: `Fotos enviadas para ${ed.nome}.` }
+      break
+    }
+    case 'editor_devolveu':
+      Object.assign(l, { devolvidoEditorEm: dia, etapa: 'Análise de qualidade' })
+      h = { etapa: 'Análise de qualidade', acao: 'Editor devolveu', quantidade: null, descricao: `${nomeEditor || 'O editor'} devolveu os álbuns montados.` }
+      break
+    case 'aprovar_qualidade': {
+      // quem é da Produção aprova por si; o ADM/Gerência escolhe quem fez a análise (a meta é dela)
+      let analista = eu?.setor === 'edicao' ? eu : undefined
+      if (!analista && dados.analistaId) {
+        analista = daProducao(dados.analistaId)
+        if (!analista) return 'Quem fez a análise precisa ser da Produção.'
+      } else if (!analista && d.colaboradores.some((c) => c.setor === 'edicao' && c.status === 'ATIVO')) return 'Escolha quem fez a análise de qualidade.'
+      Object.assign(l, { aprovadoQualidadeEm: dia, aprovadoQualidadePor: analista?.id ?? '', etapa: 'Conferência final' })
+      h = { etapa: 'Conferência final', acao: 'Aprovado na análise de qualidade', quantidade: albuns, descricao: `${albuns} álbuns aprovados${analista ? ` por ${analista.nome}` : ''}.` }
+      notificar(d, ctx, { setores: ['adm'], tipo: 'info', titulo: 'Escola pronta para a conferência final', descricao: `${l.escola}: ${albuns} álbuns aprovados na análise de qualidade.`, link: '/edicao' })
+      break
+    }
+    case 'reprovar_qualidade':
+    case 'reprovar_conferencia': {
+      if (acao === 'reprovar_conferencia' && eu?.perfil !== 'ADM') return SO_ADM_CONFERENCIA
+      const q = Math.floor(Number(dados.quantidade) || 0)
+      const motivo = (dados.motivo ?? '').trim()
+      if (q <= 0) return 'Informe quantos álbuns voltam para o editor.'
+      if (q > albuns) return `São só ${albuns} álbuns nesta escola.`
+      if (!motivo) return 'Informe o motivo.'
+      Object.assign(l, {
+        etapa: 'Em edição',
+        voltas: (Number(l.voltas) || 0) + 1,
+        reprovados: (Number(l.reprovados) || 0) + q,
+        enviadoEditorEm: dia,
+        devolvidoEditorEm: '',
+        aprovadoQualidadeEm: '',
+        aprovadoQualidadePor: '',
+      })
+      h = {
+        etapa: 'Em edição',
+        acao: acao === 'reprovar_qualidade' ? 'Reprovado na análise de qualidade' : 'Reprovado na conferência final',
+        quantidade: q,
+        descricao: `${q} álbum(ns) de volta para ${nomeEditor || 'o editor'}. Motivo: ${motivo}`,
+      }
+      if (acao === 'reprovar_conferencia')
+        notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Conferência final devolveu ao editor', descricao: `${l.escola}: ${q} álbum(ns) com erro. Motivo: ${motivo}`, link: '/edicao' })
+      break
+    }
+    case 'confirmar': {
+      if (eu?.perfil !== 'ADM') return SO_ADM_CONFERENCIA
+      let analista = l.aprovadoQualidadePor ? d.colaboradores.find((c) => c.id === l.aprovadoQualidadePor) : undefined
+      if (!l.aprovadoQualidadePor && dados.analistaId) {
+        analista = daProducao(dados.analistaId)
+        if (!analista) return 'Quem fez a análise precisa ser da Produção.'
+      }
+      Object.assign(l, { confirmadoEm: dia, confirmadoPor: ctx.autorId, etapa: 'Aguardando revelação', aprovadoQualidadePor: analista?.id ?? '' })
+      let descricao = `${albuns} álbuns liberados para a Revelação`
+      if (Number(l.albunsContados) > 0) descricao += ' (já tinham entrado na meta).'
+      else if (analista && albuns > 0) {
+        lancar(d, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: analista.id, quantidade: albuns, descricao: `Álbuns entregues: ${l.escola}`, data: dia })
+        l.albunsContados = albuns
+        descricao += `. Contam na meta de ${analista.nome}.`
+      } else descricao += ' (sem analista: não entrou na meta).'
+      h = { etapa: 'Aguardando revelação', acao: 'Conferência final aprovada', quantidade: albuns, descricao }
+      notificar(d, ctx, { setores: ['edicao'], tipo: 'sucesso', titulo: 'Conferência final aprovada', descricao: `${l.escola}: ${albuns} álbuns liberados para a Revelação.`, link: '/edicao' })
+      break
+    }
+    case 'revelando':
+      Object.assign(l, { revelandoEm: dia, etapa: 'Revelando' })
+      h = { etapa: 'Revelando', acao: 'Revelando', quantidade: null, descricao: 'A Revelação pegou o HD para revelar.' }
+      break
+    case 'na_caixa':
+      Object.assign(l, { naCaixaEm: dia, etapa: 'Na caixa' })
+      h = { etapa: 'Na caixa', acao: 'Na caixa', quantidade: null, descricao: 'Álbuns revelados e na caixa.' }
+      break
+  }
+  historicoLote(d, l, ctx, h)
+  return null
+}
+
+// Álbuns (contam na meta) e pôsteres (não contam) + observação — mesma regra do SQL 021 (producao_ajustar).
+// Depois que os álbuns entram na meta (conferência final), a quantidade de álbuns não muda mais.
+export function ajustarLote(d: ErpState, loteId: string, albuns: number, posteres: number, observacao: string, ctx: Contexto): string | null {
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada na Produção.'
+  const a = Math.floor(albuns)
+  const p = Math.floor(posteres)
+  if (!(a >= 0) || !(p >= 0)) return 'Informe quantidades válidas (0 ou mais).'
+  if (Number(l.albunsContados) > 0 && a !== Number(l.albuns)) return 'Os álbuns desta escola já entraram na meta: a quantidade não muda mais.'
+  const obs = observacao.trim()
+  const mudouQtd = a !== Number(l.albuns) || p !== Number(l.posteres)
+  if (!mudouQtd && obs === String(l.observacao ?? '')) return 'Nada mudou.'
+  const antes = `${l.albuns} álbuns + ${l.posteres} pôster`
+  Object.assign(l, { albuns: a, posteres: p, observacao: obs })
+  historicoLote(d, l, ctx, {
+    etapa: etapaDoLote(l),
+    acao: mudouQtd ? 'Quantidade ajustada' : 'Observação',
+    quantidade: mudouQtd ? a : null,
+    descricao: mudouQtd ? `${antes} → ${a} álbuns + ${p} pôster.${obs ? ` Obs.: ${obs}` : ''}` : obs || 'Observação apagada.',
+  })
+  return null
+}
+
+// ADM corrige a etapa (escola trazida de antes do controle ou botão clicado por engano).
+// As datas das etapas seguintes são apagadas; os álbuns que já entraram na meta não contam de novo.
+// Mesma regra do SQL 021 (producao_corrigir_etapa).
+export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote, editorId: string, motivo: string, ctx: Contexto): string | null {
+  if (d.colaboradores.find((c) => c.id === ctx.autorId)?.perfil !== 'ADM') return 'Só o ADM corrige a etapa.'
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada na Produção.'
+  const k = ETAPAS_LOTE.indexOf(etapa)
+  if (k < 0) return 'Etapa inválida.'
+  const ed = editorId ? col(d, 'editores').find((e) => e.id === editorId) : undefined
+  if (editorId && !ed) return 'Editor não encontrado.'
+  const de = etapaDoLote(l)
+  const editorAntes = String(l.editorId ?? '')
+  const editorFinal = k >= 1 ? (ed?.id ?? editorAntes) : ''
+  if (de === etapa && editorFinal === editorAntes) return 'Nada mudou.'
+  Object.assign(l, {
+    etapa,
+    editorId: editorFinal,
+    enviadoEditorEm: k >= 1 ? l.enviadoEditorEm : '',
+    devolvidoEditorEm: k >= 2 ? l.devolvidoEditorEm : '',
+    aprovadoQualidadeEm: k >= 3 ? l.aprovadoQualidadeEm : '',
+    aprovadoQualidadePor: k >= 3 ? l.aprovadoQualidadePor : '',
+    confirmadoEm: k >= 4 ? l.confirmadoEm : '',
+    confirmadoPor: k >= 4 ? l.confirmadoPor : '',
+    revelandoEm: k >= 5 ? l.revelandoEm : '',
+    naCaixaEm: k >= 6 ? l.naCaixaEm : '',
+  })
+  // o editor só aparece no histórico quando mudou
+  const nomeEd = editorFinal && editorFinal !== editorAntes ? String(col(d, 'editores').find((e) => e.id === editorFinal)?.nome ?? '') : ''
+  historicoLote(d, l, ctx, {
+    etapa,
+    acao: 'Etapa corrigida',
+    quantidade: null,
+    descricao: `${de} → ${etapa}${nomeEd ? ` • editor ${nomeEd}` : ''}${motivo.trim() ? `. ${motivo.trim()}` : ''}`,
+  })
+  return null
 }
 
 // Retorno: as fichas que faltaram voltam para a agenda como uma visita nova (mesma escola e contrato)

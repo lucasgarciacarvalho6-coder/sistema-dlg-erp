@@ -3,7 +3,9 @@
 
 // 'externo' = vendedores externos PJ (contrato e books): usam só o app do vendedor
 // 'rebolo'  = vendas internas: revendem por telefone/WhatsApp os books que o externo não vendeu
-export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'producao' | 'financeiro' | 'cobranca' | 'rebolo' | 'externo'
+// 'edicao'   = PRODUÇÃO (na tela): recebe as fotos das escolas, manda ao editor, faz a análise de qualidade e envia à Revelação
+// 'producao' = REVELAÇÃO (na tela): o id antigo ficou por dentro (app, metas, lançamentos)
+export type Setor = 'adm' | 'gerencia' | 'operacional' | 'vendas' | 'edicao' | 'producao' | 'financeiro' | 'cobranca' | 'rebolo' | 'externo'
 
 export type Perfil = 'ADM' | 'GERENTE' | 'COLABORADOR'
 
@@ -25,7 +27,7 @@ export interface MatrizPermissoes {
   COLABORADOR: { setor_proprio: Acao[] }
 }
 
-export type Tom = 'blue' | 'emerald' | 'orange' | 'red' | 'violet' | 'yellow' | 'cyan' | 'zinc'
+export type Tom = 'blue' | 'emerald' | 'orange' | 'red' | 'violet' | 'yellow' | 'cyan' | 'pink' | 'zinc'
 
 export interface Meta {
   diaria: number

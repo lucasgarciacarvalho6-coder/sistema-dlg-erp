@@ -12,6 +12,7 @@ export const MATRIZ_PADRAO: MatrizPermissoes = {
     gerencia: TODAS,
     operacional: TODAS,
     vendas: TODAS,
+    edicao: TODAS,
     producao: TODAS,
     financeiro: TODAS,
     cobranca: TODAS,
@@ -39,7 +40,7 @@ export const MODULOS: { id: Modulo; label: string }[] = [
   { id: 'relatorios', label: 'Relatórios' },
   { id: 'auditoria', label: 'Auditoria' },
   { id: 'configuracoes', label: 'Configurações' },
-  ...(['gerencia', 'operacional', 'vendas', 'producao', 'rebolo', 'financeiro', 'cobranca'] as Setor[]).map((s) => ({
+  ...(['gerencia', 'operacional', 'vendas', 'edicao', 'producao', 'rebolo', 'financeiro', 'cobranca'] as Setor[]).map((s) => ({
     id: s as Modulo,
     label: `Setor ${SETORES[s].nome}`,
   })),
@@ -59,7 +60,7 @@ export function pode(usuario: Colaborador | null, matriz: MatrizPermissoes, modu
   return false
 }
 
-// Produção (equipe) e vendedores externos entram direto no app de celular
+// Revelação (equipe, id 'producao') e vendedores externos entram direto no app de celular
 export function rotaInicial(usuario: Colaborador) {
   if (usuario.setor === 'producao' && usuario.perfil === 'COLABORADOR') return '/app/producao'
   return SETORES[usuario.setor].home

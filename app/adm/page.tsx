@@ -80,7 +80,7 @@ export default function AdmVisaoTVPage() {
         <div className="bg-painel-2/80 border border-violet-500/20 p-8 rounded-3xl relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-violet-500 opacity-60 shadow-[0_0_15px_#8b5cf6]"></div>
           <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-violet-500/10 brilho scale-150 rounded-full"></div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Books produzidos • Produção</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Álbuns revelados • Revelação</p>
           <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4 relative z-10">{num(books.mes)}</p>
           <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold relative z-10">Hoje {num(books.hoje)} • {pct(books.pctMes)} da meta mensal</p>
         </div>

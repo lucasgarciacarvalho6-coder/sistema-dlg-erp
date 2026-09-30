@@ -1,7 +1,7 @@
 {
-  "name": "DLG Produção",
-  "short_name": "DLG Produção",
-  "description": "Lançamento diário de books produzidos",
+  "name": "DLG Revelação",
+  "short_name": "DLG Revelação",
+  "description": "Lançamento diário de álbuns revelados",
   "id": "/app/producao",
   "start_url": "/app/producao",
   "scope": "/app/producao",

@@ -14,6 +14,7 @@ export const TONS: Record<Tom, { texto: string; solido: string; suave: string; b
   violet: { texto: 'text-violet-400', solido: 'bg-violet-500', suave: 'bg-violet-500/10', borda: 'border-violet-500/20', barra: 'bg-gradient-to-t from-violet-600/40 to-violet-500', brilho: 'shadow-[0_0_10px_#8b5cf6]' },
   yellow: { texto: 'text-yellow-400', solido: 'bg-yellow-500', suave: 'bg-yellow-500/10', borda: 'border-yellow-500/20', barra: 'bg-gradient-to-t from-yellow-600/40 to-yellow-500', brilho: 'shadow-[0_0_10px_#eab308]' },
   cyan: { texto: 'text-cyan-400', solido: 'bg-cyan-500', suave: 'bg-cyan-500/10', borda: 'border-cyan-500/20', barra: 'bg-gradient-to-t from-cyan-600/40 to-cyan-500', brilho: 'shadow-[0_0_10px_#06b6d4]' },
+  pink: { texto: 'text-pink-400', solido: 'bg-pink-500', suave: 'bg-pink-500/10', borda: 'border-pink-500/20', barra: 'bg-gradient-to-t from-pink-600/40 to-pink-500', brilho: 'shadow-[0_0_10px_#ec4899]' },
   zinc: { texto: 'text-zinc-300', solido: 'bg-zinc-500', suave: 'bg-white/[0.05]', borda: 'border-white/[0.1]', barra: 'bg-gradient-to-t from-zinc-600/40 to-zinc-400', brilho: '' },
 }
 

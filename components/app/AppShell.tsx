@@ -1,6 +1,6 @@
 'use client'
 
-// Moldura dos apps de celular (PWA): Vendedor externo e Produção.
+// Moldura dos apps de celular (PWA): Vendedor externo e Revelação (id 'producao').
 // Tela estreita (celular), cabeçalho com o nome, navegação inferior e a mesma guarda de acesso do ERP.
 // A proteção real dos dados continua no RLS do Supabase.
 

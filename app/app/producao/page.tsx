@@ -1,7 +1,7 @@
 'use client'
 
-// App da Produção (celular): a pessoa só informa quantos books fez no dia.
-// Os números vão direto para as metas da Produção e para o dashboard do ADM.
+// App da Revelação (celular): a pessoa só informa quantos álbuns revelou no dia.
+// Os números vão direto para as metas da Revelação e para o dashboard do ADM.
 
 import { useState } from 'react'
 import AppShell, { botaoApp, cardApp, inputApp, labelApp } from '@/components/app/AppShell'
@@ -22,7 +22,7 @@ export default function AppProducaoPage() {
   const [enviando, setEnviando] = useState(false)
   const mes = mesAtual()
 
-  if (!usuario) return <AppShell setor="producao" titulo="Produção">{null}</AppShell>
+  if (!usuario) return <AppShell setor="producao" titulo="Revelação">{null}</AppShell>
 
   const r = resumo(s, 'producao', 'books', mes, usuario.id)
   const situacao = situacaoResumo(r, mes)
@@ -38,7 +38,7 @@ export default function AppProducaoPage() {
     const n = Number(qtd)
     if (!Number.isFinite(n) || n <= 0) return
     setEnviando(true)
-    const erro = await registrarLancamento({ setor: 'producao', indicador: 'books', colaboradorId: usuario.id, quantidade: Math.round(n), descricao: escola ? `Escola: ${escola}` : 'Books do dia', data: hoje() })
+    const erro = await registrarLancamento({ setor: 'producao', indicador: 'books', colaboradorId: usuario.id, quantidade: Math.round(n), descricao: escola ? `Escola: ${escola}` : 'Álbuns do dia', data: hoje() })
     setEnviando(false)
     if (!erro) {
       setQtd('')
@@ -47,12 +47,12 @@ export default function AppProducaoPage() {
   }
 
   return (
-    <AppShell setor="producao" titulo={`Olá, ${usuario.nome.split(' ')[0]}`} subtitulo={`Produção • ${dataBR(hoje())}`}>
+    <AppShell setor="producao" titulo={`Olá, ${usuario.nome.split(' ')[0]}`} subtitulo={`Revelação • ${dataBR(hoje())}`}>
       {/* Hoje */}
       <div className={`${cardApp} space-y-4`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className={labelApp}>Books feitos hoje</p>
+            <p className={labelApp}>Álbuns revelados hoje</p>
             <p className="text-5xl font-black tracking-tight mt-1">{num(r.hoje)}</p>
             <p className="text-xs text-zinc-400 mt-1">
               Meta do dia <strong className="text-white">{dec(r.meta.diaria)}</strong>
@@ -69,7 +69,7 @@ export default function AppProducaoPage() {
 
       {/* Lançar */}
       <div className={`${cardApp} space-y-4`}>
-        <p className="text-sm font-black">Informar books feitos</p>
+        <p className="text-sm font-black">Informar álbuns revelados</p>
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => setQtd(String(Math.max(0, (Number(qtd) || 0) - 1)))} className="w-14 h-14 shrink-0 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-2xl font-black" aria-label="Menos um">
             −
@@ -89,7 +89,7 @@ export default function AppProducaoPage() {
           </select>
         </div>
         <button onClick={lancar} disabled={enviando || !(Number(qtd) > 0)} className={botaoApp}>
-          {enviando ? 'Enviando...' : 'Lançar books'}
+          {enviando ? 'Enviando...' : 'Lançar álbuns'}
         </button>
         {deHoje.length > 0 && (
           <div className="pt-2 border-t border-white/[0.06] space-y-2">
@@ -97,7 +97,7 @@ export default function AppProducaoPage() {
             {deHoje.map((l) => (
               <div key={l.id} className="flex items-center justify-between gap-3 bg-black/40 rounded-xl px-4 py-2.5">
                 <span className="text-sm">
-                  <strong className="text-white">{num(l.quantidade)} books</strong> <span className="text-zinc-500 text-xs">• {l.descricao}</span>
+                  <strong className="text-white">{num(l.quantidade)} álbuns</strong> <span className="text-zinc-500 text-xs">• {l.descricao}</span>
                 </span>
                 {l.origem === 'manual' && (
                   <button onClick={() => excluirLancamento(l.id)} className="text-zinc-500 hover:text-red-400 text-lg px-2" aria-label="Remover lançamento">

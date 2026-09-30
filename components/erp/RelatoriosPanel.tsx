@@ -70,7 +70,7 @@ const RELATORIOS: Relatorio[] = [
     ], (r, s) => ({ vendedora: nomeColaborador(s, r.vendedoraId), data: dataBR(String(r.data)) })),
   },
   { id: 'prod-operacional', titulo: 'Produção Operacional', descricao: 'Fichas fotografadas por equipe', modulo: 'operacional', gerar: producaoSetor('operacional') },
-  { id: 'prod-producao', titulo: 'Produção (books produzidos)', descricao: 'Books produzidos por pessoa (lançados pelo app)', modulo: 'producao', gerar: producaoSetor('producao') },
+  { id: 'prod-producao', titulo: 'Revelação (álbuns revelados)', descricao: 'Álbuns revelados por pessoa (lançados pelo app)', modulo: 'producao', gerar: producaoSetor('producao') },
   {
     id: 'titulos',
     titulo: 'Contas a receber',

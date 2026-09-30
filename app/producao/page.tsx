@@ -6,7 +6,7 @@ import { useErp } from '@/lib/erp/store'
 import { equipe, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { hoje, mesAtual, num } from '@/lib/erp/format'
 
-// A equipe da Produção só informa, pelo app, quantos books fez no dia.
+// A equipe da Revelação só informa, pelo app, quantos álbuns revelou no dia.
 // Aqui o dono acompanha o total do dia e do mês e quem está abaixo do piso.
 export default function ProducaoDashboardPage() {
   const s = useErp()
@@ -19,13 +19,13 @@ export default function ProducaoDashboardPage() {
   return (
     <SectorDashboard
       setor="producao"
-      titulo="Books produzidos"
-      descricao="A equipe lança pelo app a quantidade de books feitos no dia. Metas diária e mensal e piso de cada pessoa."
-      tituloEquipe="Produção • metas diárias e mensais"
+      titulo="Álbuns revelados"
+      descricao="A equipe lança pelo app a quantidade de álbuns revelados no dia. Metas diária e mensal e piso de cada pessoa."
+      tituloEquipe="Revelação • metas diárias e mensais"
       antesDaEquipe={
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-          <StatCard tom="violet" label="Books hoje" valor={num(r.hoje)} detalhe={`Meta do dia: ${num(Math.round(r.meta.diaria))}`} />
-          <StatCard tom="blue" label="Books no mês" valor={num(r.mes)} detalhe={`Meta: ${num(r.meta.mensal)} • projeção ${num(Math.round(r.projecao))}`} />
+          <StatCard tom="violet" label="Álbuns hoje" valor={num(r.hoje)} detalhe={`Meta do dia: ${num(Math.round(r.meta.diaria))}`} />
+          <StatCard tom="blue" label="Álbuns no mês" valor={num(r.mes)} detalhe={`Meta: ${num(r.meta.mensal)} • projeção ${num(Math.round(r.projecao))}`} />
           <StatCard tom="emerald" label="Lançaram hoje" valor={`${lancaramHoje.size}/${time.length}`} detalhe="Pessoas que já informaram o dia" />
           <StatCard tom={abaixoDoPiso ? 'red' : 'emerald'} label="Abaixo do piso" valor={abaixoDoPiso} detalhe="No ritmo atual do mês" />
         </div>

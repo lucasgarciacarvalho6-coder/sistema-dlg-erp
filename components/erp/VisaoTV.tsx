@@ -373,7 +373,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
           <NumeroTV rotulo="Faturado no mês" valor={brl(faturado).replace(',00', '')} detalhe="Recebimentos da Cobrança" />
           <NumeroTV rotulo="Fichas fotografadas" valor={num(fotografado.mes)} detalhe={`${pct(fotografado.pctMes)} da meta mensal`} />
           <NumeroTV rotulo="Contratos fechados" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} />
-          <NumeroTV rotulo="Books produzidos" valor={num(books.mes)} detalhe={`Hoje ${num(books.hoje)}`} />
+          <NumeroTV rotulo="Álbuns revelados" valor={num(books.mes)} detalhe={`Hoje ${num(books.hoje)}`} />
         </div>
         <PlacarAreas s={s} mes={mes} grande />
       </div>

@@ -42,14 +42,14 @@ export async function proxy(request: NextRequest) {
   if (!colab || colab.status !== 'ATIVO') return redirecionar('/login')
   const inicio = colab.setor === 'producao' && colab.perfil === 'COLABORADOR' ? '/app/producao' : (SETORES[colab.setor as Setor]?.home ?? '/login')
 
-  // Apps de celular: vendedor externo → /app/vendedor; equipe da Produção → /app/producao (ADM pode abrir os dois)
+  // Apps de celular: vendedor externo → /app/vendedor; equipe da Revelação (id 'producao') → /app/producao (ADM pode abrir os dois)
   if (ehApp) {
     const dono = subrota === 'vendedor' ? 'externo' : subrota === 'producao' ? 'producao' : ''
     if (colab.perfil === 'ADM' || colab.setor === dono) return resposta
     return redirecionar(inicio)
   }
 
-  // Equipe da Produção e vendedores externos usam só o app de celular
+  // Equipe da Revelação (id 'producao') e vendedores externos usam só o app de celular
   if (colab.perfil === 'COLABORADOR' && (colab.setor === 'producao' || colab.setor === 'externo')) return redirecionar(inicio)
 
   const { data: permitido } = await supabase.rpc('pode', { p_modulo: modulo, p_acao: 'visualizar' })
@@ -59,5 +59,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/adm/:path*', '/gerencia/:path*', '/operacional/:path*', '/vendas/:path*', '/producao/:path*', '/financeiro/:path*', '/cobranca/:path*', '/app/:path*'],
+  matcher: ['/adm/:path*', '/gerencia/:path*', '/operacional/:path*', '/vendas/:path*', '/edicao/:path*', '/producao/:path*', '/financeiro/:path*', '/cobranca/:path*', '/app/:path*'],
 }

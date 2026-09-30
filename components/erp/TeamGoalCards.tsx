@@ -6,6 +6,7 @@ import { useErp } from '@/lib/erp/store'
 import { diaReferencia, equipeComMeta, resumo, serieMes } from '@/lib/erp/metrics'
 import { formatar, iniciais, mesAtual, pct } from '@/lib/erp/format'
 import { Avatar, BarChart, Badge, EmptyState, ProgressBar, TONS } from './ui'
+import { LinhaBonus } from '@/components/edicao/Bonus'
 
 // Um cartão por colaborador: meta diária (hoje), meta mensal e gráfico diário do mês.
 export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: string }) {
@@ -70,6 +71,8 @@ export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: strin
                     <span>{pct(r.pctMes)} da meta mensal</span>
                     <span>Projeção: {formatar(r.projecao, ind.unidade)}</span>
                   </div>
+                  {/* Produção: bônus do mês pelos álbuns entregues */}
+                  {setor === 'edicao' && idx === 0 && <LinhaBonus albuns={r.mes} className="mt-3" />}
                 </div>
               )
             })}

@@ -21,6 +21,7 @@ import { carregarDoSupabase, traduzirErro } from './supabase-sync'
 import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
 import { lerJSON } from './operacional'
 import { chaveCustoVariavel } from './operacoes-financeiro'
+import type { AcaoLote, DadosAcaoLote, EtapaLote } from './producao'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -768,6 +769,67 @@ export async function enviarFechamento(id: string): Promise<string | null> {
   })
   avisar(erro ?? 'Enviado ao financeiro.', erro ? 'erro' : 'ok')
   return erro
+}
+
+// ---------------- PRODUÇÃO (setor 'edicao') ----------------
+// Traz para a Produção as visitas encerradas antes do controle existir (as novas entram sozinhas ao encerrar)
+export async function trazerParaProducao(visitaIds: string[]): Promise<string | null> {
+  if (!visitaIds.length) return null
+  if (MODO === 'supabase') return gravar(() => sb().rpc('producao_trazer_visitas', { p_visitas: visitaIds }), 'Escolas trazidas para a Produção.')
+  let n = 0
+  mutar((d, ctx) => {
+    n = F.trazerParaProducao(d, visitaIds, ctx)
+  })
+  avisar(n ? `${n} escola(s) trazida(s) para a Produção.` : 'Nenhuma escola nova para trazer.', n ? 'ok' : 'erro')
+  return null
+}
+
+// Supabase: funções do banco (SQL 021) garantem as regras; demo: mesmas regras em fluxos.ts
+async function acaoProducao(rpc: string, params: Record<string, unknown>, demo: (d: ErpState, ctx: F.Contexto) => string | null, ok: string): Promise<string | null> {
+  if (MODO === 'supabase') return gravar(() => sb().rpc(rpc, params), ok)
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = demo(d, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
+
+const OK_ACAO_LOTE: Record<AcaoLote, string> = {
+  fotos: 'Fotos recebidas.',
+  enviar_editor: 'Enviado ao editor.',
+  editor_devolveu: 'Voltou do editor: agora é a análise de qualidade.',
+  aprovar_qualidade: 'Aprovado! Foi para a conferência final.',
+  reprovar_qualidade: 'Álbuns devolvidos ao editor.',
+  confirmar: 'Conferência final aprovada: liberado para a Revelação.',
+  reprovar_conferencia: 'Devolvido ao editor.',
+  revelando: 'Marcado como Revelando.',
+  na_caixa: 'Marcado como Na caixa.',
+}
+
+// Botões das etapas de cada escola
+export function avancarLote(loteId: string, acao: AcaoLote, dados: DadosAcaoLote = {}): Promise<string | null> {
+  const params = {
+    p_lote: loteId,
+    p_acao: acao,
+    p_editor: dados.editorId || null,
+    p_quantidade: dados.quantidade ?? null,
+    p_motivo: dados.motivo?.trim() || null,
+    p_analista: dados.analistaId || null,
+  }
+  return acaoProducao('producao_avancar', params, (d, ctx) => F.avancarLote(d, loteId, acao, dados, ctx), OK_ACAO_LOTE[acao])
+}
+
+// Álbuns (contam na meta), pôsteres (não contam) e observação da escola
+export function ajustarLote(loteId: string, albuns: number, posteres: number, observacao: string): Promise<string | null> {
+  const params = { p_lote: loteId, p_albuns: albuns, p_posteres: posteres, p_observacao: observacao.trim() }
+  return acaoProducao('producao_ajustar', params, (d, ctx) => F.ajustarLote(d, loteId, albuns, posteres, observacao, ctx), 'Escola atualizada.')
+}
+
+// Só o ADM: coloca a escola na etapa certa (trazida de antes do controle ou clique errado)
+export function corrigirEtapaLote(loteId: string, etapa: EtapaLote, editorId: string, motivo: string): Promise<string | null> {
+  const params = { p_lote: loteId, p_etapa: etapa, p_editor: editorId || null, p_motivo: motivo.trim() || null }
+  return acaoProducao('producao_corrigir_etapa', params, (d, ctx) => F.corrigirEtapaLote(d, loteId, etapa, editorId, motivo, ctx), 'Etapa corrigida.')
 }
 
 // Financeiro › Pagamentos Operacionais: devolve o fechamento inteiro para a Operações corrigir (com o motivo)

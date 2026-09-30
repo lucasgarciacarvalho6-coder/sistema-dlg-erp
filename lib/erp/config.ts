@@ -57,14 +57,28 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     ],
     funcoes: ['Vendedor(a)', 'Supervisor(a) de vendas'],
   },
+  edicao: {
+    id: 'edicao',
+    // PRODUÇÃO nova: controla as fotos de cada escola (editor → análise de qualidade → conferência final → Revelação).
+    // Id 'edicao' por dentro, porque 'producao' ficou com a Revelação.
+    nome: 'Produção',
+    descricao: 'Fotos das escolas: editor, análise de qualidade e envio para a Revelação',
+    home: '/edicao',
+    tom: 'pink',
+    // cada colaboradora tem a sua meta: álbuns aprovados por ela e confirmados na conferência final (bônus a partir de 1.000)
+    indicadores: [{ id: 'albuns_entregues', label: 'Álbuns entregues', unidade: 'qtd', metaPadrao: { diaria: 0, mensal: 1000 } }],
+    funcoes: ['Análise de qualidade', 'Auxiliar de produção'],
+  },
   producao: {
     id: 'producao',
-    nome: 'Produção',
-    descricao: 'Impressão e montagem dos books (lançados pelo app)',
+    // Antiga "Produção": agora se chama REVELAÇÃO na tela. Por dentro continua 'producao'
+    // (enum do banco, RLS, app, metas e lançamentos) — nada muda no funcionamento.
+    nome: 'Revelação',
+    descricao: 'Revelação dos álbuns (lançados pelo app)',
     home: '/producao',
     tom: 'violet',
-    // A equipe só informa, pelo app, quantos books fez no dia
-    indicadores: [{ id: 'books', label: 'Books produzidos', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
+    // A equipe só informa, pelo app, quantos álbuns revelou no dia
+    indicadores: [{ id: 'books', label: 'Álbuns revelados', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
     funcoes: ['Produtor(a) de books', 'Montador(a) de álbuns', 'Impressão'],
   },
   financeiro: {
@@ -111,10 +125,10 @@ export const SETORES: Record<Setor, ConfigSetor> = {
 }
 
 // Setores do ERP (sem os vendedores externos, que usam só o app)
-export const SETORES_ERP: Setor[] = ['adm', 'gerencia', 'operacional', 'vendas', 'producao', 'rebolo', 'financeiro', 'cobranca']
+export const SETORES_ERP: Setor[] = ['adm', 'gerencia', 'operacional', 'vendas', 'edicao', 'producao', 'rebolo', 'financeiro', 'cobranca']
 
 // Setores com produção própria (aparecem nos painéis consolidados)
-export const SETORES_PRODUTIVOS: Setor[] = ['vendas', 'operacional', 'producao', 'rebolo', 'cobranca', 'financeiro', 'gerencia']
+export const SETORES_PRODUTIVOS: Setor[] = ['vendas', 'operacional', 'edicao', 'producao', 'rebolo', 'cobranca', 'financeiro', 'gerencia']
 
 export function perfilDoSetor(setor: Setor): Perfil {
   if (setor === 'adm') return 'ADM'
@@ -201,11 +215,22 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       ],
     },
   ],
-  producao: [
+  edicao: [
     {
       titulo: 'Produção',
       itens: [
-        { label: 'Books produzidos', href: '/producao', icone: 'dashboard' },
+        { label: 'Controle da produção', href: '/edicao', icone: 'dashboard' },
+        { label: 'Metas e bônus', href: '/edicao/metas', icone: 'target' },
+        { label: 'Editores', href: '/edicao/editores', icone: 'users' },
+        { label: 'Histórico', href: '/edicao/historico', icone: 'log' },
+      ],
+    },
+  ],
+  producao: [
+    {
+      titulo: 'Revelação',
+      itens: [
+        { label: 'Álbuns revelados', href: '/producao', icone: 'dashboard' },
         { label: 'Histórico', href: '/producao/historico', icone: 'log' },
       ],
     },

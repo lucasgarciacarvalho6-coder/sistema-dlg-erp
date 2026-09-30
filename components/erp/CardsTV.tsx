@@ -16,6 +16,7 @@ import { SETORES } from '@/lib/erp/config'
 import { diasDeMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { brl, formatar, hoje, iniciais, nomeMes, num } from '@/lib/erp/format'
 import { custoPorAluno, financeiroOperacoes } from '@/lib/erp/operacoes-financeiro'
+import { META_BONUS, bonusAlbuns, proximoBonus } from '@/lib/erp/producao'
 import { Avatar } from './ui'
 import { STATUS } from './status'
 import { corDoDia } from './PainelMeta'
@@ -67,6 +68,21 @@ function Chip({ cor, children }: { cor: string; children: ReactNode }) {
     <span className="px-[1.6cqmin] py-[0.8cqmin] rounded-lg font-black whitespace-nowrap text-[clamp(9px,3.4cqmin,15px)] border" style={{ color: cor, borderColor: `${cor}66`, backgroundColor: `${cor}1f` }}>
       {children}
     </span>
+  )
+}
+
+// Produção: bônus do mês (R$ 300 aos 1.000 álbuns + R$ 30 a cada 100 completos acima)
+function ChipBonus({ albuns }: { albuns: number }) {
+  const valor = bonusAlbuns(albuns)
+  const prox = proximoBonus(albuns)
+  return valor > 0 ? (
+    <Chip cor={VERDE}>
+      💰 Bônus {reais(valor)} • +{reais(prox.valor)} em {num(prox.faltam)}
+    </Chip>
+  ) : (
+    <Chip cor={AZUL}>
+      💰 Bônus {reais(prox.valor)} aos {num(META_BONUS)}
+    </Chip>
   )
 }
 
@@ -133,10 +149,11 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
           {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute -inset-y-1 w-[3px] rounded bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }} title={`Piso ${f(r.piso)}`}></div>}
         </div>
 
-        {/* hoje / faltam */}
+        {/* hoje / faltam (+ bônus da Produção) */}
         <div className="flex flex-wrap gap-[1.5cqmin]">
           <Chip cor={corHoje}>Hoje {f(r.hoje)}</Chip>
           {r.falta > 0 ? <Chip cor={r.faltaPiso > 0 ? VERMELHO : AMARELO}>Faltam {f(r.falta)}</Chip> : <Chip cor={VERDE}>🎯 Meta batida</Chip>}
+          {c.setor === 'edicao' && <ChipBonus albuns={r.mes} />}
         </div>
 
         {/* dias úteis */}
