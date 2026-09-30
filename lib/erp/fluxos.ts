@@ -575,6 +575,34 @@ export function enviarFechamento(d: ErpState, id: string, ctx: Contexto): string
   return null
 }
 
+// Financeiro devolve o fechamento para a Operações corrigir (mesma regra do SQL 018):
+// saem todos os pagamentos do fechamento, ele volta para "Rascunho" com o motivo e a Operações é avisada.
+export function devolverFechamento(d: ErpState, contaId: string, motivo: string, ctx: Contexto): string | null {
+  if (!motivo.trim()) return 'Informe o motivo da devolução.'
+  const c = col(d, 'contas_pagar').find((x) => x.id === contaId)
+  if (!c) return 'Pagamento não encontrado.'
+  if (!c.fechamentoId) return 'Este pagamento não veio de um fechamento da Operações.'
+  const f = col(d, 'fechamentos').find((x) => x.id === c.fechamentoId)
+  if (!f) return 'Fechamento não encontrado.'
+  if (f.status !== 'Enviado ao financeiro') return 'Este fechamento não está no Financeiro.'
+  const contas = col(d, 'contas_pagar').filter((x) => x.fechamentoId === f.id)
+  if (contas.some((x) => x.status === 'Pago')) return 'Já existe PIX pago neste fechamento: não dá para devolver.'
+  const ids = new Set(contas.map((x) => x.id))
+  d.colecoes.aprovacoes = col(d, 'aprovacoes').filter((a) => !(a.refColecao === 'contas_pagar' && a.status === 'Pendente' && ids.has(String(a.refId))))
+  d.colecoes.contas_pagar = col(d, 'contas_pagar').filter((x) => !ids.has(x.id))
+  f.status = 'Rascunho'
+  f.devolucaoMotivo = motivo.trim()
+  f.devolvidoEm = new Date().toISOString()
+  f.devolvidoPor = ctx.autorNome
+  if (f.tipo === 'escola') {
+    const v = col(d, 'agenda_visitas').find((x) => x.id === f.refId)
+    if (v && v.status === 'Fechamento enviado') v.status = 'Fotografada'
+  }
+  notificar(d, ctx, { setores: ['operacional', 'adm'], tipo: 'alerta', titulo: 'Fechamento devolvido pelo Financeiro', descricao: `${f.referencia}: ${motivo.trim()}`, link: '/operacional/fechamento' })
+  auditar(d, ctx, 'EDITAR', `Fechamento devolvido à Operações: ${f.referencia} — ${motivo.trim()}`, 'financeiro')
+  return null
+}
+
 // ---------------- Vendas Rebolo (mesmas regras do SQL 012) ----------------
 
 // Venda aprovada (ou venda interna antiga) conta na meta da vendedora: books e valor vendido

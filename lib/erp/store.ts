@@ -770,6 +770,22 @@ export async function enviarFechamento(id: string): Promise<string | null> {
   return erro
 }
 
+// Financeiro › Pagamentos Operacionais: devolve o fechamento inteiro para a Operações corrigir (com o motivo)
+export async function devolverFechamento(contaId: string, motivo: string): Promise<string | null> {
+  const ok = 'Fechamento devolvido para a Operações.'
+  if (!motivo.trim()) {
+    avisar('Informe o motivo da devolução.')
+    return 'Informe o motivo da devolução.'
+  }
+  if (MODO === 'supabase') return gravar(() => sb().rpc('devolver_fechamento', { p_conta: contaId, p_motivo: motivo.trim() }), ok)
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.devolverFechamento(d, contaId, motivo, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
+
 // Arquivo do contrato (foto/PDF). Supabase: bucket privado "contratos". Demo: guarda só o nome.
 export async function anexarArquivoContrato(arquivo: File): Promise<{ caminho: string } | { erro: string }> {
   if (arquivo.size > 10 * 1024 * 1024) return { erro: 'O arquivo precisa ter no máximo 10 MB.' }

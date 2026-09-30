@@ -27,9 +27,36 @@ const TOM_FECH: Record<string, Tom> = { Rascunho: 'yellow', 'Enviado ao financei
 const n = (v: unknown) => Number(v) || 0
 const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
 
+// Devolvido pelo Financeiro = voltou para rascunho com o motivo, para corrigir e reenviar
+const devolvido = (f?: Registro) => !!f && f.status === 'Rascunho' && !!t(f.devolucaoMotivo)
+
 function StatusFechamento({ f }: { f?: Registro }) {
   if (!f) return <Badge texto="A preparar" tom="orange" />
+  if (devolvido(f))
+    return (
+      <span className="inline-flex flex-col items-end gap-1 max-w-[240px]">
+        <Badge texto="↩ Devolvido pelo Financeiro" tom="red" />
+        <span className="text-[11px] text-red-300 text-right whitespace-normal leading-snug" title={t(f.devolucaoMotivo)}>
+          {t(f.devolucaoMotivo)}
+        </span>
+      </span>
+    )
   return <Badge texto={t(f.status)} tom={TOM_FECH[t(f.status)] ?? 'zinc'} />
+}
+
+// Aviso dentro da edição: o que o Financeiro pediu para corrigir
+function AvisoDevolucao({ f }: { f?: Registro }) {
+  if (!f || !devolvido(f)) return null
+  return (
+    <div className="bg-red-500/[0.07] border border-red-500/30 rounded-2xl p-4 space-y-1">
+      <p className="text-xs font-black uppercase tracking-widest text-red-400">↩ Devolvido pelo Financeiro para corrigir</p>
+      <p className="text-sm text-white">{t(f.devolucaoMotivo)}</p>
+      <p className="text-[11px] text-zinc-500">
+        {f.devolvidoEm ? `Em ${dataBR(t(f.devolvidoEm).slice(0, 10))}` : ''}
+        {f.devolvidoPor ? ` • por ${t(f.devolvidoPor)}` : ''} • corrija e clique em “Enviar ao financeiro” de novo.
+      </p>
+    </div>
+  )
 }
 
 export default function FechamentoOperacionalPage() {
@@ -309,6 +336,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
         </>
       }
     >
+      <AvisoDevolucao f={existente} />
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-4">
         <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Bonificação da escola</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
@@ -475,6 +503,7 @@ function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 
         </>
       }
     >
+      <AvisoDevolucao f={existente} />
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-4">
         {tipo === 'vendedor' ? (
           <>
