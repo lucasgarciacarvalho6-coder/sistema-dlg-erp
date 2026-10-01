@@ -8,6 +8,7 @@ import { dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
 import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, TONS, btnPrimario, btnSecundario, inputCls } from '@/components/erp/ui'
 import LoteDetalhe from '@/components/edicao/LoteDetalhe'
+import { Drive } from '@/components/edicao/LinkDrive'
 
 // PRODUÇÃO › Controle: a planilha da Produção dentro do sistema. Uma linha por escola (visita encerrada nas Operações),
 // com a etapa em que está: Aguardando fotos → Em edição → Análise de qualidade → Conferência final → Aguardando revelação
@@ -149,14 +150,28 @@ export default function ControleProducaoPage() {
                         {!!l.enviadoEditorEm && (
                           <span className="block text-[10px] text-zinc-500">
                             enviado {curta(l.enviadoEditorEm)}
-                            {l.driveEnvio ? ` (${String(l.driveEnvio)})` : ''}
+                            {l.driveEnvio ? (
+                              <>
+                                {' ('}
+                                <Drive valor={l.driveEnvio} />)
+                              </>
+                            ) : (
+                              ''
+                            )}
                             {etapa === 'Em edição' && l.entregaPrevista ? ` • prev. ${curta(l.entregaPrevista)}` : ''}
                           </span>
                         )}
                         {!!l.devolvidoEditorEm && (
                           <span className="block text-[10px] text-zinc-500">
                             voltou {curta(l.devolvidoEditorEm)}
-                            {l.driveDevolucao ? ` (${String(l.driveDevolucao)})` : ''}
+                            {l.driveDevolucao ? (
+                              <>
+                                {' ('}
+                                <Drive valor={l.driveDevolucao} />)
+                              </>
+                            ) : (
+                              ''
+                            )}
                           </span>
                         )}
                         {diasAtraso(l, dia) > 0 && <span className="block text-[10px] font-black text-red-400">⚠ atrasada {num(diasAtraso(l, dia))} dia(s)</span>}

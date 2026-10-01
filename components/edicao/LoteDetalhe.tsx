@@ -7,6 +7,7 @@ import { colecao } from '@/lib/erp/metrics'
 import { dataBR, dataHoraBR, hoje, num } from '@/lib/erp/format'
 import { ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, type AcaoLote, type DadosAcaoLote, type EtapaLote } from '@/lib/erp/producao'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
+import { Drive, TextoComLinks } from './LinkDrive'
 
 // PRODUÇÃO › janela de uma escola: as 7 etapas com as datas, o botão do próximo passo,
 // álbuns/pôsteres, a correção de etapa (só o ADM) e o histórico.
@@ -97,6 +98,21 @@ function Numeros({ l }: { l: Registro }) {
         <p className="text-[11px] font-bold text-emerald-400">
           ✓ {num(contados)} álbuns na meta{analista ? ` de ${analista}` : ''}
           {l.confirmadoEm ? ` (conferência final em ${dataBR(String(l.confirmadoEm))})` : ''}
+        </p>
+      )}
+      {(!!l.driveEnvio || !!l.driveDevolucao) && (
+        <p className="text-[11px] text-zinc-400">
+          {!!l.driveEnvio && (
+            <>
+              Drive do envio: <Drive valor={l.driveEnvio} />
+            </>
+          )}
+          {!!l.driveEnvio && !!l.driveDevolucao && ' • '}
+          {!!l.driveDevolucao && (
+            <>
+              Drive do recebimento: <Drive valor={l.driveDevolucao} />
+            </>
+          )}
         </p>
       )}
       {!!l.observacao && <p className="text-[11px] text-zinc-400">Obs.: {String(l.observacao)}</p>}
@@ -223,7 +239,7 @@ function ProximoPasso({ l }: { l: Registro }) {
                 </label>
                 <label className="space-y-1.5">
                   <span className={labelCls}>Drive do envio</span>
-                  <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Ex.: OneDrive, Google Drive" className={inputCls} />
+                  <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Cole o link do Google Drive / OneDrive ou escreva" className={inputCls} />
                 </label>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -244,7 +260,14 @@ function ProximoPasso({ l }: { l: Registro }) {
         <>
           {nomeEditor}
           {l.enviadoEditorEm ? ` desde ${dataBR(String(l.enviadoEditorEm))}` : ''}
-          {l.driveEnvio ? ` (${String(l.driveEnvio)})` : ''}
+          {l.driveEnvio ? (
+            <>
+              {' ('}
+              <Drive valor={l.driveEnvio} />)
+            </>
+          ) : (
+            ''
+          )}
           {l.entregaPrevista ? ` • entrega prevista ${dataBR(String(l.entregaPrevista))}` : ''}.
           {Number(l.voltas) > 0 ? ` Já voltou ${num(Number(l.voltas))} vez(es) para correção.` : ''}
           {atraso > 0 && <span className="block mt-1 font-bold text-red-400">⚠ Atrasada {num(atraso)} dia(s): a entrega era para {dataBR(String(l.entregaPrevista))}.</span>}
@@ -257,7 +280,7 @@ function ProximoPasso({ l }: { l: Registro }) {
             </label>
             <label className="space-y-1.5">
               <span className={labelCls}>Drive do recebimento</span>
-              <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Ex.: OneDrive, Google Drive" className={inputCls} />
+              <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Cole o link do Google Drive / OneDrive ou escreva" className={inputCls} />
             </label>
           </div>
           <div className="flex justify-end">
@@ -458,7 +481,11 @@ function Historico({ l }: { l: Registro }) {
                     {h.autor ? ` • ${String(h.autor)}` : ''}
                   </span>
                 </p>
-                {!!h.descricao && <p className="text-[11px] text-zinc-400 mt-0.5">{String(h.descricao)}</p>}
+                {!!h.descricao && (
+                  <p className="text-[11px] text-zinc-400 mt-0.5 break-words">
+                    <TextoComLinks texto={String(h.descricao)} />
+                  </p>
+                )}
               </div>
             </div>
           )
