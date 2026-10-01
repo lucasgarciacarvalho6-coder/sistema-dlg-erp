@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.dlgphotos.app",
+      "sha256_cert_fingerprints": ["CB:07:95:85:22:42:71:B3:6E:CC:E2:B2:A8:6D:A9:DF:EC:7E:92:4A:4A:7D:4B:B1:E4:71:40:7F:31:93:F0:B2"]
+    }
+  }
+]
