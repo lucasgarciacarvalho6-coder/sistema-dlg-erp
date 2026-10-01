@@ -79,7 +79,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     tom: 'violet',
     // A equipe só informa, pelo app, quantos álbuns revelou no dia
     indicadores: [{ id: 'books', label: 'Álbuns revelados', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
-    funcoes: ['Produtor(a) de books', 'Montador(a) de álbuns', 'Impressão'],
+    funcoes: ['Revelação'], // todos fazem o mesmo: recebem as fotos, revelam e montam o book
   },
   financeiro: {
     id: 'financeiro',

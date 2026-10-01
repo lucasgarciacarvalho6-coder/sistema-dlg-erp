@@ -56,8 +56,8 @@ const COLABORADORES: [string, string, string, Setor, string][] = [
   ['u-ed1', 'Aline Castro', 'fotos@dlgphotos.com', 'edicao', 'Análise de qualidade'],
   ['u-ed2', 'Marina Lopes', 'marina.fotos@dlgphotos.com', 'edicao', 'Análise de qualidade'],
   // Revelação (id 'producao', a antiga Produção): informa os álbuns revelados pelo app
-  ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Produtor(a) de books'],
-  ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Montador(a) de álbuns'],
+  ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Revelação'],
+  ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Revelação'],
   ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador(a)'],
   ['u-co2', 'Renata Alves', 'renata.cobranca@dlgphotos.com', 'cobranca', 'Atendente de vendas'],
   ['u-fi1', 'Eduardo Nunes', 'financeiro@dlgphotos.com', 'financeiro', 'Analista financeiro'],
