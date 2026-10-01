@@ -8,7 +8,7 @@ import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
 import { addDias, addMeses, dataBR, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
-import { ETAPAS_LOTE, ETAPA_DA_ACAO, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
+import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 
 export interface Contexto {
   autorId: string
@@ -790,6 +790,18 @@ export function avisarAtrasosProducao(d: ErpState, ctx: Contexto): number {
 // ---------------- PRODUÇÃO › Estoque: caixas da Revelação (mesmas regras do SQL 023) ----------------
 const ETAPAS_COM_REVELACAO = ['Aguardando revelação', 'Revelando', 'Na caixa']
 
+// Cor da cidade no comprovante: a que já tem; senão a próxima livre (todas usadas → a menos usada) — igual ao SQL 024
+export function corDaCidadeDemo(d: ErpState, cidade: unknown, uf: unknown): string {
+  const chave = chaveCidade(cidade, uf)
+  const cores = col(d, 'producao_cores_cidade')
+  const ja = cores.find((c) => c.chave === chave)
+  if (ja) return String(ja.cor)
+  const uso = (cor: string) => cores.filter((c) => String(c.cor).toLowerCase() === cor.toLowerCase()).length
+  const cor = [...PALETA_CIDADES].sort((a, b) => uso(a.cor) - uso(b.cor) || PALETA_CIDADES.indexOf(a) - PALETA_CIDADES.indexOf(b))[0].cor
+  inserir(d, 'producao_cores_cidade', { chave, cidade: String(cidade ?? '').trim(), uf: String(uf ?? '').trim().toUpperCase(), cor })
+  return cor
+}
+
 // A Revelação solta uma caixa: conta na meta dela (álbuns revelados) e vai para a conferência da Produção.
 // 1ª caixa → a escola fica "Revelando"; as caixas somam todos os álbuns → "Na caixa".
 export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: number; posteres: number; observacao: string; data: string }, ctx: Contexto): string | null {
@@ -805,6 +817,7 @@ export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: num
   const data = dados.data || dia
   if (data > dia) return 'A data não pode ser depois de hoje.'
   const eu = d.colaboradores.find((c) => c.id === ctx.autorId)
+  corDaCidadeDemo(d, l.cidade, l.uf) // cor do comprovante (1ª caixa da cidade ganha a cor)
   const caixas = col(d, 'producao_caixas').filter((c) => c.loteId === loteId)
   const numero = Math.max(0, ...caixas.map((c) => Number(c.numero) || 0)) + 1
   lancar(d, ctx, { setor: 'producao', indicador: 'books', colaboradorId: eu?.setor === 'producao' ? eu.id : '', quantidade: albuns, descricao: `Caixa ${numero} — ${l.escola}`, data })

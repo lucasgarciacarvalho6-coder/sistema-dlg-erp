@@ -2,19 +2,30 @@
 
 import { useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
-import { conferirCaixa, useErp, usePode } from '@/lib/erp/store'
+import { atualizarRegistro, conferirCaixa, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, num } from '@/lib/erp/format'
-import { lotesProducao } from '@/lib/erp/producao'
+import { PALETA_CIDADES, controleDaCaixa, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp/producao'
 import { EmptyState, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import Icon from '@/components/erp/Icon'
 import { imprimirComprovante } from '@/components/edicao/comprovante'
 
 // PRODUÇÃO › Estoque: a Revelação solta as caixas (app dela) → a Produção confere cada caixa →
-// confirmou: imprime o comprovante (logo, cidade, escola, caixa, álbuns, data), lacra e a caixa entra no ESTOQUE.
+// confirmou: imprime o comprovante (etiqueta na COR DA CIDADE: cidade, escola, álbuns, pôster/brindes, total e faltam),
+// lacra e a caixa entra no ESTOQUE. Cada cidade tem a sua cor (dá para trocar em "Cores das cidades").
 
 type Aba = 'conferir' | 'estoque'
 const cidadeDe = (l?: Registro) => (l ? `${String(l.cidade)}${l.uf ? `/${String(l.uf)}` : ''}` : '')
+
+// bolinha com a cor da cidade (a mesma do comprovante)
+function SeloCor({ cor, nome }: { cor: string; nome?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="inline-block w-3.5 h-3.5 rounded-full ring-1 ring-white/40" style={{ backgroundColor: cor }}></span>
+      {nome && <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-300">{nome}</span>}
+    </span>
+  )
+}
 
 export default function EstoquePage() {
   const s = useErp()
@@ -38,9 +49,22 @@ export default function EstoquePage() {
       if (cidade && cidadeDe(l) !== cidade) return false
       return !termo || [l?.escola, cidadeDe(l), nome(c.registradoPor), nome(c.conferidoPor)].some((x) => String(x ?? '').toLowerCase().includes(termo))
     })
+  const corDe = (l?: Registro) => corDaCidade(s, l?.cidade, l?.uf)
   const comprovante = (c: Registro) => {
     const l = lotes.get(String(c.loteId))
-    imprimirComprovante({ escola: String(l?.escola ?? ''), cidade: cidadeDe(l), numero: Number(c.numero), albuns: Number(c.conferidoAlbuns ?? c.albuns), data: String(c.conferidoEm) })
+    const { total, faltam } = controleDaCaixa(s, c, l)
+    imprimirComprovante({
+      escola: String(l?.escola ?? ''),
+      cidade: String(l?.cidade ?? ''),
+      uf: String(l?.uf ?? ''),
+      numero: Number(c.numero),
+      albuns: Number(c.conferidoAlbuns ?? c.albuns),
+      posteres: Number(c.conferidoPosteres ?? c.posteres) || 0,
+      data: String(c.conferidoEm),
+      cor: corDe(l).cor,
+      total,
+      faltam,
+    })
   }
   const recentes = caixas.filter((c) => conferidas.includes(c.id) && c.status === 'Em estoque')
 
@@ -74,7 +98,8 @@ export default function EstoquePage() {
             const l = lotes.get(String(c.loteId))
             return (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-white">
+                <span className="text-sm text-white flex flex-wrap items-center gap-2">
+                  <SeloCor cor={corDe(l).cor} nome={corDe(l).nome} />
                   <strong>Caixa {String(c.numero)}</strong> • {String(l?.escola)} • {cidadeDe(l)} • <strong>{num(Number(c.conferidoAlbuns))} álbuns</strong>
                 </span>
                 <button onClick={() => comprovante(c)} className={btnPrimario}>
@@ -116,18 +141,66 @@ export default function EstoquePage() {
           ) : (
             filtrar(aguardando)
               .sort((a, b) => String(a.data).localeCompare(String(b.data)) || Number(a.numero) - Number(b.numero))
-              .map((c) => <CaixaConferir key={c.id} caixa={c} lote={lotes.get(String(c.loteId))} revelacao={nome(c.registradoPor)} onConferida={() => setConferidas((x) => [...x, c.id])} />)
+              .map((c) => (
+                <CaixaConferir key={c.id} caixa={c} lote={lotes.get(String(c.loteId))} cor={corDe(lotes.get(String(c.loteId)))} revelacao={nome(c.registradoPor)} onConferida={() => setConferidas((x) => [...x, c.id])} />
+              ))
           )}
         </div>
       ) : (
-        <EmEstoque caixas={filtrar(estoque)} lotes={lotes} nome={nome} onImprimir={comprovante} />
+        <EmEstoque caixas={filtrar(estoque)} lotes={lotes} nome={nome} corDe={corDe} onImprimir={comprovante} />
       )}
+
+      <CoresDasCidades />
     </div>
   )
 }
 
+// Cores das cidades: a 1ª caixa de cada cidade ganha uma cor sozinha; aqui a Produção pode trocar
+function CoresDasCidades() {
+  const s = useErp()
+  const podeFazer = usePode()
+  const cores = colecao(s, 'producao_cores_cidade').sort((a, b) => String(a.cidade).localeCompare(String(b.cidade)))
+  if (!cores.length) return null
+  const cidadeTxt = (c: Registro) => `${String(c.cidade)}${c.uf ? `-${String(c.uf)}` : ''}`
+  const usadaPor = (cor: string, menos: string) =>
+    cores.filter((c) => c.id !== menos && String(c.cor).toLowerCase() === cor.toLowerCase()).map(cidadeTxt)
+  return (
+    <Panel titulo="Cores das cidades" subtitulo="cada cidade sai sempre na mesma cor no comprovante • a 1ª caixa da cidade ganha a cor sozinha">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {cores.map((c) => (
+          <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+            <span className="w-9 h-9 rounded-xl shrink-0 ring-1 ring-white/30" style={{ backgroundColor: String(c.cor) }}></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-white truncate">{cidadeTxt(c)}</p>
+              {podeFazer('edicao', 'editar') ? (
+                <select
+                  value={String(c.cor).toUpperCase()}
+                  onChange={(e) => void atualizarRegistro('producao_cores_cidade', c.id, { cor: e.target.value }, 'edicao')}
+                  className="mt-1 w-full bg-black/50 border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-white"
+                >
+                  {PALETA_CIDADES.map((p) => {
+                    const outras = usadaPor(p.cor, c.id)
+                    return (
+                      <option key={p.cor} value={p.cor.toUpperCase()}>
+                        {p.nome}
+                        {outras.length ? ` (também: ${outras.join(', ')})` : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+              ) : (
+                <p className="text-[11px] text-zinc-400">{nomeDaCor(String(c.cor))}</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
 // Uma caixa para conferir (igual ao controle de conferência antigo): informado × conferido
-function CaixaConferir({ caixa: c, lote: l, revelacao, onConferida }: { caixa: Registro; lote?: Registro; revelacao: string; onConferida: () => void }) {
+function CaixaConferir({ caixa: c, lote: l, cor, revelacao, onConferida }: { caixa: Registro; lote?: Registro; cor: { cor: string; nome: string }; revelacao: string; onConferida: () => void }) {
   const podeFazer = usePode()
   const [albuns, setAlbuns] = useState(String(c.albuns))
   const [posteres, setPosteres] = useState(String(c.posteres ?? 0))
@@ -151,7 +224,9 @@ function CaixaConferir({ caixa: c, lote: l, revelacao, onConferida }: { caixa: R
             {revelacao ? <> • solta por <span className="text-white">{revelacao}</span></> : null}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-3 py-1 rounded-full border border-orange-500/40 bg-orange-500/10 text-orange-300 text-[10px] font-black uppercase tracking-widest">📍 {cidadeDe(l)}</span>
+            <span className="px-3 py-1 rounded-full text-white text-[10px] font-black uppercase tracking-widest ring-1 ring-white/30" style={{ backgroundColor: cor.cor }} title={`Cor da cidade: ${cor.nome}`}>
+              📍 {cidadeDe(l)} • {cor.nome}
+            </span>
             <span className="px-3 py-1 rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-300 text-[10px] font-black uppercase tracking-widest">🏫 {String(l?.escola ?? '')}</span>
             <span className="px-3 py-1 rounded-full border border-white/20 bg-white/[0.05] text-white text-[10px] font-black uppercase tracking-widest">📦 Caixa {String(c.numero)}</span>
           </div>
@@ -197,7 +272,19 @@ function CaixaConferir({ caixa: c, lote: l, revelacao, onConferida }: { caixa: R
 }
 
 // Caixas conferidas e lacradas, agrupadas por escola (com o comprovante para reimprimir)
-function EmEstoque({ caixas, lotes, nome, onImprimir }: { caixas: Registro[]; lotes: Map<string, Registro>; nome: (id: unknown) => string; onImprimir: (c: Registro) => void }) {
+function EmEstoque({
+  caixas,
+  lotes,
+  nome,
+  corDe,
+  onImprimir,
+}: {
+  caixas: Registro[]
+  lotes: Map<string, Registro>
+  nome: (id: unknown) => string
+  corDe: (l?: Registro) => { cor: string; nome: string }
+  onImprimir: (c: Registro) => void
+}) {
   if (caixas.length === 0)
     return (
       <Panel>
@@ -213,7 +300,16 @@ function EmEstoque({ caixas, lotes, nome, onImprimir }: { caixas: Registro[]; lo
         const l = lotes.get(loteId)
         const total = cx.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0)
         return (
-          <Panel key={loteId} semPadding titulo={String(l?.escola ?? '')} subtitulo={`${cidadeDe(l)} • ${cx.length} caixa(s) • ${num(total)} álbuns em estoque`}>
+          <Panel
+            key={loteId}
+            semPadding
+            titulo={
+              <span className="flex items-center gap-2">
+                <SeloCor cor={corDe(l).cor} /> {String(l?.escola ?? '')}
+              </span>
+            }
+            subtitulo={`${cidadeDe(l)} • cor ${corDe(l).nome} • ${cx.length} caixa(s) • ${num(total)} de ${num(Number(l?.albuns) || 0)} álbuns em estoque`}
+          >
             <div className="divide-y divide-white/[0.04]">
               {cx
                 .sort((a, b) => Number(a.numero) - Number(b.numero))

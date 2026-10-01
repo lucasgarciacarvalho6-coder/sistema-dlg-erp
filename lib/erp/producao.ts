@@ -87,6 +87,42 @@ export const caixasDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_caixas')
     .filter((c) => c.loteId === loteId)
     .sort((a, b) => Number(a.numero) - Number(b.numero))
+// Comprovante: uma cor para cada CIDADE (para achar as caixas no estoque físico). Mesma lista e ordem do SQL 024.
+export const PALETA_CIDADES: { cor: string; nome: string }[] = [
+  { cor: '#7E2F5B', nome: 'Vinho' },
+  { cor: '#1D4ED8', nome: 'Azul' },
+  { cor: '#15803D', nome: 'Verde' },
+  { cor: '#C2410C', nome: 'Laranja' },
+  { cor: '#6D28D9', nome: 'Roxo' },
+  { cor: '#B91C1C', nome: 'Vermelho' },
+  { cor: '#0F766E', nome: 'Azul-petróleo' },
+  { cor: '#78350F', nome: 'Marrom' },
+  { cor: '#BE185D', nome: 'Rosa' },
+  { cor: '#1E3A8A', nome: 'Azul-marinho' },
+  { cor: '#4D7C0F', nome: 'Verde-oliva' },
+  { cor: '#0E7490', nome: 'Turquesa' },
+  { cor: '#86198F', nome: 'Púrpura' },
+  { cor: '#374151', nome: 'Cinza-escuro' },
+  { cor: '#9A3412', nome: 'Terracota' },
+  { cor: '#111111', nome: 'Preto' },
+]
+export const chaveCidade = (cidade: unknown, uf: unknown) => `${String(cidade ?? '').trim().toLowerCase()}|${String(uf ?? '').trim().toUpperCase()}`
+export const nomeDaCor = (cor: string) => PALETA_CIDADES.find((p) => p.cor.toLowerCase() === cor.toLowerCase())?.nome ?? 'Cor'
+export function corDaCidade(s: ErpState, cidade: unknown, uf: unknown): { cor: string; nome: string } {
+  const reg = colecao(s, 'producao_cores_cidade').find((c) => c.chave === chaveCidade(cidade, uf))
+  const cor = reg ? String(reg.cor) : PALETA_CIDADES[0].cor // cidade sem caixa ainda
+  return { cor, nome: nomeDaCor(cor) }
+}
+
+// Controle das caixas no comprovante: total da escola e quantos álbuns faltam depois desta caixa
+export function controleDaCaixa(s: ErpState, caixa: Registro, lote?: Registro): { total: number; faltam: number } {
+  const total = Number(lote?.albuns) || 0
+  const ateAqui = caixasDoLote(s, String(caixa.loteId))
+    .filter((c) => Number(c.numero) <= Number(caixa.numero))
+    .reduce((a, c) => a + (c.status === 'Em estoque' ? Number(c.conferidoAlbuns) || 0 : Number(c.albuns) || 0), 0)
+  return { total, faltam: Math.max(0, total - ateAqui) }
+}
+
 export const fichasDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_fichas')
     .filter((f) => f.loteId === loteId)

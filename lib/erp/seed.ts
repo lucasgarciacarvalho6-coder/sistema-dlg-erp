@@ -16,6 +16,7 @@ import {
   encerrarVisita,
   enviarFechamento,
   inserir,
+  corDaCidadeDemo,
   lancar,
   negociarTitulo,
   pagarConta,
@@ -482,6 +483,7 @@ export function gerarSeed(): ErpState {
     }
     // estoque (demo): caixas soltas pela Revelação — na caixa = 2 caixas (uma ainda para conferir); revelando = 1 caixa
     if (etapa === 'Revelando' || etapa === 'Na caixa') {
+      corDaCidadeDemo(s, l.cidade, l.uf)
       const total = Number(l.albuns)
       const partes = etapa === 'Revelando' ? [Math.ceil(total / 2)] : [Math.ceil(total * 0.6), total - Math.ceil(total * 0.6)]
       partes.forEach((albuns, k) => {
