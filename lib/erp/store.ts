@@ -835,6 +835,19 @@ export function corrigirEtapaLote(loteId: string, etapa: EtapaLote, editorId: st
   return acaoProducao('producao_corrigir_etapa', params, (d, ctx) => F.corrigirEtapaLote(d, loteId, etapa, editorId, motivo, ctx), 'Etapa corrigida.')
 }
 
+// Estoque: a Revelação solta a caixa (app dela); a Produção confere e a caixa vai para o estoque (SQL 023)
+export function registrarCaixa(loteId: string, dados: { albuns: number; posteres: number; observacao: string; data: string }): Promise<string | null> {
+  const params = { p_lote: loteId, p_albuns: dados.albuns, p_posteres: dados.posteres, p_observacao: dados.observacao.trim() || null, p_data: dados.data || null }
+  return acaoProducao('producao_registrar_caixa', params, (d, ctx) => F.registrarCaixa(d, loteId, dados, ctx), 'Caixa registrada: foi para a conferência da Produção.')
+}
+export function excluirCaixa(caixaId: string): Promise<string | null> {
+  return acaoProducao('producao_excluir_caixa', { p_caixa: caixaId }, (d, ctx) => F.excluirCaixa(d, caixaId, ctx), 'Caixa apagada.')
+}
+export function conferirCaixa(caixaId: string, dados: { albuns: number; posteres: number; observacao: string }): Promise<string | null> {
+  const params = { p_caixa: caixaId, p_albuns: dados.albuns, p_posteres: dados.posteres, p_observacao: dados.observacao.trim() || null }
+  return acaoProducao('producao_conferir_caixa', params, (d, ctx) => F.conferirCaixa(d, caixaId, dados, ctx), 'Caixa conferida: está no estoque.')
+}
+
 // Aviso de atraso do editor (sininho da Produção e do ADM). Não existe relógio no servidor:
 // o sistema confere quando alguém da Produção ou o ADM abre a tela (1 aviso por prazo, o banco garante).
 export async function avisarAtrasosProducao(): Promise<void> {

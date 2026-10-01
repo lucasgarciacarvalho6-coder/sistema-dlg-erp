@@ -1,12 +1,13 @@
 'use client'
 
-// App da Revelação (celular): a pessoa só informa quantos álbuns revelou no dia.
-// Os números vão direto para as metas da Revelação e para o dashboard do ADM.
+// App da Revelação (celular): a pessoa solta as CAIXAS (escola, álbuns, pôster/brindes e observação).
+// Cada caixa conta na meta da Revelação (álbuns revelados) e vai para a conferência da Produção (Estoque).
 
 import { useState } from 'react'
 import AppShell, { botaoApp, cardApp, inputApp, labelApp } from '@/components/app/AppShell'
-import { excluirLancamento, registrarLancamento, useErp, useUsuario } from '@/lib/erp/store'
+import { excluirCaixa, registrarCaixa, useErp, useUsuario } from '@/lib/erp/store'
 import { colecao, resumo, situacaoResumo } from '@/lib/erp/metrics'
+import { ETAPAS_REVELACAO, caixasDoLote, etapaDoLote, lotesProducao } from '@/lib/erp/producao'
 import { diasUteisDoMes } from '@/lib/erp/calendario'
 import { dataBR, hoje, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import { PillSituacao, STATUS } from '@/components/erp/status'
@@ -18,7 +19,12 @@ export default function AppProducaoPage() {
   const s = useErp()
   const usuario = useUsuario()
   const [qtd, setQtd] = useState('')
-  const [escola, setEscola] = useState('')
+  const [escolaId, setEscolaId] = useState('')
+  const [buscaEscola, setBuscaEscola] = useState('')
+  const [posteres, setPosteres] = useState('')
+  const [obs, setObs] = useState('')
+  const [dataCaixa, setDataCaixa] = useState(hoje())
+  const [apagar, setApagar] = useState<string | null>(null) // 1º toque pede confirmação
   const [enviando, setEnviando] = useState(false)
   const mes = mesAtual()
 
@@ -27,23 +33,41 @@ export default function AppProducaoPage() {
   const r = resumo(s, 'producao', 'books', mes, usuario.id)
   const situacao = situacaoResumo(r, mes)
   const meus = s.lancamentos.filter((l) => l.setor === 'producao' && l.indicador === 'books' && l.colaboradorId === usuario.id)
-  const deHoje = meus.filter((l) => l.data === hoje()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-  const escolas = [...new Set(colecao(s, 'agenda_visitas').filter((v) => v.status !== 'Agendada' && v.status !== 'Cancelada').map((v) => String(v.escola)))].sort()
+  // escolas liberadas para a Revelação (vêm da Produção)
+  const liberadas = lotesProducao(s).filter((l) => ETAPAS_REVELACAO.includes(etapaDoLote(l)))
+  const loteSel = liberadas.find((l) => l.id === escolaId)
+  const termo = buscaEscola.trim().toLowerCase()
+  const opcoes = liberadas
+    .filter((l) => !termo || `${l.escola} ${l.cidade}`.toLowerCase().includes(termo))
+    .sort((a, b) => String(a.escola).localeCompare(String(b.escola)))
+  if (loteSel && !opcoes.includes(loteSel)) opcoes.unshift(loteSel)
+  const caixasSel = loteSel ? caixasDoLote(s, loteSel.id) : []
+  const lotesPorId = new Map(lotesProducao(s).map((l) => [l.id, l]))
+  const caixasHoje = colecao(s, 'producao_caixas')
+    .filter((c) => c.registradoPor === usuario.id && String(c.data) === hoje())
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
   // últimos dias úteis do mês (até hoje)
   const uteis = diasUteisDoMes(mes).filter((d) => d <= hoje()).slice(-7)
   const porDia = (d: string) => meus.filter((l) => l.data === d).reduce((a, l) => a + l.quantidade, 0)
   const maxDia = Math.max(1, r.meta.diaria, ...uteis.map(porDia))
 
-  const lancar = async () => {
+  const soltar = async () => {
     const n = Number(qtd)
-    if (!Number.isFinite(n) || n <= 0) return
+    if (!escolaId || !Number.isFinite(n) || n <= 0) return
     setEnviando(true)
-    const erro = await registrarLancamento({ setor: 'producao', indicador: 'books', colaboradorId: usuario.id, quantidade: Math.round(n), descricao: escola ? `Escola: ${escola}` : 'Álbuns do dia', data: hoje() })
+    const erro = await registrarCaixa(escolaId, { albuns: Math.round(n), posteres: Math.round(Number(posteres) || 0), observacao: obs, data: dataCaixa })
     setEnviando(false)
     if (!erro) {
+      // a escola continua escolhida: a próxima caixa costuma ser da mesma escola
       setQtd('')
-      setEscola('')
+      setPosteres('')
+      setObs('')
     }
+  }
+  const tocarApagar = async (id: string) => {
+    if (apagar !== id) return setApagar(id)
+    setApagar(null)
+    await excluirCaixa(id)
   }
 
   return (
@@ -67,41 +91,71 @@ export default function AppProducaoPage() {
         </div>
       </div>
 
-      {/* Lançar */}
+      {/* Soltar caixa: vai para a conferência da Produção e conta na meta (álbuns revelados) */}
       <div className={`${cardApp} space-y-4`}>
-        <p className="text-sm font-black">Informar álbuns revelados</p>
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setQtd(String(Math.max(0, (Number(qtd) || 0) - 1)))} className="w-14 h-14 shrink-0 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-2xl font-black" aria-label="Menos um">
-            −
-          </button>
-          <input type="number" inputMode="numeric" min={1} value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="0" className={`${inputApp} text-center text-3xl font-black py-3`} />
-          <button type="button" onClick={() => setQtd(String((Number(qtd) || 0) + 1))} className="w-14 h-14 shrink-0 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-2xl font-black" aria-label="Mais um">
-            +
-          </button>
-        </div>
+        <p className="text-sm font-black">Soltar caixa</p>
         <div className="space-y-2">
-          <label className={labelApp}>Escola (opcional)</label>
-          <select value={escola} onChange={(e) => setEscola(e.target.value)} className={`${inputApp} appearance-none`}>
-            <option value="">Não informar</option>
-            {escolas.map((e) => (
-              <option key={e} value={e}>{e}</option>
+          <label className={labelApp}>Escola</label>
+          <input value={buscaEscola} onChange={(e) => setBuscaEscola(e.target.value)} placeholder="🔍 Buscar escola..." className={inputApp} />
+          <select value={escolaId} onChange={(e) => setEscolaId(e.target.value)} className={`${inputApp} appearance-none`}>
+            <option value="">{opcoes.length ? 'Escolha a escola' : 'Nenhuma escola encontrada'}</option>
+            {opcoes.map((l) => (
+              <option key={l.id} value={l.id}>
+                {String(l.escola)} — {String(l.cidade)}
+                {l.uf ? `/${String(l.uf)}` : ''}
+              </option>
             ))}
           </select>
+          {loteSel && (
+            <p className="text-xs text-zinc-400">
+              Já em caixas: <strong className="text-white">{num(caixasSel.reduce((a, c) => a + (Number(c.albuns) || 0), 0))}</strong> de {num(Number(loteSel.albuns))} álbuns • {caixasSel.length} caixa(s). Esta será a caixa{' '}
+              <strong className="text-white">{caixasSel.length + 1}</strong>.
+            </p>
+          )}
         </div>
-        <button onClick={lancar} disabled={enviando || !(Number(qtd) > 0)} className={botaoApp}>
-          {enviando ? 'Enviando...' : 'Lançar álbuns'}
+        <div className="space-y-2">
+          <label className={labelApp}>Data</label>
+          <input type="date" max={hoje()} value={dataCaixa} onChange={(e) => setDataCaixa(e.target.value)} className={inputApp} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelApp}>Álbuns na caixa</label>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => setQtd(String(Math.max(0, (Number(qtd) || 0) - 1)))} className="w-14 h-14 shrink-0 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-2xl font-black" aria-label="Menos um">
+              −
+            </button>
+            <input type="number" inputMode="numeric" min={1} value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="0" className={`${inputApp} text-center text-3xl font-black py-3`} />
+            <button type="button" onClick={() => setQtd(String((Number(qtd) || 0) + 1))} className="w-14 h-14 shrink-0 rounded-2xl bg-white/[0.05] border border-white/[0.08] text-2xl font-black" aria-label="Mais um">
+              +
+            </button>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className={labelApp}>Pôster/Brindes</label>
+          <input type="number" inputMode="numeric" min={0} value={posteres} onChange={(e) => setPosteres(e.target.value)} placeholder="0" className={inputApp} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelApp}>Observação (opcional)</label>
+          <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} placeholder="Ex.: faltou 1 álbum, vai na próxima caixa" className={inputApp} />
+        </div>
+        <button onClick={soltar} disabled={enviando || !escolaId || !(Number(qtd) > 0)} className={botaoApp}>
+          {enviando ? 'Enviando...' : 'Soltar caixa'}
         </button>
-        {deHoje.length > 0 && (
+        {caixasHoje.length > 0 && (
           <div className="pt-2 border-t border-white/[0.06] space-y-2">
-            <p className={labelApp}>Lançamentos de hoje (toque em ✕ para corrigir)</p>
-            {deHoje.map((l) => (
-              <div key={l.id} className="flex items-center justify-between gap-3 bg-black/40 rounded-xl px-4 py-2.5">
-                <span className="text-sm">
-                  <strong className="text-white">{num(l.quantidade)} álbuns</strong> <span className="text-zinc-500 text-xs">• {l.descricao}</span>
+            <p className={labelApp}>Caixas de hoje (✕ apaga enquanto a Produção não conferiu)</p>
+            {caixasHoje.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-3 bg-black/40 rounded-xl px-4 py-2.5">
+                <span className="text-sm min-w-0">
+                  <strong className="text-white">
+                    Caixa {String(c.numero)} • {num(Number(c.albuns))} álbuns
+                  </strong>
+                  <span className="block text-zinc-500 text-xs truncate">
+                    {String(lotesPorId.get(String(c.loteId))?.escola ?? '')} • {c.status === 'Em estoque' ? '✓ conferida (estoque)' : 'aguardando conferência'}
+                  </span>
                 </span>
-                {l.origem === 'manual' && (
-                  <button onClick={() => excluirLancamento(l.id)} className="text-zinc-500 hover:text-red-400 text-lg px-2" aria-label="Remover lançamento">
-                    ✕
+                {c.status !== 'Em estoque' && (
+                  <button onClick={() => tocarApagar(c.id)} className={`shrink-0 px-2 ${apagar === c.id ? 'text-red-400 text-xs font-black' : 'text-zinc-500 hover:text-red-400 text-lg'}`} aria-label="Apagar caixa">
+                    {apagar === c.id ? 'Apagar?' : '✕'}
                   </button>
                 )}
               </div>

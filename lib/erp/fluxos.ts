@@ -787,6 +787,99 @@ export function avisarAtrasosProducao(d: ErpState, ctx: Contexto): number {
   return n
 }
 
+// ---------------- PRODUÇÃO › Estoque: caixas da Revelação (mesmas regras do SQL 023) ----------------
+const ETAPAS_COM_REVELACAO = ['Aguardando revelação', 'Revelando', 'Na caixa']
+
+// A Revelação solta uma caixa: conta na meta dela (álbuns revelados) e vai para a conferência da Produção.
+// 1ª caixa → a escola fica "Revelando"; as caixas somam todos os álbuns → "Na caixa".
+export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: number; posteres: number; observacao: string; data: string }, ctx: Contexto): string | null {
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada.'
+  const etapa = etapaDoLote(l)
+  if (!ETAPAS_COM_REVELACAO.includes(etapa)) return `Esta escola ainda não foi liberada para a Revelação (está em "${etapa}").`
+  const albuns = Math.floor(Number(dados.albuns) || 0)
+  const posteres = Math.floor(Number(dados.posteres) || 0)
+  if (albuns <= 0) return 'Informe quantos álbuns tem na caixa.'
+  if (posteres < 0) return 'Pôster/brindes não pode ser negativo.'
+  const dia = hoje()
+  const data = dados.data || dia
+  if (data > dia) return 'A data não pode ser depois de hoje.'
+  const eu = d.colaboradores.find((c) => c.id === ctx.autorId)
+  const caixas = col(d, 'producao_caixas').filter((c) => c.loteId === loteId)
+  const numero = Math.max(0, ...caixas.map((c) => Number(c.numero) || 0)) + 1
+  lancar(d, ctx, { setor: 'producao', indicador: 'books', colaboradorId: eu?.setor === 'producao' ? eu.id : '', quantidade: albuns, descricao: `Caixa ${numero} — ${l.escola}`, data })
+  const lancamento = d.lancamentos[d.lancamentos.length - 1]
+  inserir(d, 'producao_caixas', {
+    loteId,
+    numero,
+    data,
+    albuns,
+    posteres,
+    observacao: dados.observacao.trim(),
+    registradoPor: ctx.autorId,
+    lancamentoId: lancamento.id,
+    status: 'Aguardando conferência',
+    conferidoAlbuns: null,
+    conferidoPosteres: null,
+    conferenciaObs: '',
+    conferidoPor: '',
+    conferidoEm: '',
+  })
+  const hist = (etapaH: string, acao: string, descricao: string, quantidade: number | null = null) =>
+    inserir(d, 'producao_historico', { loteId, data: agora(), etapa: etapaH, acao, quantidade, descricao, autor: ctx.autorNome })
+  hist(etapa, 'Caixa da Revelação', `Caixa ${numero}: ${albuns} álbuns${posteres > 0 ? ` + ${posteres} pôster/brindes` : ''}. Aguardando a conferência da Produção.`, albuns)
+  if (etapa === 'Aguardando revelação') {
+    Object.assign(l, { etapa: 'Revelando', revelandoEm: l.revelandoEm || data })
+    hist('Revelando', 'Revelando', 'A Revelação começou a soltar as caixas.')
+  }
+  const total = col(d, 'producao_caixas').filter((c) => c.loteId === loteId).reduce((a, c) => a + (Number(c.albuns) || 0), 0)
+  if (l.etapa === 'Revelando' && total >= (Number(l.albuns) || 0)) {
+    Object.assign(l, { etapa: 'Na caixa', naCaixaEm: dia })
+    hist('Na caixa', 'Na caixa', `Todos os álbuns revelados: ${total} em ${numero} caixa(s).`)
+  }
+  notificar(d, ctx, { setores: ['edicao'], tipo: 'info', titulo: 'Caixa para conferir', descricao: `${l.escola}: caixa ${numero} com ${albuns} álbuns. Confira no Estoque.`, link: '/edicao/estoque' })
+  auditar(d, ctx, 'CRIAR', `Caixa ${numero} da Revelação: ${l.escola}`, 'producao')
+  return null
+}
+
+// Caixa registrada errado (ainda sem conferência): sai da meta junto
+export function excluirCaixa(d: ErpState, caixaId: string, ctx: Contexto): string | null {
+  const c = col(d, 'producao_caixas').find((x) => x.id === caixaId)
+  if (!c) return 'Caixa não encontrada.'
+  if (c.status !== 'Aguardando conferência') return 'Esta caixa já foi conferida e está no estoque: não dá para apagar.'
+  d.lancamentos = d.lancamentos.filter((x) => x.id !== c.lancamentoId)
+  d.colecoes.producao_caixas = col(d, 'producao_caixas').filter((x) => x.id !== caixaId)
+  const l = col(d, 'producao_lotes').find((x) => x.id === c.loteId)
+  inserir(d, 'producao_historico', { loteId: c.loteId, data: agora(), etapa: l ? etapaDoLote(l) : 'Revelando', acao: 'Caixa apagada', quantidade: Number(c.albuns), descricao: `Caixa ${c.numero} (${c.albuns} álbuns) apagada pela Revelação.`, autor: ctx.autorNome })
+  auditar(d, ctx, 'EXCLUIR', `Caixa ${c.numero} apagada`, 'producao')
+  return null
+}
+
+// A Produção confere a caixa: confirmou → ESTOQUE (o comprovante sai na tela)
+export function conferirCaixa(d: ErpState, caixaId: string, dados: { albuns: number; posteres: number; observacao: string }, ctx: Contexto): string | null {
+  const c = col(d, 'producao_caixas').find((x) => x.id === caixaId)
+  if (!c) return 'Caixa não encontrada.'
+  if (c.status !== 'Aguardando conferência') return 'Esta caixa já foi conferida.'
+  const albuns = Math.floor(Number(dados.albuns))
+  const posteres = Math.floor(Number(dados.posteres))
+  if (!(albuns >= 0) || !(posteres >= 0)) return 'Informe quantidades válidas (0 ou mais).'
+  const obs = dados.observacao.trim()
+  if ((albuns !== Number(c.albuns) || posteres !== Number(c.posteres)) && !obs) return 'A conferência não bate com o informado pela Revelação: escreva a observação.'
+  Object.assign(c, { status: 'Em estoque', conferidoAlbuns: albuns, conferidoPosteres: posteres, conferenciaObs: obs, conferidoPor: ctx.autorId, conferidoEm: hoje() })
+  const l = col(d, 'producao_lotes').find((x) => x.id === c.loteId)
+  inserir(d, 'producao_historico', {
+    loteId: c.loteId,
+    data: agora(),
+    etapa: l ? etapaDoLote(l) : 'Na caixa',
+    acao: 'Caixa conferida',
+    quantidade: albuns,
+    descricao: `Caixa ${c.numero} conferida: ${albuns} álbuns${posteres > 0 ? ` + ${posteres} pôster/brindes` : ''} • em estoque${obs ? `. Obs.: ${obs}` : ''}`,
+    autor: ctx.autorNome,
+  })
+  auditar(d, ctx, 'EDITAR', `Caixa ${c.numero} conferida: ${l?.escola ?? ''}`, 'edicao')
+  return null
+}
+
 // Retorno: as fichas que faltaram voltam para a agenda como uma visita nova (mesma escola e contrato)
 // — mesma regra do SQL 016 (agendar_retorno)
 export function agendarRetorno(d: ErpState, visitaId: string, fichas: number, data: string, ctx: Contexto): string | null {

@@ -5,7 +5,7 @@ import type { Registro } from '@/lib/erp/types'
 import { ajustarLote, avancarLote, corrigirEtapaLote, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, dataHoraBR, hoje, num } from '@/lib/erp/format'
-import { ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, type AcaoLote, type DadosAcaoLote, type EtapaLote } from '@/lib/erp/producao'
+import { ETAPAS_LOTE, TOM_ETAPA, caixasDoLote, diasAtraso, etapaDoLote, indiceEtapa, type AcaoLote, type DadosAcaoLote, type EtapaLote } from '@/lib/erp/producao'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import { Drive, TextoComLinks } from './LinkDrive'
 
@@ -76,6 +76,7 @@ function LinhaDoTempo({ l }: { l: Registro }) {
 function Numeros({ l }: { l: Registro }) {
   const s = useErp()
   const contados = Number(l.albunsContados) || 0
+  const caixas = caixasDoLote(s, l.id)
   const analista = s.colaboradores.find((c) => c.id === l.aprovadoQualidadePor)?.nome
   const itens: [string, string, string][] = [
     ['Alunos', num(Number(l.alunos)), ''],
@@ -113,6 +114,12 @@ function Numeros({ l }: { l: Registro }) {
               Drive do recebimento: <Drive valor={l.driveDevolucao} />
             </>
           )}
+        </p>
+      )}
+      {caixas.length > 0 && (
+        <p className="text-[11px] font-bold text-zinc-300">
+          📦 {num(caixas.length)} caixa(s) da Revelação • {num(caixas.reduce((a, c) => a + (Number(c.albuns) || 0), 0))} de {num(Number(l.albuns))} álbuns •{' '}
+          <span className="text-emerald-400">{num(caixas.filter((c) => c.status === 'Em estoque').length)} em estoque</span>
         </p>
       )}
       {!!l.observacao && <p className="text-[11px] text-zinc-400">Obs.: {String(l.observacao)}</p>}

@@ -222,6 +222,8 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Controle da produção', href: '/edicao', icone: 'dashboard' },
         { label: 'Metas e bônus', href: '/edicao/metas', icone: 'target' },
         { label: 'Editores', href: '/edicao/editores', icone: 'users' },
+        { label: 'Fichas', href: '/edicao/fichas', icone: 'doc' },
+        { label: 'Estoque', href: '/edicao/estoque', icone: 'box' },
         { label: 'Histórico', href: '/edicao/historico', icone: 'log' },
       ],
     },

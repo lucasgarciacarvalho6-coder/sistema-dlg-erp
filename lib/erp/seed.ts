@@ -27,7 +27,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 10 // v10: setor Produção novo (editores e escolas em cada etapa); a antiga Produção virou Revelação
+export const VERSAO_DADOS = 11 // v11: Produção com fichas dos alunos e caixas da Revelação (estoque)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -480,6 +480,35 @@ export function gerarSeed(): ErpState {
       lancar(s, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: quem, quantidade: Number(l.albuns), descricao: `Álbuns entregues: ${l.escola}`, data: String(l.confirmadoEm) })
       l.albunsContados = Number(l.albuns)
     }
+    // estoque (demo): caixas soltas pela Revelação — na caixa = 2 caixas (uma ainda para conferir); revelando = 1 caixa
+    if (etapa === 'Revelando' || etapa === 'Na caixa') {
+      const total = Number(l.albuns)
+      const partes = etapa === 'Revelando' ? [Math.ceil(total / 2)] : [Math.ceil(total * 0.6), total - Math.ceil(total * 0.6)]
+      partes.forEach((albuns, k) => {
+        const conferida = etapa === 'Na caixa' && !(i === 10 && k === 1)
+        inserir(s, 'producao_caixas', {
+          loteId: l.id,
+          numero: k + 1,
+          data: ate(13 + k),
+          albuns,
+          posteres: 0,
+          observacao: '',
+          registradoPor: 'u-pr1',
+          lancamentoId: '',
+          status: conferida ? 'Em estoque' : 'Aguardando conferência',
+          conferidoAlbuns: conferida ? albuns : null,
+          conferidoPosteres: conferida ? 0 : null,
+          conferenciaObs: '',
+          conferidoPor: conferida ? quem : '',
+          conferidoEm: conferida ? ate(14 + k) : '',
+        })
+      })
+    }
+    // fichas (demo): alguns alunos cadastrados em uma escola
+    if (i === 10)
+      ['Ana Clara Souza', 'Bernardo Lima', 'Cecília Rocha', 'Davi Martins', 'Elisa Ferreira', 'Felipe Costa'].forEach((nome, k) =>
+        inserir(s, 'producao_fichas', { loteId: l.id, codigo: String(1001 + k), nome, qtdFotos: 2 + (k % 3) }),
+      )
   })
 
   // Fechamento diário: um já enviado ao financeiro, um em rascunho (o terceiro fica pendente)

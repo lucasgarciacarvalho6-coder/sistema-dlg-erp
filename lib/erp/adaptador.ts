@@ -52,6 +52,8 @@ export const COLUNAS: Record<string, string[]> = {
   editores: ['nome', 'telefone', 'observacao', 'status'],
   producao_lotes: [],
   producao_historico: [],
+  producao_fichas: ['lote_id', 'codigo', 'nome', 'qtd_fotos'], // fichas dos alunos (cadastro à mão)
+  producao_caixas: [], // caixas da Revelação: mudam só pelas funções do banco (SQL 023)
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade

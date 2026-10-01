@@ -81,6 +81,17 @@ export const ETAPA_DA_ACAO: Record<AcaoLote, EtapaLote> = {
   na_caixa: 'Revelando',
 }
 
+// ---- Estoque: caixas que a Revelação solta (cada escola pode ter várias) ----
+export const ETAPAS_REVELACAO: EtapaLote[] = ['Aguardando revelação', 'Revelando', 'Na caixa']
+export const caixasDoLote = (s: ErpState, loteId: string) =>
+  colecao(s, 'producao_caixas')
+    .filter((c) => c.loteId === loteId)
+    .sort((a, b) => Number(a.numero) - Number(b.numero))
+export const fichasDoLote = (s: ErpState, loteId: string) =>
+  colecao(s, 'producao_fichas')
+    .filter((f) => f.loteId === loteId)
+    .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }))
+
 // Visitas já encerradas que ainda não estão na Produção (para trazer as escolas que estavam em andamento)
 export function visitasForaDaProducao(s: ErpState) {
   const jaEstao = new Set(lotesProducao(s).map((l) => String(l.visitaId)))
