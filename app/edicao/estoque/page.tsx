@@ -5,13 +5,13 @@ import type { Registro } from '@/lib/erp/types'
 import { atualizarRegistro, conferirCaixa, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, num } from '@/lib/erp/format'
-import { PALETA_CIDADES, controleDaCaixa, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp/producao'
+import { PALETA_CIDADES, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp/producao'
 import { EmptyState, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import Icon from '@/components/erp/Icon'
 import { imprimirComprovantes, type Comprovante } from '@/components/edicao/comprovante'
 
 // PRODUÇÃO › Estoque: a Revelação solta as caixas (app dela) → a Produção confere cada caixa →
-// confirmou: imprime o comprovante (etiqueta na COR DA CIDADE: cidade, escola, álbuns, pôster/brindes, total e faltam),
+// confirmou: imprime o comprovante (etiqueta na COR DA CIDADE: cidade, escola, álbuns e pôster/brindes),
 // lacra e a caixa entra no ESTOQUE. Cada cidade tem a sua cor (dá para trocar em "Cores das cidades").
 // Dá para marcar vários comprovantes e imprimir juntos: 2 por folha A4 (economiza a folha).
 
@@ -54,7 +54,6 @@ export default function EstoquePage() {
   const corDe = (l?: Registro) => corDaCidade(s, l?.cidade, l?.uf)
   const dadosComprovante = (c: Registro): Comprovante => {
     const l = lotes.get(String(c.loteId))
-    const { total, faltam } = controleDaCaixa(s, c, l)
     return {
       escola: String(l?.escola ?? ''),
       cidade: String(l?.cidade ?? ''),
@@ -64,8 +63,6 @@ export default function EstoquePage() {
       posteres: Number(c.conferidoPosteres ?? c.posteres) || 0,
       data: String(c.conferidoEm),
       cor: corDe(l).cor,
-      total,
-      faltam,
     }
   }
   const comprovante = (c: Registro) => imprimirComprovantes([dadosComprovante(c)])

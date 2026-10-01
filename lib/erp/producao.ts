@@ -114,15 +114,6 @@ export function corDaCidade(s: ErpState, cidade: unknown, uf: unknown): { cor: s
   return { cor, nome: nomeDaCor(cor) }
 }
 
-// Controle das caixas no comprovante: total da escola e quantos álbuns faltam depois desta caixa
-export function controleDaCaixa(s: ErpState, caixa: Registro, lote?: Registro): { total: number; faltam: number } {
-  const total = Number(lote?.albuns) || 0
-  const ateAqui = caixasDoLote(s, String(caixa.loteId))
-    .filter((c) => Number(c.numero) <= Number(caixa.numero))
-    .reduce((a, c) => a + (c.status === 'Em estoque' ? Number(c.conferidoAlbuns) || 0 : Number(c.albuns) || 0), 0)
-  return { total, faltam: Math.max(0, total - ateAqui) }
-}
-
 export const fichasDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_fichas')
     .filter((f) => f.loteId === loteId)

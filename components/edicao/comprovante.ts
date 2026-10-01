@@ -1,7 +1,6 @@
 // Comprovante da caixa conferida (etiqueta que vai lacrada na caixa para o estoque), igual à etiqueta usada hoje:
 // etiqueta na COR DA CIDADE (para achar no estoque físico), letras brancas grandes —
-// cidade, escola, álbuns e pôster/brindes —, o controle (total da escola e quantos faltam),
-// e no rodapé: caixa nº e data da conferência. A logo fica menor, no canto.
+// cidade, escola, álbuns e pôster/brindes —, e no rodapé: caixa nº e data da conferência. A logo fica menor, no canto.
 // Tamanho: 16,5 × 13,5 cm, 2 por folha A4 EM PÉ (1 em cima e 1 embaixo, para economizar a folha) — recortar e colar na caixa.
 import { dataBR, num } from '@/lib/erp/format'
 
@@ -14,8 +13,6 @@ export type Comprovante = {
   posteres: number
   data: string
   cor: string
-  total: number
-  faltam: number
 }
 
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
@@ -37,7 +34,6 @@ function etiqueta(c: Comprovante, logo: string) {
   <div class="escola" style="font-size: ${tamanho(c.escola, 12).toFixed(1)}mm">${esc(c.escola)}</div>
   <div class="albuns">${albuns}</div>
   ${posteres ? `<div class="posteres">${posteres}</div>` : ''}
-  <div class="controle">Total da escola: ${num(c.total)} álbuns • Faltam: ${num(c.faltam)}</div>
   <div class="rodape">Caixa ${c.numero} • conferida em ${dataBR(c.data)}</div>
 </div>`
 }
@@ -71,8 +67,7 @@ export function imprimirComprovantes(lista: Comprovante[]) {
   .escola { line-height: 1.1; margin-top: 3mm; }
   .albuns { font-size: 13mm; line-height: 1.1; margin-top: 3mm; }
   .posteres { font-size: 7.5mm; line-height: 1.1; }
-  .controle { font-size: 4.6mm; margin-top: 4mm; padding: 1.3mm 4mm; border: 0.5mm solid rgba(255,255,255,.75); border-radius: 2.5mm; }
-  .rodape { position: absolute; bottom: 5mm; left: 0; right: 0; font-size: 4.8mm; font-weight: 700; }
+  .rodape { position: absolute; bottom: 5mm; left: 0; right: 0; font-size: 8mm; font-weight: 700; }
 </style></head><body>
 ${folhas.join('\n')}
 <script>window.onload = function () { window.focus(); window.print(); };</script>
