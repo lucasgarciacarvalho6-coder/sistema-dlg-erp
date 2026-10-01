@@ -468,7 +468,13 @@ export function gerarSeed(): ErpState {
       naCaixaEm: passou(6) ? ate(15) : '',
       posteres: i === 7 ? 2 : 0,
       albuns: Number(l.alunos) - (i === 7 ? 2 : 0),
+      // prazo do editor e drives (a 1ª escola com o editor fica atrasada, para mostrar o aviso)
+      entregaPrevista: !passou(1) ? '' : etapa === 'Em edição' ? (i === 1 ? addDias(hoje(), -2) : addDias(hoje(), i + 2)) : ate(7),
+      driveEnvio: passou(1) ? (i % 2 ? 'Google Drive' : 'OneDrive') : '',
+      driveDevolucao: passou(2) ? 'Google Drive' : '',
+      atrasoAvisado: '',
     })
+    if (etapa === 'Em edição' && i === 1) l.enviadoEditorEm = addDias(hoje(), -6)
     // conferência final feita: os álbuns entraram na meta de quem aprovou a qualidade (1 vez por escola)
     if (passou(4)) {
       lancar(s, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: quem, quantidade: Number(l.albuns), descricao: `Álbuns entregues: ${l.escola}`, data: String(l.confirmadoEm) })

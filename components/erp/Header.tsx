@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Colaborador, Setor } from '@/lib/erp/types'
 import { SETORES } from '@/lib/erp/config'
-import { alterarSenha, avisar, definirFoto, logout, marcarLidas, useErp } from '@/lib/erp/store'
+import { alterarSenha, avisar, avisarAtrasosProducao, definirFoto, logout, marcarLidas, useErp, usePode } from '@/lib/erp/store'
 import { dataHoraBR, iniciais } from '@/lib/erp/format'
 import Icon from './Icon'
 import SeletorTema from './SeletorTema'
@@ -36,6 +36,11 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
   const [senhaAberta, setSenhaAberta] = useState(false)
   const [enviandoFoto, setEnviandoFoto] = useState(false)
   const inputFoto = useRef<HTMLInputElement>(null)
+  // Produção: confere as entregas do editor atrasadas (aviso no sininho, 1 vez por prazo)
+  const veProducao = usePode()('edicao', 'visualizar')
+  useEffect(() => {
+    if (veProducao) void avisarAtrasosProducao()
+  }, [veProducao])
 
   const trocarFoto = async (arquivo: File | undefined) => {
     if (!arquivo) return

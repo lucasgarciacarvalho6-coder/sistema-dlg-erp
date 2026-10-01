@@ -4,8 +4,8 @@ import { useState, type ReactNode } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { ajustarLote, avancarLote, corrigirEtapaLote, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { dataBR, dataHoraBR, num } from '@/lib/erp/format'
-import { ETAPAS_LOTE, TOM_ETAPA, etapaDoLote, indiceEtapa, type AcaoLote, type DadosAcaoLote, type EtapaLote } from '@/lib/erp/producao'
+import { dataBR, dataHoraBR, hoje, num } from '@/lib/erp/format'
+import { ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, type AcaoLote, type DadosAcaoLote, type EtapaLote } from '@/lib/erp/producao'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
 // PRODUÇÃO › janela de uma escola: as 7 etapas com as datas, o botão do próximo passo,
@@ -45,7 +45,7 @@ function LinhaDoTempo({ l }: { l: Registro }) {
   const analista = s.colaboradores.find((c) => c.id === l.aprovadoQualidadePor)?.nome
   const info: Record<EtapaLote, string> = {
     'Aguardando fotos': l.fotosRecebidasEm ? `fotos ✓ ${curta(l.fotosRecebidasEm)}` : `foto ${curta(l.dataFoto)}`,
-    'Em edição': [editor ? String(editor.nome) : '', curta(l.enviadoEditorEm)].filter(Boolean).join(' • '),
+    'Em edição': [editor ? String(editor.nome) : '', curta(l.enviadoEditorEm), l.entregaPrevista ? `prev. ${curta(l.entregaPrevista)}` : ''].filter(Boolean).join(' • '),
     'Análise de qualidade': curta(l.devolvidoEditorEm),
     'Conferência final': [curta(l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
     'Aguardando revelação': curta(l.confirmadoEm),
@@ -104,7 +104,7 @@ function Numeros({ l }: { l: Registro }) {
   )
 }
 
-// O botão da etapa em que a escola está (mesmas regras do banco: SQL 021)
+// O botão da etapa em que a escola está (mesmas regras do banco: SQL 022)
 function ProximoPasso({ l }: { l: Registro }) {
   const s = useErp()
   const eu = useUsuario()
@@ -116,7 +116,12 @@ function ProximoPasso({ l }: { l: Registro }) {
   const [qtd, setQtd] = useState('')
   const [motivo, setMotivo] = useState('')
   const [analistaId, setAnalistaId] = useState('')
+  const [prevista, setPrevista] = useState('') // data prevista da entrega do editor
+  const [recebido, setRecebido] = useState(hoje()) // data em que o editor devolveu
+  const [drive, setDrive] = useState('') // drive do envio / do recebimento (texto livre)
   if (!podeFazer('edicao', 'editar')) return null
+  const dia = hoje()
+  const atraso = diasAtraso(l, dia)
 
   const albuns = Number(l.albuns) || 0
   const editores = colecao(s, 'editores').filter((e) => e.status === 'Ativo')
@@ -146,7 +151,7 @@ function ProximoPasso({ l }: { l: Registro }) {
 
   const formReprovar = (acao: 'reprovar_qualidade' | 'reprovar_conferencia') => (
     <div className="rounded-xl border border-red-500/20 bg-red-500/[0.05] p-4 space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-[150px_1fr] gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-[130px_1fr_190px] gap-3">
         <label className="space-y-1.5">
           <span className={labelCls}>Álbuns com erro</span>
           <input type="number" min={1} max={albuns} value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="Ex.: 3" className={inputCls} />
@@ -155,12 +160,16 @@ function ProximoPasso({ l }: { l: Registro }) {
           <span className={labelCls}>Motivo</span>
           <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: foto tremida, nome errado na capa" className={inputCls} />
         </label>
+        <label className="space-y-1.5">
+          <span className={labelCls}>Nova entrega prevista</span>
+          <input type="date" min={dia} value={prevista} onChange={(e) => setPrevista(e.target.value)} className={inputCls} />
+        </label>
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <button onClick={() => setReprovando(false)} className={btnSecundario}>
           Cancelar
         </button>
-        <button disabled={enviando} onClick={() => fazer(acao, { quantidade: Number(qtd), motivo })} className={btnPerigo}>
+        <button disabled={enviando || !prevista} onClick={() => fazer(acao, { quantidade: Number(qtd), motivo, prevista })} className={btnPerigo}>
           Devolver ao editor
         </button>
       </div>
@@ -188,7 +197,7 @@ function ProximoPasso({ l }: { l: Registro }) {
         l.fotosRecebidasEm
           ? `Fotos recebidas em ${dataBR(String(l.fotosRecebidasEm))}. Escolha o editor que vai fazer a diagramação e a montagem.`
           : 'Aguardando as fotos dos fotógrafos. Quando chegarem, envie ao editor.',
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+        <div className="space-y-3">
           {!l.fotosRecebidasEm && (
             <button disabled={enviando} onClick={() => fazer('fotos')} className={btnSecundario}>
               ✓ Fotos recebidas
@@ -196,20 +205,33 @@ function ProximoPasso({ l }: { l: Registro }) {
           )}
           {editores.length ? (
             <>
-              <label className="flex-1 space-y-1.5">
-                <span className={labelCls}>Editor</span>
-                <select value={editorId} onChange={(e) => setEditorId(e.target.value)} className={inputCls}>
-                  <option value="">Escolha o editor…</option>
-                  {editores.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {String(e.nome)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button disabled={enviando || !editorId} onClick={() => fazer('enviar_editor', { editorId })} className={btnPrimario}>
-                Enviar ao editor
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <label className="space-y-1.5">
+                  <span className={labelCls}>Editor</span>
+                  <select value={editorId} onChange={(e) => setEditorId(e.target.value)} className={inputCls}>
+                    <option value="">Escolha o editor…</option>
+                    {editores.map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {String(e.nome)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1.5">
+                  <span className={labelCls}>Entrega prevista</span>
+                  <input type="date" min={dia} value={prevista} onChange={(e) => setPrevista(e.target.value)} className={inputCls} />
+                </label>
+                <label className="space-y-1.5">
+                  <span className={labelCls}>Drive do envio</span>
+                  <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Ex.: OneDrive, Google Drive" className={inputCls} />
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] text-zinc-500">O envio fica registrado com a data de hoje ({dataBR(dia)}).</p>
+                <button disabled={enviando || !editorId || !prevista} onClick={() => fazer('enviar_editor', { editorId, prevista, drive })} className={btnPrimario}>
+                  Enviar ao editor
+                </button>
+              </div>
             </>
           ) : (
             <p className="text-xs text-orange-300">Cadastre os editores em Produção › Editores.</p>
@@ -219,10 +241,31 @@ function ProximoPasso({ l }: { l: Registro }) {
     case 'Em edição':
       return caixa(
         'Com o editor',
-        `${nomeEditor}${l.enviadoEditorEm ? ` desde ${dataBR(String(l.enviadoEditorEm))}` : ''}.${Number(l.voltas) > 0 ? ` Já voltou ${num(Number(l.voltas))} vez(es) para correção.` : ''}`,
-        <button disabled={enviando} onClick={() => fazer('editor_devolveu')} className={btnPrimario}>
-          Editor devolveu → análise de qualidade
-        </button>,
+        <>
+          {nomeEditor}
+          {l.enviadoEditorEm ? ` desde ${dataBR(String(l.enviadoEditorEm))}` : ''}
+          {l.driveEnvio ? ` (${String(l.driveEnvio)})` : ''}
+          {l.entregaPrevista ? ` • entrega prevista ${dataBR(String(l.entregaPrevista))}` : ''}.
+          {Number(l.voltas) > 0 ? ` Já voltou ${num(Number(l.voltas))} vez(es) para correção.` : ''}
+          {atraso > 0 && <span className="block mt-1 font-bold text-red-400">⚠ Atrasada {num(atraso)} dia(s): a entrega era para {dataBR(String(l.entregaPrevista))}.</span>}
+        </>,
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="space-y-1.5">
+              <span className={labelCls}>Data do recebimento</span>
+              <input type="date" max={dia} value={recebido} onChange={(e) => setRecebido(e.target.value)} className={inputCls} />
+            </label>
+            <label className="space-y-1.5">
+              <span className={labelCls}>Drive do recebimento</span>
+              <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Ex.: OneDrive, Google Drive" className={inputCls} />
+            </label>
+          </div>
+          <div className="flex justify-end">
+            <button disabled={enviando || !recebido} onClick={() => fazer('editor_devolveu', { data: recebido, drive })} className={btnPrimario}>
+              Editor devolveu → análise de qualidade
+            </button>
+          </div>
+        </div>,
       )
     case 'Análise de qualidade':
       return caixa(

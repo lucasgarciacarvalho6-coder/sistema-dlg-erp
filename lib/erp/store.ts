@@ -816,6 +816,9 @@ export function avancarLote(loteId: string, acao: AcaoLote, dados: DadosAcaoLote
     p_quantidade: dados.quantidade ?? null,
     p_motivo: dados.motivo?.trim() || null,
     p_analista: dados.analistaId || null,
+    p_data: dados.data || null,
+    p_prevista: dados.prevista || null,
+    p_drive: dados.drive?.trim() || null,
   }
   return acaoProducao('producao_avancar', params, (d, ctx) => F.avancarLote(d, loteId, acao, dados, ctx), OK_ACAO_LOTE[acao])
 }
@@ -830,6 +833,28 @@ export function ajustarLote(loteId: string, albuns: number, posteres: number, ob
 export function corrigirEtapaLote(loteId: string, etapa: EtapaLote, editorId: string, motivo: string): Promise<string | null> {
   const params = { p_lote: loteId, p_etapa: etapa, p_editor: editorId || null, p_motivo: motivo.trim() || null }
   return acaoProducao('producao_corrigir_etapa', params, (d, ctx) => F.corrigirEtapaLote(d, loteId, etapa, editorId, motivo, ctx), 'Etapa corrigida.')
+}
+
+// Aviso de atraso do editor (sininho da Produção e do ADM). Não existe relógio no servidor:
+// o sistema confere quando alguém da Produção ou o ADM abre a tela (1 aviso por prazo, o banco garante).
+export async function avisarAtrasosProducao(): Promise<void> {
+  if (MODO === 'supabase') {
+    const { data, error } = await sb().rpc('producao_avisar_atrasos')
+    if (!error && Number(data) > 0) agendarRecarga(150)
+    return
+  }
+  let n = 0
+  const s = carregar()
+  const dia = hoje()
+  // demo: só grava se tiver escola nova atrasada (evita regravar a cada tela)
+  const temNova = F.col(s, 'producao_lotes').some(
+    (l) => l.etapa === 'Em edição' && !!l.entregaPrevista && String(l.entregaPrevista) < dia && String(l.atrasoAvisado ?? '') !== String(l.entregaPrevista),
+  )
+  if (!temNova) return
+  mutar((d, ctx) => {
+    n = F.avisarAtrasosProducao(d, ctx)
+  })
+  if (n) avisar(`${n} entrega(s) do editor atrasada(s): veja no sininho.`)
 }
 
 // Financeiro › Pagamentos Operacionais: devolve o fechamento inteiro para a Operações corrigir (com o motivo)

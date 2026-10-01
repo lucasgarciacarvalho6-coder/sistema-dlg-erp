@@ -57,6 +57,16 @@ export interface DadosAcaoLote {
   quantidade?: number // álbuns que voltam para o editor
   motivo?: string
   analistaId?: string // quem fez a análise de qualidade (quando o ADM/Gerência aprova por ela)
+  prevista?: string // data prevista da entrega do editor (ao enviar e ao devolver álbuns reprovados)
+  data?: string // data do recebimento do editor
+  drive?: string // drive do envio / do recebimento (texto livre: OneDrive, Google Drive...)
+}
+
+// Dias de atraso do editor: passou da data prevista e a escola continua "Em edição" (0 = no prazo / sem prazo)
+export function diasAtraso(l: Registro, hojeISO: string): number {
+  const prevista = String(l.entregaPrevista ?? '')
+  if (etapaDoLote(l) !== 'Em edição' || !prevista || prevista >= hojeISO) return 0
+  return Math.round((Date.parse(hojeISO) - Date.parse(prevista)) / 86400000)
 }
 // Em que etapa a escola precisa estar para cada botão
 export const ETAPA_DA_ACAO: Record<AcaoLote, EtapaLote> = {

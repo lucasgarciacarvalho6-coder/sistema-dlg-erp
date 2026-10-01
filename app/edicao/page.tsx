@@ -4,8 +4,8 @@ import { useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { trazerParaProducao, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { dataBR, mesAtual, num } from '@/lib/erp/format'
-import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
+import { dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
+import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, TONS, btnPrimario, btnSecundario, inputCls } from '@/components/erp/ui'
 import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 
@@ -13,7 +13,7 @@ import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 // com a etapa em que está: Aguardando fotos → Em edição → Análise de qualidade → Conferência final → Aguardando revelação
 // → Revelando → Na caixa. Retorno fica em laranja, como na planilha.
 
-type Filtro = 'andamento' | EtapaLote
+type Filtro = 'andamento' | 'atrasadas' | EtapaLote
 const soma = (ls: Registro[]) => ls.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
 const curta = (iso: unknown) => (iso ? dataBR(String(iso)).slice(0, 5) : '—')
 
@@ -32,10 +32,12 @@ export default function ControleProducaoPage() {
   const emProducao = lotes.filter((l) => ETAPAS_EM_PRODUCAO.includes(etapaDoLote(l)))
   const comEditores = lotes.filter((l) => etapaDoLote(l) === 'Em edição')
   const entreguesMes = lotes.filter((l) => String(l.confirmadoEm).startsWith(mes))
+  const dia = hoje()
+  const atrasadas = lotes.filter((l) => diasAtraso(l, dia) > 0) // passou da entrega prevista e continua com o editor
 
   const termo = busca.trim().toLowerCase()
   const lista = lotes
-    .filter((l) => (filtro === 'andamento' ? etapaDoLote(l) !== 'Na caixa' : etapaDoLote(l) === filtro))
+    .filter((l) => (filtro === 'andamento' ? etapaDoLote(l) !== 'Na caixa' : filtro === 'atrasadas' ? diasAtraso(l, dia) > 0 : etapaDoLote(l) === filtro))
     .filter((l) => !termo || [l.escola, l.cidade, l.vendedor, editores.get(String(l.editorId))].some((x) => String(x ?? '').toLowerCase().includes(termo)))
     .sort((a, b) => String(a.dataFoto).localeCompare(String(b.dataFoto)) || String(a.escola).localeCompare(String(b.escola)))
 
@@ -58,11 +60,16 @@ export default function ControleProducaoPage() {
       </div>
 
       {/* Etapas: clicar filtra a lista */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-3">
         <button onClick={() => setFiltro('andamento')} className={pill(filtro === 'andamento')}>
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Em andamento</p>
           <p className="text-xl font-black text-white mt-1">{lotes.filter((l) => etapaDoLote(l) !== 'Na caixa').length}</p>
           <p className="text-[10px] text-zinc-500">escolas</p>
+        </button>
+        <button onClick={() => setFiltro('atrasadas')} className={`${pill(filtro === 'atrasadas')} ${atrasadas.length && filtro !== 'atrasadas' ? '!border-red-500/40 !bg-red-500/10' : ''}`}>
+          <p className={`text-[10px] font-black uppercase tracking-widest ${atrasadas.length ? 'text-red-400' : 'text-zinc-500'}`}>⚠ Atrasadas</p>
+          <p className="text-xl font-black text-white mt-1">{atrasadas.length}</p>
+          <p className="text-[10px] text-zinc-500">com o editor</p>
         </button>
         {ETAPAS_LOTE.map((e) => {
           const ls = lotes.filter((l) => etapaDoLote(l) === e)
@@ -78,7 +85,7 @@ export default function ControleProducaoPage() {
 
       <Panel
         semPadding
-        titulo={filtro === 'andamento' ? 'Escolas em andamento' : filtro}
+        titulo={filtro === 'andamento' ? 'Escolas em andamento' : filtro === 'atrasadas' ? 'Atrasadas com o editor' : filtro}
         subtitulo={`${lista.length} escola(s) • ${num(lista.reduce((a, l) => a + (Number(l.alunos) || 0), 0))} alunos • ${num(soma(lista))} álbuns`}
         acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, vendedor ou editor" className={`${inputCls} !py-2.5 w-72 max-w-full`} />}
       >
@@ -137,14 +144,22 @@ export default function ControleProducaoPage() {
                           <span className="text-zinc-500">aguardando</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs min-w-[170px] max-w-[280px]">
                         <span className="block text-white font-bold">{editores.get(String(l.editorId)) ?? '—'}</span>
                         {!!l.enviadoEditorEm && (
                           <span className="block text-[10px] text-zinc-500">
                             enviado {curta(l.enviadoEditorEm)}
-                            {l.devolvidoEditorEm ? ` • voltou ${curta(l.devolvidoEditorEm)}` : ''}
+                            {l.driveEnvio ? ` (${String(l.driveEnvio)})` : ''}
+                            {etapa === 'Em edição' && l.entregaPrevista ? ` • prev. ${curta(l.entregaPrevista)}` : ''}
                           </span>
                         )}
+                        {!!l.devolvidoEditorEm && (
+                          <span className="block text-[10px] text-zinc-500">
+                            voltou {curta(l.devolvidoEditorEm)}
+                            {l.driveDevolucao ? ` (${String(l.driveDevolucao)})` : ''}
+                          </span>
+                        )}
+                        {diasAtraso(l, dia) > 0 && <span className="block text-[10px] font-black text-red-400">⚠ atrasada {num(diasAtraso(l, dia))} dia(s)</span>}
                         {Number(l.voltas) > 0 && (
                           <span className="block text-[10px] font-bold text-red-400">
                             ↩ {num(Number(l.voltas))} volta(s) • {num(Number(l.reprovados))} álbum(ns) reprovado(s)

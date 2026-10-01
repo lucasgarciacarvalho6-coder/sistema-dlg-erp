@@ -6,7 +6,7 @@
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
-import { addDias, addMeses, hoje, uid } from './format'
+import { addDias, addMeses, dataBR, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 
@@ -532,6 +532,10 @@ export function criarLoteProducao(d: ErpState, v: Registro, ctx: Contexto, orige
     naCaixaEm: '',
     observacao: '',
     albunsContados: 0, // álbuns que já entraram na meta (na conferência final, 1 vez por escola)
+    entregaPrevista: '', // prazo do editor
+    driveEnvio: '',
+    driveDevolucao: '',
+    atrasoAvisado: '', // data prevista que já gerou o aviso de atraso
   })
   inserir(d, 'producao_historico', {
     loteId: lote.id,
@@ -564,7 +568,7 @@ function historicoLote(d: ErpState, l: Registro, ctx: Contexto, h: { etapa: stri
   auditar(d, ctx, 'EDITAR', `Produção • ${l.escola}: ${h.acao}`, 'edicao')
 }
 
-// Botões das etapas da Produção — mesmas regras do SQL 021 (producao_avancar).
+// Botões das etapas da Produção — mesmas regras do SQL 022 (producao_avancar).
 // Na conferência final (só o ADM) os álbuns entram na meta de quem aprovou a análise de qualidade, 1 vez por escola.
 export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: DadosAcaoLote, ctx: Contexto): string | null {
   const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
@@ -575,6 +579,13 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
   const nomeEditor = String(col(d, 'editores').find((e) => e.id === l.editorId)?.nome ?? '')
   const dia = hoje()
   const albuns = Number(l.albuns) || 0
+  const drive = (dados.drive ?? '').trim()
+  const prevista = dados.prevista ?? ''
+  // prazo do editor: obrigatório ao enviar e ao devolver álbuns reprovados
+  if (acao === 'enviar_editor' || acao === 'reprovar_qualidade' || acao === 'reprovar_conferencia') {
+    if (!prevista) return 'Informe a data prevista da entrega do editor.'
+    if (prevista < dia) return 'A data prevista da entrega não pode ser antes de hoje.'
+  }
   let h: { etapa: EtapaLote; acao: string; quantidade: number | null; descricao: string }
 
   switch (acao) {
@@ -586,14 +597,34 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
     case 'enviar_editor': {
       const ed = col(d, 'editores').find((e) => e.id === dados.editorId && e.status === 'Ativo')
       if (!ed) return 'Escolha o editor.'
-      Object.assign(l, { editorId: ed.id, enviadoEditorEm: dia, devolvidoEditorEm: '', fotosRecebidasEm: l.fotosRecebidasEm || dia, etapa: 'Em edição' })
-      h = { etapa: 'Em edição', acao: 'Enviado ao editor', quantidade: null, descricao: `Fotos enviadas para ${ed.nome}.` }
+      Object.assign(l, {
+        editorId: ed.id,
+        enviadoEditorEm: dia,
+        devolvidoEditorEm: '',
+        fotosRecebidasEm: l.fotosRecebidasEm || dia,
+        etapa: 'Em edição',
+        entregaPrevista: prevista,
+        driveEnvio: drive,
+        driveDevolucao: '',
+        atrasoAvisado: '',
+      })
+      h = { etapa: 'Em edição', acao: 'Enviado ao editor', quantidade: null, descricao: `Fotos enviadas para ${ed.nome}${drive ? ` (${drive})` : ''} • entrega prevista ${dataBR(prevista)}.` }
       break
     }
-    case 'editor_devolveu':
-      Object.assign(l, { devolvidoEditorEm: dia, etapa: 'Análise de qualidade' })
-      h = { etapa: 'Análise de qualidade', acao: 'Editor devolveu', quantidade: null, descricao: `${nomeEditor || 'O editor'} devolveu os álbuns montados.` }
+    case 'editor_devolveu': {
+      const recebido = dados.data || dia
+      if (recebido > dia) return 'A data do recebimento não pode ser depois de hoje.'
+      if (l.enviadoEditorEm && recebido < String(l.enviadoEditorEm)) return `A data do recebimento não pode ser antes do envio (${dataBR(String(l.enviadoEditorEm))}).`
+      const atrasou = l.entregaPrevista && recebido > String(l.entregaPrevista) ? Math.round((Date.parse(recebido) - Date.parse(String(l.entregaPrevista))) / 86400000) : 0
+      Object.assign(l, { devolvidoEditorEm: recebido, driveDevolucao: drive, etapa: 'Análise de qualidade' })
+      h = {
+        etapa: 'Análise de qualidade',
+        acao: 'Editor devolveu',
+        quantidade: null,
+        descricao: `${nomeEditor || 'O editor'} devolveu os álbuns montados em ${dataBR(recebido)}${drive ? ` (${drive})` : ''}${atrasou ? ` • ${atrasou} dia(s) depois do previsto` : ''}.`,
+      }
       break
+    }
     case 'aprovar_qualidade': {
       // quem é da Produção aprova por si; o ADM/Gerência escolhe quem fez a análise (a meta é dela)
       let analista = eu?.setor === 'edicao' ? eu : undefined
@@ -620,6 +651,9 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         reprovados: (Number(l.reprovados) || 0) + q,
         enviadoEditorEm: dia,
         devolvidoEditorEm: '',
+        driveDevolucao: '',
+        entregaPrevista: prevista,
+        atrasoAvisado: '',
         aprovadoQualidadeEm: '',
         aprovadoQualidadePor: '',
       })
@@ -627,7 +661,7 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         etapa: 'Em edição',
         acao: acao === 'reprovar_qualidade' ? 'Reprovado na análise de qualidade' : 'Reprovado na conferência final',
         quantidade: q,
-        descricao: `${q} álbum(ns) de volta para ${nomeEditor || 'o editor'}. Motivo: ${motivo}`,
+        descricao: `${q} álbum(ns) de volta para ${nomeEditor || 'o editor'}. Motivo: ${motivo} • nova entrega prevista ${dataBR(prevista)}.`,
       }
       if (acao === 'reprovar_conferencia')
         notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Conferência final devolveu ao editor', descricao: `${l.escola}: ${q} álbum(ns) com erro. Motivo: ${motivo}`, link: '/edicao' })
@@ -690,7 +724,7 @@ export function ajustarLote(d: ErpState, loteId: string, albuns: number, postere
 
 // ADM corrige a etapa (escola trazida de antes do controle ou botão clicado por engano).
 // As datas das etapas seguintes são apagadas; os álbuns que já entraram na meta não contam de novo.
-// Mesma regra do SQL 021 (producao_corrigir_etapa).
+// Mesma regra do SQL 022 (producao_corrigir_etapa).
 export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote, editorId: string, motivo: string, ctx: Contexto): string | null {
   if (d.colaboradores.find((c) => c.id === ctx.autorId)?.perfil !== 'ADM') return 'Só o ADM corrige a etapa.'
   const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
@@ -707,7 +741,10 @@ export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote,
     etapa,
     editorId: editorFinal,
     enviadoEditorEm: k >= 1 ? l.enviadoEditorEm : '',
+    entregaPrevista: k >= 1 ? l.entregaPrevista : '',
+    driveEnvio: k >= 1 ? l.driveEnvio : '',
     devolvidoEditorEm: k >= 2 ? l.devolvidoEditorEm : '',
+    driveDevolucao: k >= 2 ? l.driveDevolucao : '',
     aprovadoQualidadeEm: k >= 3 ? l.aprovadoQualidadeEm : '',
     aprovadoQualidadePor: k >= 3 ? l.aprovadoQualidadePor : '',
     confirmadoEm: k >= 4 ? l.confirmadoEm : '',
@@ -724,6 +761,30 @@ export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote,
     descricao: `${de} → ${etapa}${nomeEd ? ` • editor ${nomeEd}` : ''}${motivo.trim() ? `. ${motivo.trim()}` : ''}`,
   })
   return null
+}
+
+// Aviso de atraso do editor: passou da data prevista e continua "Em edição" — 1 aviso por prazo.
+// Mesma regra do SQL 022 (producao_avisar_atrasos); roda quando alguém da Produção ou o ADM abre o sistema.
+export function avisarAtrasosProducao(d: ErpState, ctx: Contexto): number {
+  const dia = hoje()
+  let n = 0
+  for (const l of col(d, 'producao_lotes')) {
+    const prevista = String(l.entregaPrevista ?? '')
+    if (etapaDoLote(l) !== 'Em edição' || !prevista || prevista >= dia || String(l.atrasoAvisado ?? '') === prevista) continue
+    l.atrasoAvisado = prevista
+    const dias = Math.round((Date.parse(dia) - Date.parse(prevista)) / 86400000)
+    const editor = String(col(d, 'editores').find((e) => e.id === l.editorId)?.nome ?? 'o editor')
+    notificar(d, ctx, {
+      setores: ['edicao', 'adm'],
+      tipo: 'alerta',
+      titulo: 'Entrega do editor atrasada',
+      descricao: `${l.escola}: ${editor} não entregou — prevista para ${dataBR(prevista)} (${dias} dia(s) de atraso).`,
+      link: '/edicao',
+    })
+    inserir(d, 'producao_historico', { loteId: l.id, data: agora(), etapa: 'Em edição', acao: 'Entrega atrasada', quantidade: null, descricao: `Passou da data prevista (${dataBR(prevista)}).`, autor: 'Sistema' })
+    n++
+  }
+  return n
 }
 
 // Retorno: as fichas que faltaram voltam para a agenda como uma visita nova (mesma escola e contrato)

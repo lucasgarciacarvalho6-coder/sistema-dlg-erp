@@ -67,7 +67,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     tom: 'pink',
     // cada colaboradora tem a sua meta: álbuns aprovados por ela e confirmados na conferência final (bônus a partir de 1.000)
     indicadores: [{ id: 'albuns_entregues', label: 'Álbuns entregues', unidade: 'qtd', metaPadrao: { diaria: 0, mensal: 1000 } }],
-    funcoes: ['Análise de qualidade', 'Auxiliar de produção'],
+    funcoes: ['Análise de qualidade'],
   },
   producao: {
     id: 'producao',
