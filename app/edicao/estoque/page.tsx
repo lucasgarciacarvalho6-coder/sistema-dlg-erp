@@ -8,11 +8,12 @@ import { dataBR, num } from '@/lib/erp/format'
 import { PALETA_CIDADES, controleDaCaixa, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp/producao'
 import { EmptyState, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import Icon from '@/components/erp/Icon'
-import { imprimirComprovante } from '@/components/edicao/comprovante'
+import { imprimirComprovantes, type Comprovante } from '@/components/edicao/comprovante'
 
 // PRODUÇÃO › Estoque: a Revelação solta as caixas (app dela) → a Produção confere cada caixa →
 // confirmou: imprime o comprovante (etiqueta na COR DA CIDADE: cidade, escola, álbuns, pôster/brindes, total e faltam),
 // lacra e a caixa entra no ESTOQUE. Cada cidade tem a sua cor (dá para trocar em "Cores das cidades").
+// Dá para marcar vários comprovantes e imprimir juntos: 2 por folha A4 (economiza a folha).
 
 type Aba = 'conferir' | 'estoque'
 const cidadeDe = (l?: Registro) => (l ? `${String(l.cidade)}${l.uf ? `/${String(l.uf)}` : ''}` : '')
@@ -33,6 +34,7 @@ export default function EstoquePage() {
   const [busca, setBusca] = useState('')
   const [cidade, setCidade] = useState('')
   const [conferidas, setConferidas] = useState<string[]>([]) // conferidas agora: botão do comprovante no topo
+  const [marcadas, setMarcadas] = useState<Set<string>>(new Set()) // comprovantes marcados para imprimir juntos
 
   const lotes = new Map(lotesProducao(s).map((l) => [l.id, l]))
   const nome = (id: unknown) => s.colaboradores.find((c) => c.id === id)?.nome ?? ''
@@ -50,10 +52,10 @@ export default function EstoquePage() {
       return !termo || [l?.escola, cidadeDe(l), nome(c.registradoPor), nome(c.conferidoPor)].some((x) => String(x ?? '').toLowerCase().includes(termo))
     })
   const corDe = (l?: Registro) => corDaCidade(s, l?.cidade, l?.uf)
-  const comprovante = (c: Registro) => {
+  const dadosComprovante = (c: Registro): Comprovante => {
     const l = lotes.get(String(c.loteId))
     const { total, faltam } = controleDaCaixa(s, c, l)
-    imprimirComprovante({
+    return {
       escola: String(l?.escola ?? ''),
       cidade: String(l?.cidade ?? ''),
       uf: String(l?.uf ?? ''),
@@ -64,9 +66,39 @@ export default function EstoquePage() {
       cor: corDe(l).cor,
       total,
       faltam,
-    })
+    }
   }
+  const comprovante = (c: Registro) => imprimirComprovantes([dadosComprovante(c)])
   const recentes = caixas.filter((c) => conferidas.includes(c.id) && c.status === 'Em estoque')
+
+  // marcar vários comprovantes e imprimir juntos (2 por folha), na ordem da lista: escola e número da caixa
+  const alternar = (id: string) => {
+    const n = new Set(marcadas)
+    if (n.has(id)) n.delete(id)
+    else n.add(id)
+    setMarcadas(n)
+  }
+  const marcarTodas = (ids: string[]) => {
+    const n = new Set(marcadas)
+    const todas = ids.every((id) => n.has(id))
+    for (const id of ids) {
+      if (todas) n.delete(id)
+      else n.add(id)
+    }
+    setMarcadas(n)
+  }
+  const selecionadas = estoque
+    .filter((c) => marcadas.has(c.id))
+    .sort((a, b) => {
+      const la = lotes.get(String(a.loteId))
+      const lb = lotes.get(String(b.loteId))
+      return String(la?.escola).localeCompare(String(lb?.escola)) || String(a.loteId).localeCompare(String(b.loteId)) || Number(a.numero) - Number(b.numero)
+    })
+  const folhas = Math.ceil(selecionadas.length / 2)
+  const imprimirSelecionados = () => {
+    if (imprimirComprovantes(selecionadas.map(dadosComprovante))) setMarcadas(new Set()) // impressos: desmarca para não repetir
+  }
+  const todasMarcadas = (ids: string[]) => ids.length > 0 && ids.every((id) => marcadas.has(id))
 
   const aba1 = (id: Aba, rotulo: string, n: number) => (
     <button
@@ -93,15 +125,23 @@ export default function EstoquePage() {
       {/* acabou de conferir: o comprovante para imprimir e lacrar */}
       {recentes.length > 0 && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 space-y-3">
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Conferidas agora — imprima o comprovante e lacre a caixa</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Conferidas agora — imprima o comprovante e lacre a caixa</p>
+            {recentes.length > 1 && (
+              <button onClick={() => marcarTodas(recentes.map((c) => c.id))} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+                {todasMarcadas(recentes.map((c) => c.id)) ? 'Desmarcar todas' : 'Selecionar todas'}
+              </button>
+            )}
+          </div>
           {recentes.map((c) => {
             const l = lotes.get(String(c.loteId))
             return (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-white flex flex-wrap items-center gap-2">
+                <label className="text-sm text-white flex flex-wrap items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={marcadas.has(c.id)} onChange={() => alternar(c.id)} className="w-4 h-4 accent-blue-500" />
                   <SeloCor cor={corDe(l).cor} nome={corDe(l).nome} />
                   <strong>Caixa {String(c.numero)}</strong> • {String(l?.escola)} • {cidadeDe(l)} • <strong>{num(Number(c.conferidoAlbuns))} álbuns</strong>
-                </span>
+                </label>
                 <button onClick={() => comprovante(c)} className={btnPrimario}>
                   🖨 Imprimir comprovante
                 </button>
@@ -147,10 +187,29 @@ export default function EstoquePage() {
           )}
         </div>
       ) : (
-        <EmEstoque caixas={filtrar(estoque)} lotes={lotes} nome={nome} corDe={corDe} onImprimir={comprovante} />
+        <EmEstoque caixas={filtrar(estoque)} lotes={lotes} nome={nome} corDe={corDe} onImprimir={comprovante} marcadas={marcadas} onAlternar={alternar} onMarcarTodas={marcarTodas} />
       )}
 
       <CoresDasCidades />
+
+      {/* selecionados: imprime todos juntos, 2 por folha (fica preso no rodapé da tela) */}
+      {selecionadas.length > 0 && (
+        <div className="sticky bottom-4 z-30 mx-auto max-w-3xl rounded-2xl border border-blue-500/40 bg-black/95 shadow-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-white">
+            <strong>{selecionadas.length === 1 ? '1 comprovante selecionado' : `${num(selecionadas.length)} comprovantes selecionados`}</strong> •{' '}
+            {folhas === 1 ? '1 folha A4' : `${num(folhas)} folhas A4`}
+            <span className="block text-[10px] font-bold uppercase tracking-widest text-zinc-500">2 por folha: 1 em cima e 1 embaixo</span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setMarcadas(new Set())} className={btnSecundario}>
+              Limpar
+            </button>
+            <button onClick={imprimirSelecionados} className={btnPrimario}>
+              🖨 Imprimir selecionados
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -271,19 +330,25 @@ function CaixaConferir({ caixa: c, lote: l, cor, revelacao, onConferida }: { cai
   )
 }
 
-// Caixas conferidas e lacradas, agrupadas por escola (com o comprovante para reimprimir)
+// Caixas conferidas e lacradas, agrupadas por escola (com o comprovante para reimprimir, um ou vários juntos)
 function EmEstoque({
   caixas,
   lotes,
   nome,
   corDe,
   onImprimir,
+  marcadas,
+  onAlternar,
+  onMarcarTodas,
 }: {
   caixas: Registro[]
   lotes: Map<string, Registro>
   nome: (id: unknown) => string
   corDe: (l?: Registro) => { cor: string; nome: string }
   onImprimir: (c: Registro) => void
+  marcadas: Set<string>
+  onAlternar: (id: string) => void
+  onMarcarTodas: (ids: string[]) => void
 }) {
   if (caixas.length === 0)
     return (
@@ -299,6 +364,7 @@ function EmEstoque({
       {grupos.map(([loteId, cx]) => {
         const l = lotes.get(loteId)
         const total = cx.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0)
+        const ids = cx.map((c) => c.id)
         return (
           <Panel
             key={loteId}
@@ -309,25 +375,35 @@ function EmEstoque({
               </span>
             }
             subtitulo={`${cidadeDe(l)} • cor ${corDe(l).nome} • ${cx.length} caixa(s) • ${num(total)} de ${num(Number(l?.albuns) || 0)} álbuns em estoque`}
+            acoes={
+              cx.length > 1 && (
+                <button onClick={() => onMarcarTodas(ids)} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
+                  {ids.every((id) => marcadas.has(id)) ? 'Desmarcar todas' : 'Selecionar todas'}
+                </button>
+              )
+            }
           >
             <div className="divide-y divide-white/[0.04]">
               {cx
                 .sort((a, b) => Number(a.numero) - Number(b.numero))
                 .map((c) => (
-                  <div key={c.id} className="px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm">
-                      <span className="font-black text-white">📦 Caixa {String(c.numero)}</span>
-                      <span className="text-zinc-300">
-                        {' '}
-                        • {num(Number(c.conferidoAlbuns))} álbuns
-                        {Number(c.conferidoPosteres) > 0 ? ` + ${num(Number(c.conferidoPosteres))} pôster/brinde` : ''}
+                  <div key={c.id} className={`px-6 py-3 flex flex-wrap items-center justify-between gap-3 ${marcadas.has(c.id) ? 'bg-blue-500/[0.06]' : ''}`}>
+                    <label className="flex items-center gap-4 text-sm cursor-pointer">
+                      <input type="checkbox" checked={marcadas.has(c.id)} onChange={() => onAlternar(c.id)} className="w-4 h-4 shrink-0 accent-blue-500" />
+                      <span>
+                        <span className="font-black text-white">📦 Caixa {String(c.numero)}</span>
+                        <span className="text-zinc-300">
+                          {' '}
+                          • {num(Number(c.conferidoAlbuns))} álbuns
+                          {Number(c.conferidoPosteres) > 0 ? ` + ${num(Number(c.conferidoPosteres))} pôster/brinde` : ''}
+                        </span>
+                        <span className="block text-[11px] text-zinc-500">
+                          conferida em {dataBR(String(c.conferidoEm))}
+                          {nome(c.conferidoPor) ? ` por ${nome(c.conferidoPor)}` : ''}
+                          {c.conferenciaObs ? ` • Obs.: ${String(c.conferenciaObs)}` : ''}
+                        </span>
                       </span>
-                      <span className="block text-[11px] text-zinc-500">
-                        conferida em {dataBR(String(c.conferidoEm))}
-                        {nome(c.conferidoPor) ? ` por ${nome(c.conferidoPor)}` : ''}
-                        {c.conferenciaObs ? ` • Obs.: ${String(c.conferenciaObs)}` : ''}
-                      </span>
-                    </div>
+                    </label>
                     <button onClick={() => onImprimir(c)} className={btnSecundario}>
                       🖨 Comprovante
                     </button>
