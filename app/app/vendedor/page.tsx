@@ -335,12 +335,12 @@ function MinhasEscolas({ s, vend }: { s: ErpState; vend: Registro }) {
         const v = visitas.filter((x) => x.contratoId === c.id && x.status !== 'Cancelada').sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]
         const etapa =
           c.status === 'Cancelado'
-            ? { texto: 'Cancelado', cor: 'text-red-400' }
+            ? { texto: 'Cancelado', cor: 'text-zinc-500' }
             : c.status === 'Em conferência'
-              ? { texto: 'Em conferência', cor: 'text-orange-400' }
+              ? { texto: 'Em conferência', cor: 'text-zinc-300' }
               : v && v.status !== 'Agendada'
-                ? { texto: `Fotografada • ${num(Number(v.fichasFotografadas || 0))} fichas`, cor: 'text-emerald-400' }
-                : { texto: `Agendada • ${dataBR(String(v?.data || c.dataPrevista || ''))}`, cor: 'text-blue-400' }
+                ? { texto: `Fotografada • ${num(Number(v.fichasFotografadas || 0))} fichas`, cor: 'text-zinc-300' }
+                : { texto: `Agendada • ${dataBR(String(v?.data || c.dataPrevista || ''))}`, cor: 'text-zinc-300' }
         return (
           <div key={c.id} className={`${cardApp} py-4`}>
             <p className="text-sm font-black">{String(c.escola)}</p>
@@ -356,7 +356,7 @@ function MinhasEscolas({ s, vend }: { s: ErpState; vend: Registro }) {
 // ---------------------------------------------------------------------------
 // VENDEDOR DE BOOKS
 const SITUACAO_VENDA: Record<string, { texto: string; cor: string }> = {
-  'Aguardando conferência': { texto: 'No Financeiro', cor: 'text-orange-400' },
+  'Aguardando conferência': { texto: 'No Financeiro', cor: 'text-zinc-300' },
   Conferida: { texto: 'Conferida', cor: 'text-emerald-400' },
   Devolvida: { texto: 'Devolvida', cor: 'text-red-400' },
 }

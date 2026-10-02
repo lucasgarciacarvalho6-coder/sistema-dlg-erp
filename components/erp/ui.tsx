@@ -1,22 +1,31 @@
 // Peças visuais reaproveitáveis. As classes seguem exatamente o padrão das telas
 // do módulo Operacional (glassmorphism escuro + acento azul).
+//
+// CORES (regra do ADM): tudo que é informação fica NEUTRO. Cor só para a SITUAÇÃO (leitura de alerta):
+//   emerald = verde, está bem / ok • yellow = amarelo, atenção • red = vermelho, atrasado, parado ou ruim.
+// Os tons que só enfeitavam (blue, violet, cyan, pink, orange) saem neutros, iguais ao zinc.
+// O azul continua só na interface: botões, abas, links e foco.
 
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Tom } from '@/lib/erp/types'
 import Icon from './Icon'
 
-export const TONS: Record<Tom, { texto: string; solido: string; suave: string; borda: string; barra: string; brilho: string }> = {
-  blue: { texto: 'text-blue-400', solido: 'bg-blue-500', suave: 'bg-blue-500/10', borda: 'border-blue-500/20', barra: 'bg-gradient-to-t from-blue-600/40 to-blue-500', brilho: 'shadow-[0_0_10px_#3b82f6]' },
-  emerald: { texto: 'text-emerald-400', solido: 'bg-emerald-500', suave: 'bg-emerald-500/10', borda: 'border-emerald-500/20', barra: 'bg-gradient-to-t from-emerald-600/40 to-emerald-500', brilho: 'shadow-[0_0_10px_#10b981]' },
-  orange: { texto: 'text-orange-400', solido: 'bg-orange-500', suave: 'bg-orange-500/10', borda: 'border-orange-500/20', barra: 'bg-gradient-to-t from-orange-600/40 to-orange-500', brilho: 'shadow-[0_0_10px_#f97316]' },
-  red: { texto: 'text-red-400', solido: 'bg-red-500', suave: 'bg-red-500/10', borda: 'border-red-500/20', barra: 'bg-gradient-to-t from-red-600/40 to-red-500', brilho: 'shadow-[0_0_10px_#ef4444]' },
-  violet: { texto: 'text-violet-400', solido: 'bg-violet-500', suave: 'bg-violet-500/10', borda: 'border-violet-500/20', barra: 'bg-gradient-to-t from-violet-600/40 to-violet-500', brilho: 'shadow-[0_0_10px_#8b5cf6]' },
-  yellow: { texto: 'text-yellow-400', solido: 'bg-yellow-500', suave: 'bg-yellow-500/10', borda: 'border-yellow-500/20', barra: 'bg-gradient-to-t from-yellow-600/40 to-yellow-500', brilho: 'shadow-[0_0_10px_#eab308]' },
-  cyan: { texto: 'text-cyan-400', solido: 'bg-cyan-500', suave: 'bg-cyan-500/10', borda: 'border-cyan-500/20', barra: 'bg-gradient-to-t from-cyan-600/40 to-cyan-500', brilho: 'shadow-[0_0_10px_#06b6d4]' },
-  pink: { texto: 'text-pink-400', solido: 'bg-pink-500', suave: 'bg-pink-500/10', borda: 'border-pink-500/20', barra: 'bg-gradient-to-t from-pink-600/40 to-pink-500', brilho: 'shadow-[0_0_10px_#ec4899]' },
-  zinc: { texto: 'text-zinc-300', solido: 'bg-zinc-500', suave: 'bg-white/[0.05]', borda: 'border-white/[0.1]', barra: 'bg-gradient-to-t from-zinc-600/40 to-zinc-400', brilho: '' },
+type EstiloTom = { texto: string; solido: string; suave: string; borda: string; barra: string; brilho: string }
+const NEUTRO: EstiloTom = { texto: 'text-zinc-300', solido: 'bg-zinc-400', suave: 'bg-white/[0.05]', borda: 'border-white/[0.1]', barra: 'bg-zinc-500/70', brilho: '' }
+export const TONS: Record<Tom, EstiloTom> = {
+  blue: NEUTRO,
+  violet: NEUTRO,
+  cyan: NEUTRO,
+  pink: NEUTRO,
+  orange: NEUTRO,
+  zinc: NEUTRO,
+  emerald: { texto: 'text-emerald-400', solido: 'bg-emerald-500', suave: 'bg-emerald-500/10', borda: 'border-emerald-500/25', barra: 'bg-emerald-500/80', brilho: '' },
+  yellow: { texto: 'text-yellow-400', solido: 'bg-yellow-500', suave: 'bg-yellow-500/10', borda: 'border-yellow-500/25', barra: 'bg-yellow-500/80', brilho: '' },
+  red: { texto: 'text-red-400', solido: 'bg-red-500', suave: 'bg-red-500/10', borda: 'border-red-500/25', barra: 'bg-red-500/80', brilho: '' },
 }
+// tom de situação (tem cor) × tom neutro
+export const ehSituacao = (tom: Tom) => tom === 'emerald' || tom === 'yellow' || tom === 'red'
 
 // ---- Classes de formulário (mesmas do Controle de Rota) ----
 export const inputCls =
@@ -34,7 +43,7 @@ export function PageHeader({ modulo, titulo, descricao, acoes }: { modulo: strin
     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
       <div>
         <div className="flex items-center gap-3 mb-3">
-          <span className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></span>
+          <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
           <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-[0.2em]">{modulo}</span>
         </div>
         <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">{titulo}</h1>
@@ -92,31 +101,33 @@ export function StatCard({
   destaque?: boolean
 }) {
   const t = TONS[tom]
+  const situacao = ehSituacao(tom) // só a situação tem cor: o número sai na cor e a borda fica levemente colorida
   // valores longos (ex.: R$ 12.345,67) usam fonte menor para não quebrar no meio do número
   const longo = typeof valor === 'string' && (valor.length > 10 || (valor.includes('R$') && valor.length > 7))
   return (
-    <div
-      className={`bg-painel-2/80 border ${tom === 'zinc' ? 'border-white/[0.05]' : t.borda} p-6 rounded-3xl relative overflow-hidden group hover:-translate-y-1 transition-transform`}
-    >
-      <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} ${destaque ? 'opacity-80' : 'opacity-40'} ${t.brilho}`}></div>
-      {destaque && <div className={`absolute -bottom-10 -right-10 w-32 h-32 ${t.suave} brilho scale-150 rounded-full`}></div>}
-      <p className={`text-[10px] font-bold uppercase tracking-[0.15em] ${tom === 'zinc' ? 'text-zinc-400' : t.texto} mb-2 relative z-10`}>{label}</p>
-      <p className={`${destaque ? 'text-5xl tracking-tighter' : longo ? 'text-2xl xl:text-[1.7rem] tracking-tight whitespace-nowrap' : 'text-3xl xl:text-4xl tracking-tight'} font-black text-white relative z-10 break-words`}>{valor}</p>
+    <div className={`bg-painel-2/80 border ${situacao ? t.borda : 'border-white/[0.06]'} p-6 rounded-3xl relative overflow-hidden`}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400 mb-2">{label}</p>
+      <p
+        className={`${destaque ? 'text-5xl tracking-tighter' : longo ? 'text-2xl xl:text-[1.7rem] tracking-tight whitespace-nowrap' : 'text-3xl xl:text-4xl tracking-tight'} font-black ${situacao ? t.texto : 'text-white'} break-words`}
+      >
+        {valor}
+      </p>
       {progresso !== undefined && (
-        <div className="w-full bg-white/[0.05] h-1.5 rounded-full mt-4 overflow-hidden relative z-10">
-          <div className={`${progresso >= 100 ? 'bg-emerald-500' : t.solido} h-full rounded-full ${t.brilho}`} style={{ width: `${Math.min(100, progresso)}%` }}></div>
+        <div className="w-full bg-white/[0.06] h-1.5 rounded-full mt-4 overflow-hidden">
+          <div className={`${progresso >= 100 ? 'bg-emerald-500' : t.solido} h-full rounded-full`} style={{ width: `${Math.min(100, progresso)}%` }}></div>
         </div>
       )}
-      {detalhe && <p className="text-[10px] text-zinc-500 mt-3 uppercase tracking-widest font-bold relative z-10">{detalhe}</p>}
+      {detalhe && <p className="text-[10px] text-zinc-500 mt-3 uppercase tracking-widest font-bold">{detalhe}</p>}
     </div>
   )
 }
 
-export function ProgressBar({ valor, tom = 'blue', altura = 'h-1.5' }: { valor: number; tom?: Tom; altura?: string }) {
+// barra neutra; verde quando chega a 100% (meta batida). Para mostrar a situação, passe tom="emerald" | "yellow" | "red".
+export function ProgressBar({ valor, tom = 'zinc', altura = 'h-1.5' }: { valor: number; tom?: Tom; altura?: string }) {
   const t = TONS[valor >= 100 ? 'emerald' : tom]
   return (
-    <div className={`w-full bg-white/[0.05] ${altura} rounded-full overflow-hidden`}>
-      <div className={`${t.solido} h-full rounded-full ${t.brilho} transition-all duration-700`} style={{ width: `${Math.min(100, Math.max(0, valor))}%` }}></div>
+    <div className={`w-full bg-white/[0.06] ${altura} rounded-full overflow-hidden`}>
+      <div className={`${t.solido} h-full rounded-full transition-all duration-700`} style={{ width: `${Math.min(100, Math.max(0, valor))}%` }}></div>
     </div>
   )
 }
@@ -131,11 +142,12 @@ export function Badge({ texto, tom = 'zinc' }: { texto: ReactNode; tom?: Tom }) 
   )
 }
 
-// Gráfico de barras em divs (padrão do "Desempenho Diário das Equipas")
+// Gráfico de barras em divs (padrão do "Desempenho Diário das Equipas").
+// Barras neutras; com meta, o dia que não bateu a meta fica amarelo (atenção).
 export function BarChart({
   valores,
   meta,
-  tom = 'blue',
+  tom = 'zinc',
   altura = 'h-64',
   formatar = (v: number) => String(Math.round(v)),
   rotulos,
@@ -182,11 +194,9 @@ export function BarChart({
               ) : (
                 <div
                   title={compacto ? `Dia ${i + 1}: ${formatar(v)}` : undefined}
-                  className={`w-full rounded-t-md relative transition-all duration-500 hover:brightness-125 ${acima ? t.barra : TONS.orange.barra}`}
+                  className={`w-full rounded-t-md relative transition-all duration-500 hover:brightness-125 ${acima ? t.barra : TONS.yellow.barra}`}
                   style={{ height: `${Math.max(v > 0 ? 2 : 0, (v / max) * 100)}%` }}
-                >
-                  <div className="absolute top-0 left-0 w-full h-1 bg-white/30 rounded-t-md"></div>
-                </div>
+                ></div>
               )}
             </div>
           )
@@ -297,7 +307,7 @@ export function Avatar({ texto, foto, tamanho = 'w-9 h-9', arredondado = 'rounde
     return <img src={foto} alt={texto} className={`${tamanho} ${arredondado} shrink-0 object-cover border border-white/[0.1] bg-black`} />
   }
   return (
-    <div className={`${tamanho} ${arredondado} shrink-0 bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black ${textoCls}`}>
+    <div className={`${tamanho} ${arredondado} shrink-0 bg-white/[0.06] text-zinc-200 border border-white/[0.12] flex items-center justify-center font-black ${textoCls}`}>
       {texto}
     </div>
   )

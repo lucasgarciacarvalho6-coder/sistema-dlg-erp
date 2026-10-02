@@ -25,7 +25,6 @@ export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: strin
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {ranking.map(({ c }, pos) => (
         <div key={c.id} className="bg-painel-2/80 border border-white/[0.05] rounded-3xl p-6 relative overflow-hidden hover:border-white/[0.1] transition-all">
-          <div className="absolute -top-16 -right-16 w-40 h-40 bg-blue-600/10 brilho scale-150 rounded-full pointer-events-none"></div>
           <div className="flex items-center justify-between gap-4 mb-5 relative z-10">
             <div className="flex items-center gap-4 min-w-0">
               <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-11 h-11" />
@@ -34,7 +33,7 @@ export default function TeamGoalCards({ setor, mes }: { setor: Setor; mes: strin
                 <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">{c.funcao}</p>
               </div>
             </div>
-            <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${pos === 0 ? 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10' : 'text-zinc-400 border-white/[0.1] bg-white/[0.03]'}`}>
+            <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${pos === 0 ? 'text-white border-white/[0.2] bg-white/[0.06]' : 'text-zinc-400 border-white/[0.1] bg-white/[0.03]'}`}>
               #{pos + 1}
             </span>
           </div>

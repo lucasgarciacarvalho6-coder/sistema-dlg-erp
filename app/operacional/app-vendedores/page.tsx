@@ -64,10 +64,10 @@ export default function AppVendedoresPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="blue" label="Documentos a conferir" valor={documentos.filter((d) => d.status === 'Recebido').length} />
-        <StatCard tom="emerald" label="Vendas externas no mês" valor={vendasMes.length} detalhe={brl(vendasMes.reduce((a, v) => a + Number(v.valor || 0), 0))} />
-        <StatCard tom="violet" label="Books vendidos no mês" valor={num(vendasMes.reduce((a, v) => a + Number(v.quantidade || 1), 0))} detalhe="pelos vendedores de books" />
-        <StatCard tom="orange" label="Books devolvidos no mês" valor={num(devolucoes.filter((d) => String(d.data).startsWith(mes)).reduce((a, d) => a + Number(d.quantidade || 0), 0))} detalhe="seguem para as vendas internas" />
+        <StatCard tom={documentos.some((d) => d.status === 'Recebido') ? 'yellow' : 'zinc'} label="Documentos a conferir" valor={documentos.filter((d) => d.status === 'Recebido').length} />
+        <StatCard label="Vendas externas no mês" valor={vendasMes.length} detalhe={brl(vendasMes.reduce((a, v) => a + Number(v.valor || 0), 0))} />
+        <StatCard label="Books vendidos no mês" valor={num(vendasMes.reduce((a, v) => a + Number(v.quantidade || 1), 0))} detalhe="pelos vendedores de books" />
+        <StatCard label="Books devolvidos no mês" valor={num(devolucoes.filter((d) => String(d.data).startsWith(mes)).reduce((a, d) => a + Number(d.quantidade || 0), 0))} detalhe="seguem para as vendas internas" />
       </div>
 
       <Tabs
@@ -103,7 +103,7 @@ export default function AppVendedoresPage() {
                       <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataBR(String(d.criadoEm).slice(0, 10))}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-white font-bold">{nomeVendedor(s, d.vendedorId)}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <Badge texto={String(d.tipo)} tom={d.tipo === 'Contrato de venda' ? 'blue' : d.tipo === 'Comprovante' ? 'emerald' : 'zinc'} />
+                        <Badge texto={String(d.tipo)} />
                       </td>
                       <td className="px-4 py-3 min-w-[220px]">
                         <p className="text-white text-xs font-bold">{String(d.escola || '—')}</p>
@@ -114,13 +114,13 @@ export default function AppVendedoresPage() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {d.status === 'Conferido' ? (
-                          <Badge texto="Conferido" tom="emerald" />
+                          <Badge texto="Conferido" />
                         ) : pEditar ? (
-                          <button onClick={() => atualizarRegistro('documentos_externos', d.id, { status: 'Conferido' }, 'operacional')} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20">
+                          <button onClick={() => atualizarRegistro('documentos_externos', d.id, { status: 'Conferido' }, 'operacional')} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
                             Marcar conferido
                           </button>
                         ) : (
-                          <Badge texto="Recebido" tom="orange" />
+                          <Badge texto="Recebido" tom="yellow" />
                         )}
                       </td>
                     </tr>
@@ -202,13 +202,13 @@ export default function AppVendedoresPage() {
                       <td className="px-4 py-3 text-xs text-zinc-400">{String(d.observacao || '—')}</td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {d.status === 'Recebido na empresa' ? (
-                          <Badge texto="Recebido na empresa" tom="emerald" />
+                          <Badge texto="Recebido na empresa" />
                         ) : pEditar ? (
-                          <button onClick={() => atualizarRegistro('devolucoes_books', d.id, { status: 'Recebido na empresa' }, 'operacional')} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20">
+                          <button onClick={() => atualizarRegistro('devolucoes_books', d.id, { status: 'Recebido na empresa' }, 'operacional')} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
                             Confirmar recebimento
                           </button>
                         ) : (
-                          <Badge texto="Devolvido" tom="orange" />
+                          <Badge texto="Devolvido" tom="yellow" />
                         )}
                       </td>
                     </tr>

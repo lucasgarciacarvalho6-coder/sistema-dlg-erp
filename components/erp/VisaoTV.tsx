@@ -12,6 +12,7 @@ import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, setoresComMeta, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { GradeTV } from './CardsTV'
+import { FaixaGerente } from './GerenteVirtual'
 import Icon from './Icon'
 import { LegendaSituacao, PillSituacao, STATUS } from './status'
 import { ehDiaUtil } from '@/lib/erp/calendario'
@@ -252,7 +253,7 @@ export function GradeEvolucao({ s, mes, grande = false }: { s: ErpState; mes: st
       {!grande && (
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></span>
+            <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
             <h2 className="text-sm font-black text-white uppercase tracking-widest">Evolução do mês • realizado × meta</h2>
           </div>
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Linha colorida acima da cinza = à frente da meta • passe o mouse para ver cada dia</p>
@@ -291,8 +292,7 @@ function RelogioTV() {
 
 function NumeroTV({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; detalhe: ReactNode }) {
   return (
-    <div className="bg-painel-2/80 border border-white/[0.06] rounded-3xl px-7 py-5 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-70 shadow-[0_0_15px_#3b82f6]"></div>
+    <div className="bg-painel-2/80 border border-white/[0.08] rounded-3xl px-7 py-5 relative overflow-hidden">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">{rotulo}</p>
       <p className="text-5xl 2xl:text-6xl font-black text-white tracking-tighter mt-2 leading-none break-words">{valor}</p>
       <p className="text-xs text-zinc-500 mt-2 uppercase tracking-widest font-bold">{detalhe}</p>
@@ -380,7 +380,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
     )
   } else if (atual.id === 'equipe') {
     conteudo = (
-      <div className="h-[calc(100vh-12rem)] 2xl:h-[calc(100vh-13.5rem)]">
+      <div className="h-[calc(100vh-15.5rem)] 2xl:h-[calc(100vh-17rem)]">
         <GradeTV s={s} mes={mes} pessoas={pessoas} producao ajustar />
       </div>
     )
@@ -390,20 +390,19 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
 
   return (
     <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto custom-scrollbar">
-      <div className="absolute top-[-10%] left-[20%] w-[600px] h-[600px] bg-blue-600/10 brilho scale-150 rounded-full pointer-events-none"></div>
 
       <div className="relative z-10 px-8 py-6 2xl:p-10 space-y-5 max-w-[2200px] mx-auto">
         {/* barra superior */}
         <div className="flex items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <img src="/logo.png" alt="DLG Photos" className="w-14 h-14 object-contain drop-shadow-[0_0_20px_rgba(37,99,235,0.6)]" />
+            <img src="/logo.png" alt="DLG Photos" className="w-14 h-14 object-contain" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-300"></span>
                 </span>
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">Ao vivo</span>
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400">Ao vivo</span>
               </div>
               <h1 className="text-3xl font-black tracking-tight mt-1">
                 {atual.titulo} <span className="text-zinc-600 font-bold text-xl">• {nomeMes(mes)}</span>
@@ -432,10 +431,13 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
           </div>
         </div>
 
+        {/* gerente virtual: o que está atrasado ou parado, em todas as telas */}
+        <FaixaGerente s={s} />
+
         {/* barra de progresso da rotação */}
         {rodando && (
           <div className="h-0.5 w-full bg-white/[0.05] rounded-full overflow-hidden">
-            <div key={`${atual.id}-${indice}`} className="h-full bg-blue-500/70 animate-[tvprogresso_20s_linear_forwards]"></div>
+            <div key={`${atual.id}-${indice}`} className="h-full bg-zinc-500/70 animate-[tvprogresso_20s_linear_forwards]"></div>
           </div>
         )}
 

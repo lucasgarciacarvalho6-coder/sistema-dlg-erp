@@ -7,10 +7,11 @@ import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diasDeMeta, equipeComMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { formatar, iniciais, mesAtual, nomeMes } from '@/lib/erp/format'
-import { Avatar, EmptyState, Modal, ProgressBar, TONS, btnSecundario } from './ui'
+import { Avatar, EmptyState, Modal, ProgressBar, btnSecundario } from './ui'
 import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
 import { GradeTV } from './CardsTV'
+import { FaixaGerente } from './GerenteVirtual'
 import Icon from './Icon'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
@@ -24,7 +25,6 @@ function porDia(falta: number, diasRestantes: number, unidade: 'qtd' | 'brl') {
 // Clicar no card abre o painel completo da pessoa.
 export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; c: Colaborador; mes: string; posicao: number; onAbrir?: () => void }) {
   const cfg = SETORES[c.setor]
-  const t = TONS[cfg.tom]
   const [principal, ...outros] = cfg.indicadores
   const r = resumo(s, c.setor, principal.id, mes, c.id)
   const dias = diasDeMeta(s, c.setor, principal.id, c.id, mes)
@@ -42,10 +42,8 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
       tabIndex={onAbrir ? 0 : undefined}
       onClick={onAbrir}
       onKeyDown={(e) => onAbrir && (e.key === 'Enter' || e.key === ' ') && onAbrir()}
-      className={`bg-painel-2/80 border ${t.borda} rounded-3xl p-5 relative overflow-hidden hover:-translate-y-1 transition-all ${onAbrir ? 'cursor-pointer hover:border-blue-500/40' : ''}`}
+      className={`bg-painel-2/80 border border-white/[0.08] rounded-3xl p-5 relative overflow-hidden transition-all ${onAbrir ? 'cursor-pointer hover:border-white/[0.2]' : ''}`}
     >
-      <div className={`absolute top-0 left-0 w-full h-1 ${t.solido} opacity-70 ${t.brilho}`}></div>
-      <div className={`absolute -bottom-14 -right-14 w-40 h-40 ${t.suave} brilho scale-150 rounded-full pointer-events-none`}></div>
 
       {/* Identificação */}
       <div className="flex items-start gap-4 relative z-10">
@@ -53,7 +51,7 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-16 h-16" arredondado="rounded-2xl" textoCls="text-lg" />
           <span
             className={`absolute -bottom-2 -right-2 min-w-[26px] h-[26px] px-1 rounded-full border-2 border-painel-2 text-[10px] font-black flex items-center justify-center ${
-              posicao <= 3 ? 'bg-yellow-500 text-[#111111]' : 'bg-zinc-800 text-zinc-300'
+              posicao <= 3 ? 'bg-white text-[#111111]' : 'bg-zinc-800 text-zinc-300'
             }`}
           >
             {posicao}º
@@ -61,7 +59,7 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-base font-black text-white leading-tight line-clamp-2" title={c.nome}>{c.nome}</p>
-          <p className={`text-[10px] font-bold uppercase tracking-widest ${t.texto}`}>{cfg.nome}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{cfg.nome}</p>
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest truncate" title={c.funcao}>{c.funcao}</p>
           <div className="mt-1.5"><PillSituacao situacao={situacao} /></div>
         </div>
@@ -76,7 +74,7 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
         {temPiso && (
           <div className={mini} title={`Piso do mês: ${f(r.piso)} (mínimo para não dar prejuízo)`}>
             <p className="text-[8px] text-zinc-500 uppercase font-bold tracking-widest">Piso/dia</p>
-            <p className="text-xs font-black mt-0.5" style={{ color: STATUS.atencao.cor }}>{dec(r.pisoDiario)}</p>
+            <p className="text-xs font-black text-white mt-0.5">{dec(r.pisoDiario)}</p>
           </div>
         )}
         <div className={mini}>
@@ -107,7 +105,7 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
         <div className="mt-2 relative">
           <ProgressBar valor={r.pctMes} tom={cfg.tom} />
           {temPiso && r.meta.mensal > 0 && (
-            <div className="absolute -inset-y-1 w-0.5 rounded" style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 1px)`, backgroundColor: STATUS.atencao.cor }} title={`Piso ${f(r.piso)}`}></div>
+            <div className="absolute -inset-y-1 w-0.5 rounded bg-zinc-300" style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 1px)` }} title={`Piso ${f(r.piso)}`}></div>
           )}
         </div>
         <p className={`mt-2 text-[11px] font-bold ${r.faltaPiso > 0 ? 'text-red-400' : r.falta > 0 ? 'text-yellow-400' : 'text-emerald-400'}`}>
@@ -142,7 +140,7 @@ export function CardColaborador({ s, c, mes, posicao, onAbrir }: { s: ErpState; 
         return (
           <div key={ind.id} className="mt-3 flex items-center gap-3 relative z-10">
             <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 w-24 shrink-0 truncate">{ind.label}</span>
-            <ProgressBar valor={r2.pctMes} tom="violet" altura="h-1" />
+            <ProgressBar valor={r2.pctMes} altura="h-1" />
             <span className="text-[10px] font-bold text-zinc-300 whitespace-nowrap">
               {formatar(r2.mes, ind.unidade)} / {formatar(r2.meta.mensal, ind.unidade)}
             </span>
@@ -212,14 +210,14 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="DLG Photos" className="w-12 h-12 object-contain drop-shadow-[0_0_20px_rgba(37,99,235,0.6)]" />
+          <img src="/logo.png" alt="DLG Photos" className="w-12 h-12 object-contain" />
           <div>
             <div className="flex items-center gap-2">
               <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-zinc-300"></span>
               </span>
-              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400">Ao vivo</span>
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400">Ao vivo</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight mt-0.5">
               Equipe • metas individuais <span className="text-zinc-600 font-bold text-lg">• {filtro ? SETORES[filtro].nome : 'Todos os setores'} • {nomeMes(mes)}</span>
@@ -233,6 +231,7 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
           </button>
         </div>
       </div>
+      <FaixaGerente s={s} />
       <div className="flex-1 min-h-0">
         <GradeTV key={filtro || 'todos'} s={s} mes={mes} pessoas={lista.map(({ c }) => c)} base={todos.map(({ c }) => c)} producao={!filtro || filtro === 'edicao'} ajustar />
       </div>
@@ -273,7 +272,7 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
     <div className="space-y-5">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></span>
+          <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
           <h2 className="text-sm font-black text-white uppercase tracking-widest">Equipe • metas individuais</h2>
           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ranking por % da meta mensal</span>
         </div>

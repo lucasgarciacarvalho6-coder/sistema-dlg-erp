@@ -36,10 +36,10 @@ export default function GestaoDiariaReboloPage() {
         acoes={<input type="date" value={dia} onChange={(e) => setDia(e.target.value || hoje())} className="bg-black/50 border border-white/[0.05] text-white text-xs font-bold rounded-xl px-4 py-3 outline-none" />}
       />
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="blue" label="Contatos no dia" valor={tot('cont')} />
-        <StatCard tom="cyan" label="Vendas fechadas" valor={tot('fechadas')} detalhe="aguardando contrato / Financeiro" />
-        <StatCard tom="emerald" label="Aprovadas no dia" valor={tot('aprovadas')} detalhe={brl(linhas.reduce((a, l) => a + l.valorAprovado, 0))} />
-        <StatCard tom="yellow" label="Pacotes abertos" valor={linhas.filter((l) => l.aberto).length} detalhe={`${linhas.length} vendedora(s)`} />
+        <StatCard label="Contatos no dia" valor={tot('cont')} />
+        <StatCard label="Vendas fechadas" valor={tot('fechadas')} detalhe="aguardando contrato / Financeiro" />
+        <StatCard label="Aprovadas no dia" valor={tot('aprovadas')} detalhe={brl(linhas.reduce((a, l) => a + l.valorAprovado, 0))} />
+        <StatCard label="Pacotes abertos" valor={linhas.filter((l) => l.aberto).length} detalhe={`${linhas.length} vendedora(s)`} />
       </div>
 
       <Panel semPadding titulo="Por vendedora">
@@ -75,7 +75,7 @@ export default function GestaoDiariaReboloPage() {
                     </td>
                     <td className="px-3 py-3.5 text-center font-black text-white">{l.cont.length}</td>
                     <td className="px-3 py-3.5 text-center font-black text-white">{l.fechadas.length}</td>
-                    <td className="px-3 py-3.5 text-center font-black text-emerald-400">{l.aprovadas.length}</td>
+                    <td className="px-3 py-3.5 text-center font-black text-white">{l.aprovadas.length}</td>
                     <td className="px-3 py-3.5 whitespace-nowrap text-xs">
                       {l.metaDia > 0 ? (
                         <p className={l.valorAprovado >= l.metaDia ? 'text-emerald-400 font-bold' : 'text-zinc-300'}>{brl(l.valorAprovado)} / {brl(l.metaDia)}</p>
@@ -83,7 +83,7 @@ export default function GestaoDiariaReboloPage() {
                         <span className="text-zinc-600">sem meta</span>
                       )}
                     </td>
-                    <td className="px-3 py-3.5 whitespace-nowrap text-xs">{l.aberto ? <span className="font-black text-cyan-300">P{String(l.aberto.numero)}</span> : <span className="text-zinc-600">—</span>}</td>
+                    <td className="px-3 py-3.5 whitespace-nowrap text-xs">{l.aberto ? <span className="font-black text-white">P{String(l.aberto.numero)}</span> : <span className="text-zinc-600">—</span>}</td>
                     {SITUACOES_FICHA.map((st) => {
                       const n = l.minhas.filter((f) => f.situacao === st).length
                       return (

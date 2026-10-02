@@ -132,14 +132,10 @@ export function ultimaComposicao(s: ErpState, nomeEquipe: string, excetoId: stri
   )
 }
 
-// Cor fixa por equipe (a mesma equipe tem a mesma cor em todo o sistema)
-const CORES_EQUIPE = ['blue', 'emerald', 'orange', 'violet', 'cyan', 'yellow', 'red'] as const
-export function corEquipe(nome: string): (typeof CORES_EQUIPE)[number] | 'zinc' {
-  const n = nome.trim().toLowerCase()
-  if (!n) return 'zinc'
-  let h = 0
-  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return CORES_EQUIPE[h % CORES_EQUIPE.length]
+// Equipes sem cor (regra do ADM: cor só para alerta — verde, amarelo, vermelho). O nome da equipe vai escrito.
+export function corEquipe(nome: string): 'zinc' {
+  void nome
+  return 'zinc'
 }
 
 // Dona da meta do Operacional: todos os contratos/fichas ficam com a coordenação (RMC).

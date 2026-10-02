@@ -29,7 +29,7 @@ export default function ContratosVendasPage() {
         { chave: 'status', label: 'Status', tipo: 'select', opcoes: ['Ativo', 'Em agendamento', 'Finalizado', 'Cancelado'], obrigatorio: true, tabela: false },
         { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
       ]}
-      status={{ campo: 'status', tons: { Ativo: 'blue', 'Em agendamento': 'yellow', Finalizado: 'emerald', Cancelado: 'red' } }}
+      status={{ campo: 'status', tons: {} }}
       kpis={(rs) => [
         { label: 'Contratos no mês', valor: rs.filter((r) => String(r.data).startsWith(mesAtual())).length, tom: 'emerald' },
         { label: 'Total de contratos', valor: rs.length, tom: 'blue' },

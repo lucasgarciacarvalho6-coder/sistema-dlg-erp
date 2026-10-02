@@ -107,12 +107,13 @@ export type SituacaoFicha = (typeof SITUACOES_FICHA)[number]
 export const FINALIZADAS: readonly string[] = ['Vendida', 'Descarte', 'Cancelada']
 export const EM_ABERTO: readonly string[] = ['Aguardando contato', 'Tentar de novo', 'Em negociação', 'Agendado']
 export const MOTIVOS_DESCARTE = ['Sem interesse', 'Sem retorno', 'Não localizado', 'Sem condição financeira', 'Restrição nos nomes'] as const
-export const TOM_SITUACAO: Record<string, 'blue' | 'emerald' | 'orange' | 'red' | 'violet' | 'yellow' | 'cyan' | 'zinc'> = {
-  'Aguardando contato': 'yellow',
-  'Tentar de novo': 'orange',
-  'Em negociação': 'blue',
-  Agendado: 'violet',
-  'Venda a efetivar': 'cyan',
+// cor só para alerta (regra do ADM): tentar de novo = atenção, vendida = bom, descarte = ruim; o resto neutro
+export const TOM_SITUACAO: Record<string, 'emerald' | 'red' | 'yellow' | 'zinc'> = {
+  'Aguardando contato': 'zinc',
+  'Tentar de novo': 'yellow',
+  'Em negociação': 'zinc',
+  Agendado: 'zinc',
+  'Venda a efetivar': 'zinc',
   Vendida: 'emerald',
   Descarte: 'red',
   Cancelada: 'zinc',

@@ -74,11 +74,11 @@ export default function VendasBooksFinanceiroPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-6">
-        <StatCard tom="blue" label="Vendas" valor={vendas.length} detalhe={`${num(vendas.reduce((a, v) => a + Number(v.quantidade || 1), 0))} books`} />
-        <StatCard tom="violet" label="Valor vendido" valor={brl(valor)} />
-        <StatCard tom="emerald" label="Recebido" valor={brl(recebido)} detalhe="PIX, dinheiro, cartão e boletos pagos" />
-        <StatCard tom="yellow" label="A receber" valor={brl(aReceber)} detalhe="parcelas de boleto em aberto" />
-        <StatCard tom="red" label="Em atraso" valor={brl(atrasado)} detalhe="acompanhado pela Cobrança" />
+        <StatCard label="Vendas" valor={vendas.length} detalhe={`${num(vendas.reduce((a, v) => a + Number(v.quantidade || 1), 0))} books`} />
+        <StatCard label="Valor vendido" valor={brl(valor)} />
+        <StatCard label="Recebido" valor={brl(recebido)} detalhe="PIX, dinheiro, cartão e boletos pagos" />
+        <StatCard label="A receber" valor={brl(aReceber)} detalhe="parcelas de boleto em aberto" />
+        <StatCard tom={atrasado > 0 ? 'red' : 'zinc'} label="Em atraso" valor={brl(atrasado)} detalhe="acompanhado pela Cobrança" />
       </div>
 
       {porForma.length > 0 && (
@@ -123,7 +123,7 @@ export default function VendasBooksFinanceiroPage() {
                     <tr key={v.id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataBR(String(v.data))}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <Badge texto={v.canal === 'Externo' ? 'Externa' : v.canal === 'Rebolo' ? 'Rebolo' : 'Interna'} tom={v.canal === 'Externo' ? 'orange' : v.canal === 'Rebolo' ? 'cyan' : 'blue'} />
+                        <Badge texto={v.canal === 'Externo' ? 'Externa' : v.canal === 'Rebolo' ? 'Rebolo' : 'Interna'} />
                         <p className="text-[11px] text-zinc-400 mt-1">{vendedor(v)}</p>
                       </td>
                       <td className="px-4 py-3 text-xs">{String(v.escola)}</td>
@@ -143,7 +143,7 @@ export default function VendasBooksFinanceiroPage() {
                         {tv.length === 0 ? (
                           <span className="text-zinc-600">—</span>
                         ) : pagas === tv.length ? (
-                          <span className="text-emerald-400 font-bold">✓ Quitado</span>
+                          <span className="text-zinc-300 font-bold">✓ Quitado</span>
                         ) : (
                           <span>
                             {pagas}/{tv.length} pagas

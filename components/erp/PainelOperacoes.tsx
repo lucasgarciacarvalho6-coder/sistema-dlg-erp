@@ -90,7 +90,6 @@ function Cartao({ titulo, children, modo, onClick }: { titulo: string; children:
       onKeyDown={(e) => onClick && (e.key === 'Enter' || e.key === ' ') && onClick()}
       className={`${estilo} ${onClick ? 'cursor-pointer hover:-translate-y-1 hover:border-blue-500/40 transition-all' : ''}`}
     >
-      {modo === 'mini' && <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500 opacity-70"></div>}
       <p className={`font-black uppercase tracking-[0.2em] text-zinc-400 ${modo === 'mini' ? 'text-[10px]' : 'text-[11px]'}`}>{titulo}</p>
       {children}
       {modo === 'mini' && onClick && <p className="mt-auto text-right text-[9px] font-bold uppercase tracking-widest text-blue-400">Ver tudo em tela cheia ↗</p>}
@@ -195,11 +194,11 @@ function CardAlunos({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =
   return (
     <Cartao titulo="Alunos fotografados" modo={modo} onClick={onClick}>
       <div className="flex items-center gap-3">
-        <span className={`font-black ${modo === 'mini' ? 'text-2xl' : 'text-4xl'}`} style={{ color: subiu ? STATUS.bom.cor : STATUS.critico.cor }} aria-hidden="true">
+        <span className={`font-black text-zinc-400 ${modo === 'mini' ? 'text-2xl' : 'text-4xl'}`} aria-hidden="true">
           {subiu ? '↗' : '↘'}
         </span>
         <div>
-          <p className={`font-black leading-none tracking-tighter ${modo === 'grade' ? 'text-7xl' : tituloGrande(modo)}`} style={{ color: x.corHoje }}>{num(x.alunosHoje)}</p>
+          <p className={`font-black leading-none tracking-tighter text-white ${modo === 'grade' ? 'text-7xl' : tituloGrande(modo)}`}>{num(x.alunosHoje)}</p>
           <p className={`font-bold text-zinc-300 mt-1 ${modo === 'mini' ? 'text-xs' : 'text-base'}`}>{x.atual ? 'Alunos fotografados hoje' : 'Último dia útil do mês'}</p>
         </div>
       </div>
@@ -253,8 +252,8 @@ function CardGastos({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: () =
       <Rosca
         modo={modo}
         fatias={[
-          { rotulo: 'Fixo (operações)', valor: f.realizado.fixo, cor: '#3b82f6' },
-          { rotulo: 'Variável (escola + vendedor)', valor: f.realizado.variavel, cor: '#f59e0b' },
+          { rotulo: 'Fixo (operações)', valor: f.realizado.fixo, cor: 'var(--color-zinc-300)' },
+          { rotulo: 'Variável (escola + vendedor)', valor: f.realizado.variavel, cor: 'var(--color-zinc-600)' },
         ]}
       />
       {modo !== 'mini' && (
@@ -293,8 +292,8 @@ function CardProjecao({ x, modo, onClick }: { x: Dados; modo: Modo; onClick?: ()
         {modo !== 'mini' && <Numero modo={modo} rotulo="Alunos no mês" valor={num(f.projecao.alunos)} detalhe={`${num(f.realizado.alunos)} feitos + ${num(f.previsto.alunos)} fechados`} />}
         <Numero modo={modo} rotulo="Gasto previsto" valor={reais(f.projecao.total)} detalhe={`${reais(f.projecao.custoAluno)} por aluno`} />
       </div>
-      <div className={`bg-emerald-500/[0.07] border border-emerald-500/25 rounded-2xl ${modo === 'grade' ? 'p-5' : 'p-4'}`}>
-        <p className="text-[11px] font-black uppercase tracking-widest text-emerald-300">Quanto vai ganhar</p>
+      <div className={`bg-white/[0.03] border border-white/[0.08] rounded-2xl ${modo === 'grade' ? 'p-5' : 'p-4'}`}>
+        <p className="text-[11px] font-black uppercase tracking-widest text-zinc-400">Quanto vai ganhar</p>
         {f.projecao.temVendas ? (
           <>
             <p className={`font-black text-white tracking-tighter mt-1 ${modo === 'mini' ? 'text-3xl' : modo === 'coluna' ? 'text-4xl' : 'text-5xl'}`}>{reais(f.projecao.receita)}</p>
@@ -368,15 +367,24 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Fichas confirmadas: {num(a.total)}</span>
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Dias: {a.comAgenda}/{a.dias.length}</span>
         {a.capacidade !== null && (
-          <span className={`${chip} border-blue-500/30 bg-blue-500/10 text-blue-300`} title="Fichas confirmadas ÷ o que a meta pede nesses dias">
+          <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`} title="Fichas confirmadas ÷ o que a meta pede nesses dias">
             Capacidade: {Math.round(a.capacidade)}%
           </span>
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        <span className={`${chip} border-emerald-500/30 bg-emerald-500/10 text-emerald-300`}>{a.ok} OK</span>
-        <span className={`${chip} border-yellow-500/30 bg-yellow-500/10 text-yellow-300`}>{a.pendentes} Pend.</span>
-        <span className={`${chip} border-red-500/30 bg-red-500/10 text-red-300`}>{a.vazios} Vazio</span>
+        <span className={`${chip} inline-flex items-center gap-1.5 border-white/[0.08] bg-white/[0.04] text-zinc-200`}>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS.bom.cor }}></span>
+          {a.ok} OK
+        </span>
+        <span className={`${chip} inline-flex items-center gap-1.5 border-white/[0.08] bg-white/[0.04] text-zinc-200`}>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS.atencao.cor }}></span>
+          {a.pendentes} Pend.
+        </span>
+        <span className={`${chip} inline-flex items-center gap-1.5 border-white/[0.08] bg-white/[0.04] text-zinc-200`}>
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS.critico.cor }}></span>
+          {a.vazios} Vazio
+        </span>
       </div>
       <div className={`flex flex-col @container ${modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-64'}`}>
         <div className="flex-1 min-h-0 flex items-end gap-[3px]">
@@ -481,7 +489,7 @@ function GastoFixoCarros({ s, mes }: { s: ErpState; mes: string }) {
       <p className="text-[11px] text-zinc-500">
         Fixo por operação (carro por dia): tudo incluso (combustível, fotógrafos, motorista, veículo...). Conta só nos dias em que o carro sai. Os valores valem a partir de {mesCurto(mes).toLowerCase()}.
       </p>
-      {!souAdm && <p className="text-[11px] font-bold text-yellow-400">🔒 Valores definidos pelo ADM: somente o ADM altera.</p>}
+      {!souAdm && <p className="text-[11px] font-bold text-zinc-400">🔒 Valores definidos pelo ADM: somente o ADM altera.</p>}
       {editavel && (
         <button
           disabled={salvando}
@@ -543,12 +551,11 @@ export default function PainelOperacoes({ s, colaborador, mes = mesAtual() }: { 
 export function CardOperacoesTV({ s, colaborador, mes = mesAtual() }: { s: ErpState; colaborador: Colaborador | undefined; mes?: string }) {
   const x = useDados(s, colaborador, mes)
   return (
-    <div className="bg-painel/80 border border-cyan-500/25 rounded-3xl p-4 relative overflow-hidden h-full">
-      <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500 opacity-80"></div>
+    <div className="bg-painel/80 border border-white/[0.1] rounded-3xl p-4 relative overflow-hidden h-full">
       <div className="flex items-center gap-3 mb-3">
         <Avatar texto={iniciais(colaborador?.nome ?? 'Operações')} foto={colaborador?.foto} tamanho="w-10 h-10" arredondado="rounded-full" textoCls="text-xs" />
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-cyan-300">Operações</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-zinc-400">Operações</p>
           <p className="text-sm font-bold text-white truncate">{colaborador?.nome ?? '—'}</p>
         </div>
         {x.r && x.r.meta.mensal > 0 && (

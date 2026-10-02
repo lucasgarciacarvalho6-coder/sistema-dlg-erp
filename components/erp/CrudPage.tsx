@@ -77,6 +77,15 @@ function formatarCelula(c: Campo, v: Valor, s: ErpState) {
   return String(v)
 }
 
+// Indicadores do topo: cor só para alerta (regra do ADM). Amarelo/vermelho só quando o número não é zero;
+// os que só enfeitavam (verde de "pagas", azul de "cadastrados"...) ficam neutros.
+const ZERO = /^(R\$\s*)?0(,00)?(\s*dias?)?$/
+function tomDoKpi(tom: Tom | undefined, valor: ReactNode): Tom {
+  if (tom !== 'red' && tom !== 'yellow') return 'zinc'
+  const texto = String(valor ?? '').replace(/\s/g, ' ').trim()
+  return valor === 0 || ZERO.test(texto) ? 'zinc' : tom
+}
+
 export default function CrudPage(p: CrudProps) {
   const s = useErp()
   const podeFazer = usePode()
@@ -173,7 +182,7 @@ export default function CrudPage(p: CrudProps) {
       {kpis && kpis.length > 0 && (
         <div className={`grid grid-cols-1 sm:grid-cols-2 ${kpis.length >= 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'} gap-6`}>
           {kpis.map((k) => (
-            <StatCard key={k.label} label={k.label} valor={k.valor} tom={k.tom} detalhe={k.detalhe} />
+            <StatCard key={k.label} label={k.label} valor={k.valor} tom={tomDoKpi(k.tom, k.valor)} detalhe={k.detalhe} />
           ))}
         </div>
       )}
@@ -243,13 +252,8 @@ export default function CrudPage(p: CrudProps) {
                               key={a.label}
                               onClick={() => a.executar(r)}
                               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap transition-all ${
-                                a.tom === 'emerald'
-                                  ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20'
-                                  : a.tom === 'orange'
-                                    ? 'text-orange-400 border-orange-500/20 bg-orange-500/10 hover:bg-orange-500/20'
-                                    : a.tom === 'red'
-                                      ? 'text-red-400 border-red-500/20 bg-red-500/10 hover:bg-red-500/20'
-                                      : 'text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20'
+                                // ações: azul da interface; vermelho só para a ação que desfaz ou recusa (rejeitar, bloquear)
+                                a.tom === 'red' ? 'text-red-400 border-red-500/20 bg-red-500/10 hover:bg-red-500/20' : 'text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20'
                               }`}
                             >
                               {a.label}

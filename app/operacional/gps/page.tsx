@@ -132,10 +132,10 @@ export default function GpsVendedoresPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="blue" label="Vendedores com app" valor={vendedores.length} />
-        <StatCard tom="emerald" label="Ativos agora" valor={vendedores.filter((v) => ativoAgora(ultimoDe(v))).length} detalhe="app aberto nos últimos 15 min" />
-        <StatCard tom="violet" label="Registraram hoje" valor={(ultimos ?? []).filter((u) => u.pontosHoje > 0).length} />
-        <StatCard tom="orange" label="Sem registro" valor={vendedores.filter((v) => !ultimoDe(v)).length} detalhe="ainda não abriram o app" />
+        <StatCard label="Vendedores com app" valor={vendedores.length} />
+        <StatCard label="Ativos agora" valor={vendedores.filter((v) => ativoAgora(ultimoDe(v))).length} detalhe="app aberto nos últimos 15 min" />
+        <StatCard label="Registraram hoje" valor={(ultimos ?? []).filter((u) => u.pontosHoje > 0).length} />
+        <StatCard tom={vendedores.some((v) => !ultimoDe(v)) ? 'yellow' : 'zinc'} label="Sem registro" valor={vendedores.filter((v) => !ultimoDe(v)).length} detalhe="ainda não abriram o app" />
       </div>
 
       {ultimos === null ? (
@@ -173,7 +173,7 @@ export default function GpsVendedoresPage() {
                     {u.descricao && <p className="text-yellow-400 truncate">⚑ {u.descricao}</p>}
                   </div>
                 ) : (
-                  <p className="text-xs text-orange-400 font-bold">Ainda não abriu o app.</p>
+                  <p className="text-xs text-yellow-400 font-bold">Ainda não abriu o app.</p>
                 )}
                 <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400">{sel === v.id ? 'Fechar rota ▲' : 'Ver rota ▼'}</p>
               </button>

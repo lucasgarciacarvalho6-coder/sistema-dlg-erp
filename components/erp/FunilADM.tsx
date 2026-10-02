@@ -7,7 +7,7 @@ import type { ErpState, Tom } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { colecao, equipeComMeta, resumo, situacaoResumo, tituloAtrasado } from '@/lib/erp/metrics'
 import { brl, formatar, iniciais, nomeMes, num } from '@/lib/erp/format'
-import { Avatar, TONS } from './ui'
+import { Avatar, TONS, ehSituacao } from './ui'
 
 interface Etapa {
   rotulo: string
@@ -34,14 +34,15 @@ export function FunilDoMes({ s, mes }: { s: ErpState; mes: string }) {
     .filter((d) => String(d.data).startsWith(mes))
     .reduce((a, d) => a + Number(d.quantidade || 0), 0)
 
+  // etapas neutras; só "Em atraso" fica vermelho, e só quando tem parcela atrasada
   const etapas: Etapa[] = [
-    { rotulo: 'Contratos de escola', valor: num(contratos), detalhe: 'recebidos no mês', tom: 'blue', link: '/operacional/contratos' },
-    { rotulo: 'Escolas fotografadas', valor: num(visitas.length), detalhe: `${num(fichas)} fichas`, tom: 'cyan', link: '/operacional/agenda' },
-    { rotulo: 'Álbuns revelados', valor: num(books), detalhe: 'lançados pela Revelação', tom: 'violet', link: '/producao' },
-    { rotulo: 'Books vendidos', valor: num(externas + internas), detalhe: `${num(externas)} na rua • ${num(internas)} internas`, tom: 'emerald', link: '/financeiro/vendas-books' },
-    { rotulo: 'Valor vendido', valor: brl(vendido), tom: 'emerald', link: '/financeiro/vendas-books' },
-    { rotulo: 'Recebido', valor: brl(recebido), detalhe: 'vendas de books', tom: 'emerald', link: '/financeiro/vendas-books' },
-    { rotulo: 'Em atraso', valor: brl(atraso.reduce((a, t) => a + Number(t.valor || 0), 0)), detalhe: `${atraso.length} parcela(s) • Cobrança`, tom: 'red', link: '/cobranca/inadimplencia' },
+    { rotulo: 'Contratos de escola', valor: num(contratos), detalhe: 'recebidos no mês', tom: 'zinc', link: '/operacional/contratos' },
+    { rotulo: 'Escolas fotografadas', valor: num(visitas.length), detalhe: `${num(fichas)} fichas`, tom: 'zinc', link: '/operacional/agenda' },
+    { rotulo: 'Álbuns revelados', valor: num(books), detalhe: 'lançados pela Revelação', tom: 'zinc', link: '/producao' },
+    { rotulo: 'Books vendidos', valor: num(externas + internas), detalhe: `${num(externas)} na rua • ${num(internas)} internas`, tom: 'zinc', link: '/financeiro/vendas-books' },
+    { rotulo: 'Valor vendido', valor: brl(vendido), tom: 'zinc', link: '/financeiro/vendas-books' },
+    { rotulo: 'Recebido', valor: brl(recebido), detalhe: 'vendas de books', tom: 'zinc', link: '/financeiro/vendas-books' },
+    { rotulo: 'Em atraso', valor: brl(atraso.reduce((a, t) => a + Number(t.valor || 0), 0)), detalhe: `${atraso.length} parcela(s) • Cobrança`, tom: atraso.length ? 'red' : 'zinc', link: '/cobranca/inadimplencia' },
   ]
 
   return (
@@ -52,19 +53,18 @@ export function FunilDoMes({ s, mes }: { s: ErpState; mes: string }) {
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">Da escola contratada até o dinheiro recebido — tudo que os setores e os apps registraram</p>
         </div>
         {devolvidos > 0 && (
-          <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400">↩ {num(devolvidos)} books devolvidos pelos vendedores (vão para as vendas internas)</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">↩ {num(devolvidos)} books devolvidos pelos vendedores (vão para as vendas internas)</span>
         )}
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7">
         {etapas.map((e, i) => {
-          const t = TONS[e.tom]
+          const alerta = ehSituacao(e.tom)
           const corpo = (
             <div className={`relative h-full p-5 border-white/[0.04] ${i > 0 ? 'xl:border-l' : ''} border-b xl:border-b-0 hover:bg-white/[0.02] transition-colors`}>
-              <div className={`absolute top-0 left-0 w-full h-0.5 ${t.solido} opacity-60`}></div>
-              <p className={`text-[9px] font-bold uppercase tracking-[0.15em] ${t.texto}`}>
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-zinc-400">
                 {i + 1}. {e.rotulo}
               </p>
-              <p className="text-xl font-black text-white tracking-tight mt-2 leading-tight whitespace-nowrap">{e.valor}</p>
+              <p className={`text-xl font-black tracking-tight mt-2 leading-tight whitespace-nowrap ${alerta ? TONS[e.tom].texto : 'text-white'}`}>{e.valor}</p>
               {e.detalhe && <p className="text-[10px] text-zinc-500 mt-1">{e.detalhe}</p>}
               {i < etapas.length - 1 && <span className="hidden xl:block absolute -right-2 top-1/2 -translate-y-1/2 z-10 text-zinc-600 text-lg" aria-hidden="true">›</span>}
             </div>

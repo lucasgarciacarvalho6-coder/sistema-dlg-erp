@@ -12,7 +12,7 @@ export interface ConfigSetor {
   nome: string
   descricao: string
   home: string
-  tom: Tom // cor do setor nos gráficos consolidados (ADM / Gerência)
+  tom: Tom // sempre 'zinc': o setor não tem cor (regra do ADM: cor só para alerta — verde, amarelo, vermelho)
   indicadores: Indicador[]
   funcoes: string[]
 }
@@ -23,7 +23,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Administração',
     descricao: 'Diretoria • visão mestra',
     home: '/adm',
-    tom: 'blue',
+    tom: 'zinc',
     indicadores: [],
     funcoes: ['Diretor(a)', 'Administrador(a)'],
   },
@@ -32,7 +32,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Gerência',
     descricao: 'Gestão tática das equipes',
     home: '/gerencia',
-    tom: 'yellow',
+    tom: 'zinc',
     indicadores: [{ id: 'aprovacoes', label: 'Aprovações analisadas', unidade: 'qtd', metaPadrao: { diaria: 3, mensal: 60 } }],
     funcoes: ['Gerente geral', 'Gerente de área'],
   },
@@ -41,7 +41,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Operacional',
     descricao: 'Campo, rotas e sessões fotográficas',
     home: '/operacional/metas',
-    tom: 'blue',
+    tom: 'zinc',
     indicadores: [{ id: 'fichas', label: 'Fichas fotografadas', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
     funcoes: ['Fotógrafo(a)', 'Motorista', 'Coordenação / RMC', 'Auxiliar de campo'],
   },
@@ -50,7 +50,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Vendas',
     descricao: 'Contratos com escolas e leads',
     home: '/vendas',
-    tom: 'emerald',
+    tom: 'zinc',
     indicadores: [
       { id: 'contratos', label: 'Contratos fechados', unidade: 'qtd', metaPadrao: { diaria: 1, mensal: 20 } },
       { id: 'visitas', label: 'Escolas visitadas', unidade: 'qtd', metaPadrao: { diaria: 4, mensal: 80 } },
@@ -64,7 +64,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Produção',
     descricao: 'Fotos das escolas: editor, análise de qualidade e envio para a Revelação',
     home: '/edicao',
-    tom: 'pink',
+    tom: 'zinc',
     // cada colaboradora tem a sua meta: álbuns aprovados por ela e confirmados na conferência final (bônus a partir de 1.000)
     indicadores: [{ id: 'albuns_entregues', label: 'Álbuns entregues', unidade: 'qtd', metaPadrao: { diaria: 0, mensal: 1000 } }],
     funcoes: ['Análise de qualidade'],
@@ -76,7 +76,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Revelação',
     descricao: 'Revelação dos álbuns (lançados pelo app)',
     home: '/producao',
-    tom: 'violet',
+    tom: 'zinc',
     // A equipe só informa, pelo app, quantos álbuns revelou no dia
     indicadores: [{ id: 'books', label: 'Álbuns revelados', unidade: 'qtd', metaPadrao: { diaria: 20, mensal: 440 } }],
     funcoes: ['Revelação'], // todos fazem o mesmo: recebem as fotos, revelam e montam o book
@@ -86,7 +86,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Financeiro',
     descricao: 'Contas, pagamentos operacionais e fluxo de caixa',
     home: '/financeiro',
-    tom: 'cyan',
+    tom: 'zinc',
     indicadores: [{ id: 'contas_processadas', label: 'Pagamentos processados', unidade: 'qtd', metaPadrao: { diaria: 5, mensal: 110 } }],
     funcoes: ['Analista financeiro', 'Assistente financeiro'],
   },
@@ -95,7 +95,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Cobrança',
     descricao: 'Venda de books aos pais e recebimentos',
     home: '/cobranca',
-    tom: 'orange',
+    tom: 'zinc',
     // a venda de books aos pais passou para o setor Vendas Rebolo
     indicadores: [{ id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1500, mensal: 33000 } }],
     funcoes: ['Cobrador(a)', 'Atendente de cobrança', 'Supervisor(a) de cobrança'],
@@ -105,7 +105,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Vendas Rebolo',
     descricao: 'Revenda dos books que o vendedor externo não vendeu',
     home: '/rebolo',
-    tom: 'cyan',
+    tom: 'zinc',
     // meta do time = soma das metas individuais (ADM › Metas)
     indicadores: [
       { id: 'valor_vendido', label: 'Valor vendido', unidade: 'brl', metaPadrao: { diaria: 0, mensal: 0 } },
@@ -118,7 +118,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     nome: 'Vendedores externos',
     descricao: 'App do vendedor de contrato e de books',
     home: '/app/vendedor',
-    tom: 'orange',
+    tom: 'zinc',
     indicadores: [],
     funcoes: ['Vendedor de contrato', 'Vendedor de books'],
   },

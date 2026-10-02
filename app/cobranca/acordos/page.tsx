@@ -24,7 +24,7 @@ export default function AcordosPage() {
         { chave: 'primeiroVencimento', label: '1º vencimento', tipo: 'data', padrao: () => addDias(hoje(), 7) },
         { chave: 'status', label: 'Status', tipo: 'texto', formulario: false, tabela: false, padrao: () => 'Aguardando aprovação' },
       ]}
-      status={{ campo: 'status', tons: { 'Aguardando aprovação': 'yellow', Ativo: 'emerald', Rejeitado: 'red', Quitado: 'blue' } }}
+      status={{ campo: 'status', tons: { 'Aguardando aprovação': 'yellow' } }}
       kpis={(rs) => [
         { label: 'Acordos ativos', valor: rs.filter((r) => r.status === 'Ativo').length, tom: 'emerald' },
         { label: 'Aguardando aprovação', valor: rs.filter((r) => r.status === 'Aguardando aprovação').length, tom: 'yellow' },

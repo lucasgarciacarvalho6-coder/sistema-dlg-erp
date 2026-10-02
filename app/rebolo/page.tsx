@@ -28,10 +28,10 @@ export default function ReboloDashboardPage() {
       antesDaEquipe={
         <div className="space-y-6">
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-            <Link href="/rebolo/contatos"><StatCard tom="blue" label="Fichas na fila" valor={abertas.length} detalhe={`${abertas.filter((f) => f.situacao === 'Agendado').length} agendada(s) • ${abertas.filter((f) => f.situacao === 'Tentar de novo').length} tentar de novo`} /></Link>
-            <Link href="/rebolo/vendas"><StatCard tom="cyan" label="Vendas a efetivar" valor={efetivar.length} detalhe={`${brl(soma(efetivar))} • aguardando contrato`} /></Link>
-            <Link href="/rebolo/vendas"><StatCard tom="yellow" label="No Financeiro" valor={financeiro.length} detalhe={brl(soma(financeiro))} /></Link>
-            <Link href="/rebolo/envios"><StatCard tom="orange" label="A enviar" valor={aEnviar.length} detalhe="aprovadas, falta o rastreio" /></Link>
+            <Link href="/rebolo/contatos"><StatCard label="Fichas na fila" valor={abertas.length} detalhe={`${abertas.filter((f) => f.situacao === 'Agendado').length} agendada(s) • ${abertas.filter((f) => f.situacao === 'Tentar de novo').length} tentar de novo`} /></Link>
+            <Link href="/rebolo/vendas"><StatCard label="Vendas a efetivar" valor={efetivar.length} detalhe={`${brl(soma(efetivar))} • aguardando contrato`} /></Link>
+            <Link href="/rebolo/vendas"><StatCard label="No Financeiro" valor={financeiro.length} detalhe={brl(soma(financeiro))} /></Link>
+            <Link href="/rebolo/envios"><StatCard tom={aEnviar.length ? 'yellow' : 'zinc'} label="A enviar" valor={aEnviar.length} detalhe="aprovadas, falta o rastreio" /></Link>
           </div>
           <Panel titulo="Descartes por motivo" subtitulo={`${descartes.length} álbum(ns) congelado(s) na empresa`} acoes={<Link href="/rebolo/contatos" className={link}>Ver fichas →</Link>}>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

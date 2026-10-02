@@ -22,6 +22,7 @@ import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
 import { lerJSON } from './operacional'
 import { chaveCustoVariavel } from './operacoes-financeiro'
 import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, type FotografoDaEscola } from './producao'
+import type { AtividadeEquipe } from './gerente'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -846,6 +847,16 @@ export function excluirCaixa(caixaId: string): Promise<string | null> {
 export function conferirCaixa(caixaId: string, dados: { albuns: number; posteres: number; observacao: string }): Promise<string | null> {
   const params = { p_caixa: caixaId, p_albuns: dados.albuns, p_posteres: dados.posteres, p_observacao: dados.observacao.trim() || null }
   return acaoProducao('producao_conferir_caixa', params, (d, ctx) => F.conferirCaixa(d, caixaId, dados, ctx), 'Caixa conferida: está no estoque.')
+}
+
+// Gerente virtual (SQL 026): última atividade de cada pessoa nos últimos 60 dias, direto do banco
+// (a auditoria da tela vai só até 1.000 linhas). Sem o SQL, ou sem permissão: null → o painel usa a auditoria da tela.
+export async function carregarAtividadeEquipe(): Promise<AtividadeEquipe | null> {
+  if (MODO !== 'supabase') return null
+  const { data, error } = await sb().rpc('gerente_ultima_atividade')
+  const linhas = (data ?? []) as { colaborador_id: string; ultima: string }[]
+  if (error || !linhas.length) return null
+  return { ultima: new Map(linhas.map((r) => [r.colaborador_id, r.ultima])), cobertura: addDias(hoje(), -60) }
 }
 
 // Fotos de cada fotógrafo na escola (SQL 025). A lista para escolher vem do banco, só com os nomes

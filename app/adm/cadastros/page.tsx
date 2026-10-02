@@ -69,7 +69,8 @@ const CAMPOS: Record<Aba, { titulo: string; descricao: string; novo: string; cam
   },
 }
 
-const TONS_SITUACAO = { Ativa: 'emerald', Ativo: 'emerald', Inativa: 'red', Inativo: 'red', 'Abaixo do mínimo': 'orange', OK: 'emerald' } as const
+// cor só para alerta: estoque abaixo do mínimo = amarelo; o resto neutro
+const TONS_SITUACAO = { Ativa: 'zinc', Ativo: 'zinc', Inativa: 'zinc', Inativo: 'zinc', 'Abaixo do mínimo': 'yellow', OK: 'zinc' } as const
 
 export default function CadastrosPage() {
   const [aba, setAba] = useState<Aba>('escolas')

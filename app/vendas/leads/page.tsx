@@ -28,7 +28,7 @@ export default function LeadsPage() {
         { chave: 'etapa', label: 'Etapa', tipo: 'select', opcoes: ETAPAS_LEAD, obrigatorio: true, tabela: false },
         { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
       ]}
-      status={{ campo: 'etapa', tons: { Novo: 'zinc', 'Contato feito': 'blue', 'Visita agendada': 'cyan', Proposta: 'violet', Negociação: 'yellow', Convertido: 'emerald', Perdido: 'red' } }}
+      status={{ campo: 'etapa', tons: {} }}
       kpis={(rs) => [
         { label: 'Leads ativos', valor: rs.filter((r) => r.etapa !== 'Convertido' && r.etapa !== 'Perdido').length, tom: 'blue' },
         { label: 'Em negociação', valor: rs.filter((r) => r.etapa === 'Negociação' || r.etapa === 'Proposta').length, tom: 'yellow' },

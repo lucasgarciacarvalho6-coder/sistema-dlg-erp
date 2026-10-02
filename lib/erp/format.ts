@@ -18,6 +18,12 @@ export function isoData(d: Date) {
 }
 
 export const hoje = () => isoData(new Date())
+// dia (no fuso local) de uma data ou data/hora: '2026-10-01T23:30:00Z' → '2026-10-01' no horário de Brasília
+export const diaLocal = (iso: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : isoData(d)
+}
 export const mesDe = (iso: string) => iso.slice(0, 7)
 export const mesAtual = () => mesDe(hoje())
 

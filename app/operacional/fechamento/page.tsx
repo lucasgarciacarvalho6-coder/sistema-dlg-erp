@@ -23,7 +23,8 @@ import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, Tabs, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
 type Aba = 'escolas' | 'vendedores' | 'freelancers'
-const TOM_FECH: Record<string, Tom> = { Rascunho: 'yellow', 'Enviado ao financeiro': 'blue', Pago: 'emerald' }
+// cor só para alerta: rascunho (falta enviar) = amarelo; enviado e pago = neutros
+const TOM_FECH: Record<string, Tom> = { Rascunho: 'yellow', 'Enviado ao financeiro': 'zinc', Pago: 'zinc' }
 const n = (v: unknown) => Number(v) || 0
 const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
 
@@ -31,7 +32,7 @@ const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
 const devolvido = (f?: Registro) => !!f && f.status === 'Rascunho' && !!t(f.devolucaoMotivo)
 
 function StatusFechamento({ f }: { f?: Registro }) {
-  if (!f) return <Badge texto="A preparar" tom="orange" />
+  if (!f) return <Badge texto="A preparar" tom="yellow" />
   if (devolvido(f))
     return (
       <span className="inline-flex flex-col items-end gap-1 max-w-[240px]">
@@ -100,7 +101,7 @@ export default function FechamentoOperacionalPage() {
         </button>
       )}
       {f?.status === 'Rascunho' && pEditar && (
-        <button onClick={() => enviar(f)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20">
+        <button onClick={() => enviar(f)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
           Enviar ao financeiro
         </button>
       )}
@@ -135,9 +136,9 @@ export default function FechamentoOperacionalPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <StatCard tom="yellow" label="Em rascunho" valor={brl(soma('Rascunho'))} detalhe={`${fechamentos.filter((f) => f.status === 'Rascunho').length} fechamento(s)`} />
-        <StatCard tom="blue" label="No financeiro (a pagar)" valor={brl(soma('Enviado ao financeiro'))} detalhe={`${fechamentos.filter((f) => f.status === 'Enviado ao financeiro').length} fechamento(s)`} />
-        <StatCard tom="emerald" label="Pagos" valor={brl(soma('Pago'))} detalhe={`${fechamentos.filter((f) => f.status === 'Pago').length} fechamento(s)`} />
+        <StatCard tom={fechamentos.some((f) => f.status === 'Rascunho') ? 'yellow' : 'zinc'} label="Em rascunho" valor={brl(soma('Rascunho'))} detalhe={`${fechamentos.filter((f) => f.status === 'Rascunho').length} fechamento(s)`} />
+        <StatCard label="No financeiro (a pagar)" valor={brl(soma('Enviado ao financeiro'))} detalhe={`${fechamentos.filter((f) => f.status === 'Enviado ao financeiro').length} fechamento(s)`} />
+        <StatCard label="Pagos" valor={brl(soma('Pago'))} detalhe={`${fechamentos.filter((f) => f.status === 'Pago').length} fechamento(s)`} />
       </div>
 
       <Tabs
@@ -338,7 +339,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
     >
       <AvisoDevolucao f={existente} />
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-4">
-        <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Bonificação da escola</p>
+        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Bonificação da escola</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
           <div>
             <p className={labelCls}>Crianças fotografadas</p>
@@ -354,7 +355,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
           </div>
           <div className="text-right">
             <p className={labelCls}>Total da escola</p>
-            <p className="text-2xl font-black text-emerald-400 mt-2">{brl(calc.totalEscola)}</p>
+            <p className="text-2xl font-black text-white mt-2">{brl(calc.totalEscola)}</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-white/[0.05]">
@@ -367,7 +368,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
 
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-4">
         <div className="flex justify-between items-center">
-          <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Ajudantes da visita</p>
+          <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Ajudantes da visita</p>
           <button onClick={() => setAjudantes([...ajudantes, { nome: '', valor: 0, pixChave: '', pixBanco: '' }])} className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">
             + Adicionar ajudante
           </button>
@@ -412,7 +413,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
         </div>
         <div>
           <p className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Total do fechamento</p>
-          <p className="text-2xl font-black text-emerald-400 mt-1">{brl(calc.total)}</p>
+          <p className="text-2xl font-black text-white mt-1">{brl(calc.total)}</p>
         </div>
       </div>
       {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
@@ -556,7 +557,7 @@ function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 
           {num(n(qtd))} × {brl(unit)}
           {tipo === 'freelancer' && <span className="text-zinc-500"> (diária {brl(n(diaria))} + alimentação {brl(par.alimentacaoDiaria)})</span>}
         </p>
-        <p className="text-2xl font-black text-emerald-400">{brl(total)}</p>
+        <p className="text-2xl font-black text-white">{brl(total)}</p>
       </div>
       {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
     </Modal>

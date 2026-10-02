@@ -194,7 +194,7 @@ export default function RelatoriosPanel({ modulo }: { modulo: string }) {
                 <div className="min-w-0">
                   <h3 className="text-base font-bold text-white">{r.titulo}</h3>
                   <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{r.descricao}</p>
-                  <p className="text-xs text-blue-400 font-bold mt-2">{qtd} registro(s)</p>
+                  <p className="text-xs text-zinc-400 font-bold mt-2">{qtd} registro(s)</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 mt-5">

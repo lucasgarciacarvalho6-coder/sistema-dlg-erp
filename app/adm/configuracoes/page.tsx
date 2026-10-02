@@ -125,7 +125,7 @@ export default function ConfiguracoesPage() {
                 <p className="text-sm font-bold text-white">{i.nome}</p>
                 <p className="text-[11px] text-zinc-500">{i.descricao}</p>
               </div>
-              <Badge texto={i.conectado ? 'Conectado' : 'Não configurado'} tom={i.conectado ? 'emerald' : 'orange'} />
+              <Badge texto={i.conectado ? 'Conectado' : 'Não configurado'} tom={i.conectado ? 'zinc' : 'yellow'} />
             </div>
           ))}
         </div>
@@ -188,7 +188,7 @@ function PainelParametros({ editavel }: { editavel: boolean }) {
       <div className="space-y-6">
         {grupos.map((g) => (
           <div key={g}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-400 mb-3">{g}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400 mb-3">{g}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
               {PARAMETROS.filter((p) => p.grupo === g).map((p) => (
                 <div key={p.chave} className="space-y-2">

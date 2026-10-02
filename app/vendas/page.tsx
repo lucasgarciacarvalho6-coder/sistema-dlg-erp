@@ -58,7 +58,7 @@ export default function VendasDashboardPage() {
                       {String(c.cidade)} • {nomeColaborador(s, c.vendedoraId)} • {dataBR(String(c.data))}
                     </p>
                   </div>
-                  <Badge texto={`${c.alunos} alunos`} tom="emerald" />
+                  <Badge texto={`${c.alunos} alunos`} />
                 </div>
               ))}
             </div>

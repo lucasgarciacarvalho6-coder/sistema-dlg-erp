@@ -90,14 +90,14 @@ export default function ContratosEscolaPage() {
       .sort((a, b) => String(b.data).localeCompare(String(a.data)))[0]
     if (!v) return <span className="text-[10px] text-zinc-600">—</span>
     const eq = equipeDaVisita(s, v)
-    if (!eq.nome && !eq.veiculo && !eq.motorista && !eq.fotografos.length) return <Badge texto="Equipe a definir" tom="orange" />
+    if (!eq.nome && !eq.veiculo && !eq.motorista && !eq.fotografos.length) return <Badge texto="Equipe a definir" tom="yellow" />
     return (
       <div className="text-[11px] leading-snug space-y-0.5">
         <p className={`font-black uppercase tracking-wider text-[10px] ${TONS[corEquipe(eq.nome)].texto}`}>{eq.nome || 'Equipe sem nome'}</p>
-        <p className="text-zinc-300">🚐 {eq.veiculo ? nomeVeiculo(eq.veiculo) : String(v.carro || '') || <span className="text-orange-400">sem veículo</span>}</p>
+        <p className="text-zinc-300">🚐 {eq.veiculo ? nomeVeiculo(eq.veiculo) : String(v.carro || '') || <span className="text-yellow-400">sem veículo</span>}</p>
         <p className="text-zinc-400">
-          🧑‍✈️ {eq.motorista ? String(eq.motorista.nome).split(' ')[0] : <span className="text-orange-400">sem motorista</span>} • 📷{' '}
-          {eq.fotografos.length ? eq.fotografos.map((f) => String(f.nome).split(' ')[0]).join(', ') : <span className="text-orange-400">sem fotógrafo</span>}
+          🧑‍✈️ {eq.motorista ? String(eq.motorista.nome).split(' ')[0] : <span className="text-yellow-400">sem motorista</span>} • 📷{' '}
+          {eq.fotografos.length ? eq.fotografos.map((f) => String(f.nome).split(' ')[0]).join(', ') : <span className="text-yellow-400">sem fotógrafo</span>}
         </p>
       </div>
     )
@@ -243,7 +243,7 @@ export default function ContratosEscolaPage() {
     duvidas.has(chave) ? (
       <span className="ml-2 px-1.5 py-0.5 rounded bg-yellow-500/15 text-yellow-400 text-[8px] font-black tracking-widest">CONFIRA</span>
     ) : iaCampos.has(chave) ? (
-      <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[8px] font-black tracking-widest">LIDO</span>
+      <span className="ml-2 px-1.5 py-0.5 rounded bg-white/[0.08] text-zinc-300 text-[8px] font-black tracking-widest">LIDO</span>
     ) : null
   const destaqueIA = (chave: string) => (duvidas.has(chave) ? '!border-yellow-500/60' : '')
   const alterarCampo = (chave: string, valor: string) => {
@@ -280,10 +280,15 @@ export default function ContratosEscolaPage() {
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-6">
         <StatCard label="Total de contratos" valor={contratos.length} tom="zinc" />
-        <StatCard label="Em conferência" valor={emConferencia.length} tom="orange" detalhe={`${emConferencia.filter((c) => camposFaltando(c).length).length} com dados faltando`} />
-        <StatCard label="Na agenda" valor={contratos.filter((c) => c.status === 'Na agenda').length} tom="blue" />
-        <StatCard label="Fichas contratadas" valor={num(contratos.filter((c) => c.status !== 'Cancelado').reduce((a, c) => a + Number(c.fichasPrevistas || 0), 0))} tom="emerald" />
-        <StatCard label="PIX da escola pendente" valor={contratos.filter((c) => c.status !== 'Cancelado' && !pixCompleto(c)).length} tom="yellow" detalhe="Não bloqueia a revisão" />
+        <StatCard label="Em conferência" valor={emConferencia.length} detalhe={`${emConferencia.filter((c) => camposFaltando(c).length).length} com dados faltando`} />
+        <StatCard label="Na agenda" valor={contratos.filter((c) => c.status === 'Na agenda').length} />
+        <StatCard label="Fichas contratadas" valor={num(contratos.filter((c) => c.status !== 'Cancelado').reduce((a, c) => a + Number(c.fichasPrevistas || 0), 0))} />
+        <StatCard
+          label="PIX da escola pendente"
+          valor={contratos.filter((c) => c.status !== 'Cancelado' && !pixCompleto(c)).length}
+          tom={contratos.some((c) => c.status !== 'Cancelado' && !pixCompleto(c)) ? 'yellow' : 'zinc'}
+          detalhe="Não bloqueia a revisão"
+        />
       </div>
 
       <Tabs
@@ -333,7 +338,7 @@ export default function ContratosEscolaPage() {
                       <td className="px-4 py-4 min-w-[220px]">
                         <p className="text-white font-bold tracking-wide">
                           {String(c.escola)}
-                          {c.origem === 'App' && <span className="ml-2 align-middle px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[8px] font-black tracking-widest">📱 APP</span>}
+                          {c.origem === 'App' && <span className="ml-2 align-middle px-1.5 py-0.5 rounded bg-white/[0.08] text-zinc-300 text-[8px] font-black tracking-widest">📱 APP</span>}
                         </p>
                         <p className="text-[11px] text-zinc-500 font-mono">{String(c.cidade || '—')} - {String(c.uf || '')}</p>
                       </td>
@@ -349,10 +354,10 @@ export default function ContratosEscolaPage() {
                         <div className="flex flex-col items-start gap-1.5">
                           {falta.length ? (
                             <span title={`Faltam: ${falta.join(', ')}`}>
-                              <Badge texto={`Faltam ${falta.length} dados`} tom="orange" />
+                              <Badge texto={`Faltam ${falta.length} dados`} tom="yellow" />
                             </span>
                           ) : (
-                            <Badge texto="Dados completos" tom="emerald" />
+                            <Badge texto="Dados completos" />
                           )}
                           {!pixCompleto(c) && <Badge texto="PIX pendente" tom="yellow" />}
                         </div>
@@ -371,7 +376,7 @@ export default function ContratosEscolaPage() {
                       {/* nas outras abas o status já é o próprio filtro */}
                       {aba === 'todos' && (
                         <td className="px-4 py-4">
-                          <Badge texto={String(c.status)} tom={c.status === 'Na agenda' ? 'blue' : c.status === 'Cancelado' ? 'red' : 'orange'} />
+                          <Badge texto={String(c.status)} />
                         </td>
                       )}
                       <td className="px-3 py-4">
@@ -380,7 +385,7 @@ export default function ContratosEscolaPage() {
                             <button
                               onClick={() => (falta.length ? abrir(c) : setConfirmar(c))}
                               title={falta.length ? `Faltam: ${falta.join(', ')}` : 'A diretora confirmou o contrato e a data: enviar para a Agenda Fotográfica'}
-                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20"
+                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20"
                             >
                               {falta.length ? 'Completar' : 'Enviar à agenda →'}
                             </button>
@@ -405,7 +410,7 @@ export default function ContratosEscolaPage() {
                             </button>
                           )}
                           {pEditar && c.status !== 'Cancelado' && (
-                            <button onClick={() => pedirAcao('cancelar', c)} title="Cancelar contrato (fica no histórico)" className="p-2 rounded-lg text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10">
+                            <button onClick={() => pedirAcao('cancelar', c)} title="Cancelar contrato (fica no histórico)" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10">
                               <Icon nome="x" className="w-4 h-4" />
                             </button>
                           )}
@@ -437,7 +442,7 @@ export default function ContratosEscolaPage() {
             {editando && pEditar && (
               <div className="mr-auto flex gap-1">
                 {editando.status !== 'Cancelado' && (
-                  <button onClick={() => pedirAcao('cancelar', editando)} className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-orange-400 hover:bg-orange-500/10 rounded-xl">
+                  <button onClick={() => pedirAcao('cancelar', editando)} className="px-4 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl">
                     Cancelar contrato
                   </button>
                 )}
@@ -490,10 +495,10 @@ export default function ContratosEscolaPage() {
             </label>
             <div
               className={`rounded-2xl p-4 text-[11px] text-zinc-300 leading-relaxed border ${
-                ia.estado === 'erro' ? 'bg-red-500/10 border-red-500/20' : ia.estado === 'ok' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-blue-500/10 border-blue-500/20'
+                ia.estado === 'erro' ? 'bg-red-500/10 border-red-500/20' : ia.estado === 'ok' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/[0.03] border-white/[0.08]'
               }`}
             >
-              <p className={`font-bold uppercase tracking-widest text-[10px] mb-1 ${ia.estado === 'erro' ? 'text-red-400' : ia.estado === 'ok' ? 'text-emerald-400' : 'text-blue-400'}`}>
+              <p className={`font-bold uppercase tracking-widest text-[10px] mb-1 ${ia.estado === 'erro' ? 'text-red-400' : ia.estado === 'ok' ? 'text-emerald-400' : 'text-zinc-300'}`}>
                 Leitura automática (grátis)
               </p>
               {ia.estado === 'parado' && 'Anexe a foto ou o PDF do contrato: a IA lê o documento, inclusive a letra à mão, e preenche os campos ao lado. Você só confere antes de concluir. Foto de perto, reta e bem iluminada lê melhor.'}
@@ -540,7 +545,7 @@ export default function ContratosEscolaPage() {
               {CAMPOS_OBRIGATORIOS_CONTRATO.map((f) => {
                 const ok = !faltando.includes(f.label)
                 return (
-                  <p key={f.chave} className={`text-xs flex items-center gap-2 ${ok ? 'text-zinc-400' : 'text-orange-400 font-bold'}`}>
+                  <p key={f.chave} className={`text-xs flex items-center gap-2 ${ok ? 'text-zinc-400' : 'text-yellow-400 font-bold'}`}>
                     <span className="w-4">{ok ? '✓' : '•'}</span> {f.label}
                   </p>
                 )
@@ -554,7 +559,7 @@ export default function ContratosEscolaPage() {
           {/* Campos */}
           <div className="lg:col-span-3 space-y-6">
             <div className="space-y-4">
-              <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Dados da escola</p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Dados da escola</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">{campo('escola', 'Escola', true, { placeholder: 'Nome como está no contrato' })}</div>
                 {campo('cidade', 'Cidade', true)}
@@ -569,7 +574,7 @@ export default function ContratosEscolaPage() {
             </div>
 
             <div className="space-y-4 pt-4 border-t border-white/[0.05]">
-              <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Contrato e bonificação</p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Contrato e bonificação</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className={labelCls}>
@@ -612,7 +617,7 @@ export default function ContratosEscolaPage() {
             </div>
 
             <div className="space-y-4 pt-4 border-t border-white/[0.05]">
-              <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">Dados PIX da escola <span className="text-zinc-500 normal-case tracking-normal font-medium">— pode completar depois</span></p>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Dados PIX da escola <span className="text-zinc-500 normal-case tracking-normal font-medium">— pode completar depois</span></p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                 {campo('pixNome', 'Titular (quem recebe)')}
                 {campo('pixChave', 'Chave PIX')}
@@ -672,7 +677,7 @@ export default function ContratosEscolaPage() {
               <button
                 onClick={executarAcao}
                 disabled={executando}
-                className={`px-6 py-3 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-60 ${acao.tipo === 'excluir' ? 'bg-red-600 hover:bg-red-500' : 'bg-orange-600 hover:bg-orange-500'}`}
+                className={`px-6 py-3 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-60 bg-red-600 hover:bg-red-500`}
               >
                 {executando ? 'Aguarde...' : acao.tipo === 'excluir' ? 'Excluir definitivamente' : 'Cancelar contrato'}
               </button>
@@ -681,7 +686,7 @@ export default function ContratosEscolaPage() {
         }
       >
         {acao && jaFotografado(acao.contrato) ? (
-          <p className="text-sm text-orange-400 font-bold">
+          <p className="text-sm text-yellow-400 font-bold">
             Esta escola já foi fotografada: fichas, fechamento e pagamentos dependem deste contrato, então ele não pode ser {acao.tipo === 'excluir' ? 'excluído' : 'cancelado'}.
           </p>
         ) : acao?.tipo === 'excluir' ? (

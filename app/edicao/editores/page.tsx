@@ -36,7 +36,7 @@ export default function EditoresPage() {
         { chave: 'status', label: 'Situação', tipo: 'select', opcoes: ['Ativo', 'Inativo'], obrigatorio: true, padrao: () => 'Ativo', tabela: false },
         { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
       ]}
-      status={{ campo: 'status', tons: { Ativo: 'emerald', Inativo: 'zinc' } }}
+      status={{ campo: 'status', tons: {} }}
     />
   )
 }

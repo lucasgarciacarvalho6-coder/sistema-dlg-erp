@@ -15,7 +15,7 @@ function Celula({ ativo, editavel, onClick }: { ativo: boolean; editavel: boolea
       disabled={!editavel}
       onClick={onClick}
       className={`w-9 h-9 rounded-xl border flex items-center justify-center mx-auto transition-all ${
-        ativo ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-white/[0.02] border-white/[0.05] text-zinc-700'
+        ativo ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-white/[0.02] border-white/[0.05] text-zinc-700'
       } ${editavel ? 'hover:scale-110 cursor-pointer' : 'cursor-default'}`}
     >
       {ativo ? <Icon nome="check" className="w-4 h-4" /> : <Icon nome="x" className="w-3.5 h-3.5" />}

@@ -38,7 +38,7 @@ export default function OperacionalMetasPage() {
                     <p className="text-sm font-bold text-white truncate">{String(t.titulo)} • {String(t.escola)}</p>
                     <p className="text-[11px] text-zinc-500">{String(t.cidade)} • {nomeColaborador(s, t.responsavelId)} • prazo {dataBR(String(t.prazo))}</p>
                   </div>
-                  <Badge texto={String(t.status)} tom={t.status === 'Em andamento' ? 'blue' : 'orange'} />
+                  <Badge texto={String(t.status)} />
                 </div>
               ))}
             </div>

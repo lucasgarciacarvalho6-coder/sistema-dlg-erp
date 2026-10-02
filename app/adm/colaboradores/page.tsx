@@ -121,7 +121,7 @@ export default function ColaboradoresPage() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-4">
-        <StatCard label="Total" valor={s.colaboradores.length} detalhe={`${ativos.length} ativos`} tom="blue" />
+        <StatCard label="Total" valor={s.colaboradores.length} detalhe={`${ativos.length} ativos`} />
         {SETORES_IDS.map((x) => (
           <button key={x} onClick={() => setFiltroSetor(filtroSetor === x ? '' : x)} className="text-left">
             <div className={`bg-painel-2/80 border ${filtroSetor === x ? 'border-blue-500/50' : 'border-white/[0.05]'} p-5 rounded-3xl hover:-translate-y-1 transition-all h-full`}>
@@ -202,11 +202,11 @@ export default function ColaboradoresPage() {
                     <td className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-zinc-400">{c.perfil}</td>
                     <td className="px-6 py-4 text-zinc-500 whitespace-nowrap">{c.telefone || '—'}</td>
                     <td className="px-6 py-4 text-zinc-500">{dataBR(c.dataAdmissao)}</td>
-                    <td className="px-6 py-4"><Badge texto={c.status} tom={c.status === 'ATIVO' ? 'emerald' : 'red'} /></td>
+                    <td className="px-6 py-4"><Badge texto={c.status} /></td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end gap-2">
                         {pEditar && c.id !== eu?.id && (
-                          <button onClick={() => alternarStatus(c)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap ${c.status === 'ATIVO' ? 'text-orange-400 border-orange-500/20 bg-orange-500/10' : 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10'}`}>
+                          <button onClick={() => alternarStatus(c)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap ${c.status === 'ATIVO' ? 'text-red-400 border-red-500/20 bg-red-500/10' : 'text-blue-400 border-blue-500/20 bg-blue-500/10'}`}>
                             {c.status === 'ATIVO' ? 'Desativar' : 'Ativar'}
                           </button>
                         )}
@@ -295,7 +295,7 @@ export default function ColaboradoresPage() {
               ))}
             </select>
             <p className="text-[10px] text-zinc-500">
-              Perfil: <strong className="text-blue-400">{perfilDoSetor(form.setor)}</strong> • entra em <strong className="text-white">{SETORES[form.setor].home}</strong>
+              Perfil: <strong className="text-white">{perfilDoSetor(form.setor)}</strong> • entra em <strong className="text-white">{SETORES[form.setor].home}</strong>
             </p>
           </div>
           <div className="space-y-2">

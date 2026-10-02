@@ -75,7 +75,7 @@ function LinhaDoTempo({ l }: { l: Registro }) {
         const t = TONS[TOM_ETAPA[e]]
         return (
           <div key={e} className={`rounded-xl border px-3 py-2.5 ${agora ? `${t.borda} ${t.suave}` : feito ? 'border-white/[0.08] bg-white/[0.03]' : 'border-white/[0.04] opacity-40'}`}>
-            <p className={`text-[9px] font-black uppercase tracking-widest leading-tight ${agora ? t.texto : feito ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            <p className={`text-[9px] font-black uppercase tracking-widest leading-tight ${agora ? 'text-white' : feito ? 'text-zinc-300' : 'text-zinc-500'}`}>
               {feito ? '✓ ' : ''}
               {e}
             </p>
@@ -110,7 +110,7 @@ function Numeros({ l }: { l: Registro }) {
         ))}
       </div>
       {contados > 0 && (
-        <p className="text-[11px] font-bold text-emerald-400">
+        <p className="text-[11px] font-bold text-zinc-300">
           ✓ {num(contados)} álbuns na meta{analista ? ` de ${analista}` : ''}
           {l.confirmadoEm ? ` (conferência final em ${dataBR(String(l.confirmadoEm))})` : ''}
         </p>
@@ -133,7 +133,7 @@ function Numeros({ l }: { l: Registro }) {
       {caixas.length > 0 && (
         <p className="text-[11px] font-bold text-zinc-300">
           📦 {num(caixas.length)} caixa(s) da Revelação • {num(caixas.reduce((a, c) => a + (Number(c.albuns) || 0), 0))} de {num(Number(l.albuns))} álbuns •{' '}
-          <span className="text-emerald-400">{num(caixas.filter((c) => c.status === 'Em estoque').length)} em estoque</span>
+          <span className="text-white">{num(caixas.filter((c) => c.status === 'Em estoque').length)} em estoque</span>
         </p>
       )}
       {!!l.observacao && <p className="text-[11px] text-zinc-400">Obs.: {String(l.observacao)}</p>}
@@ -392,7 +392,7 @@ function ProximoPasso({ l }: { l: Registro }) {
               </div>
             </>
           ) : (
-            <p className="text-xs text-orange-300">Cadastre os editores em Produção › Editores.</p>
+            <p className="text-xs text-yellow-400">Cadastre os editores em Produção › Editores.</p>
           )}
         </div>,
       )
@@ -524,7 +524,7 @@ function Ajuste({ l }: { l: Registro }) {
             <input type="number" min={0} value={posteres} onChange={(e) => setPosteres(e.target.value)} className={inputCls} />
           </label>
         </div>
-        {contado && <p className="text-[11px] text-emerald-400">Os álbuns já entraram na meta: a quantidade de álbuns não muda mais.</p>}
+        {contado && <p className="text-[11px] text-zinc-400">Os álbuns já entraram na meta: a quantidade de álbuns não muda mais.</p>}
         <label className="block space-y-1.5">
           <span className={labelCls}>Observação</span>
           <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: 5 alunos faltaram no dia" className={inputCls} />

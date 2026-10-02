@@ -10,7 +10,8 @@ import { brl } from '@/lib/erp/format'
 import { chaveParcelas, chavePreco, FAIXAS, FORMAS_REBOLO, PRODUTOS_REBOLO, REGRAS_REBOLO, tabelaRebolo, type Faixa } from '@/lib/erp/rebolo'
 import { PageHeader, Panel, btnPrimario, labelCls } from '@/components/erp/ui'
 
-const CORES: Record<Faixa, string> = { 1: 'border-blue-500/30', 2: 'border-emerald-500/30', 3: 'border-cyan-500/30' }
+// faixas sem cor (regra do ADM: cor só para alerta)
+const CORES: Record<Faixa, string> = { 1: 'border-white/[0.08]', 2: 'border-white/[0.08]', 3: 'border-white/[0.08]' }
 const campo = 'w-full bg-black/50 border border-white/[0.05] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 disabled:opacity-70'
 
 export default function PrecosReboloPage() {

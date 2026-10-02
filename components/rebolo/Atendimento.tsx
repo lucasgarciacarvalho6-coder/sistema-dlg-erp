@@ -47,8 +47,8 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
           <div className="flex flex-wrap items-center gap-2">
             <SituacaoBadge situacao={ficha.situacao} />
             <FaixaBadge ficha={ficha} tabela={tabela} />
-            <Badge texto={`P${pacoteDe(ficha)?.numero ?? '?'}`} tom="cyan" />
-            {Number(ficha.tentativas) > 0 && <Badge texto={`${ficha.tentativas} tentativa(s)`} tom="orange" />}
+            <Badge texto={`P${pacoteDe(ficha)?.numero ?? '?'}`} />
+            {Number(ficha.tentativas) > 0 && <Badge texto={`${ficha.tentativas} tentativa(s)`} />}
           </div>
           <p className="text-lg font-black text-white">{String(ficha.aluno)}</p>
           <p className="text-zinc-400">
@@ -67,7 +67,7 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
           </p>
           {ficha.pontoReferencia ? <p className="text-zinc-500 text-xs">Referência: {String(ficha.pontoReferencia)}</p> : null}
           {ficha.horario ? <p className="text-zinc-400">Melhor horário: <strong className="text-white">{String(ficha.horario)}</strong></p> : null}
-          {ficha.agendadoPara ? <p className="text-violet-300 font-bold">📅 Agendado: {dataHoraCurta(ficha.agendadoPara)}</p> : null}
+          {ficha.agendadoPara ? <p className="text-zinc-200 font-bold">📅 Agendado: {dataHoraCurta(ficha.agendadoPara)}</p> : null}
           <div className="pt-2"><Telefones ficha={ficha} /></div>
           <p className="text-[11px] text-zinc-500 pt-1">Vendedora: {nome(ficha.vendedoraId)}</p>
         </div>
@@ -164,9 +164,9 @@ function RegistrarContato({ ficha, onFeito }: { ficha: Registro; onFeito: () => 
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const opcoes: { id: ResultadoContato; t: string; d: string; cls: string }[] = [
-    { id: 'Sem resposta', t: '📵 Sem resposta', d: 'Fica em "Tentar de novo"', cls: 'border-orange-500/40 text-orange-300' },
-    { id: 'Em negociação', t: '💬 Em negociação', d: 'Conversando com a família', cls: 'border-blue-500/40 text-blue-300' },
-    { id: 'Agendado', t: '📅 Agendado', d: 'Retornar em data e hora marcadas', cls: 'border-violet-500/40 text-violet-300' },
+    { id: 'Sem resposta', t: '📵 Sem resposta', d: 'Fica em "Tentar de novo"', cls: 'border-yellow-500/40 text-yellow-300' },
+    { id: 'Em negociação', t: '💬 Em negociação', d: 'Conversando com a família', cls: 'border-white/[0.15] text-zinc-200' },
+    { id: 'Agendado', t: '📅 Agendado', d: 'Retornar em data e hora marcadas', cls: 'border-white/[0.15] text-zinc-200' },
     { id: 'Descarte', t: '🗑 Descarte', d: 'Não vende: o álbum fica congelado', cls: 'border-red-500/40 text-red-300' },
   ]
   const salvar = async () => {
@@ -324,15 +324,15 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
             type="button"
             disabled={!(f.preco > 0)}
             onClick={() => setForma(f.id)}
-            className={`p-3 rounded-xl border text-center disabled:opacity-30 ${forma === f.id ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/[0.06]'}`}
+            className={`p-3 rounded-xl border text-center disabled:opacity-30 ${forma === f.id ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/[0.06]'}`}
           >
             <p className="text-xs font-black text-white">{f.nome}</p>
-            <p className="text-sm font-bold text-emerald-300">{brl(f.preco)}</p>
+            <p className="text-sm font-bold text-white">{brl(f.preco)}</p>
           </button>
         ))}
       </div>
       {descontoOk && (
-        <label className="flex items-center gap-2 text-sm text-emerald-300">
+        <label className="flex items-center gap-2 text-sm text-zinc-200">
           <input type="checkbox" checked={usarDesconto} onChange={(e) => setUsarDesconto(e.target.checked)} /> Usar desconto aprovado pela Gerência: {brl(Number(ficha.descontoValor))}
         </label>
       )}

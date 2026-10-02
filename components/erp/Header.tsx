@@ -10,7 +10,8 @@ import Icon from './Icon'
 import SeletorTema from './SeletorTema'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from './ui'
 
-const TOM_NOTIF = { info: 'blue', alerta: 'orange', sucesso: 'emerald', aprovacao: 'yellow' } as const
+// cor só para alerta: aviso e aprovação = amarelo (atenção), sucesso = verde, informação = neutra
+const TOM_NOTIF = { info: 'zinc', alerta: 'yellow', sucesso: 'emerald', aprovacao: 'yellow' } as const
 
 function Relogio() {
   const [agora, setAgora] = useState<Date | null>(null)
@@ -85,10 +86,10 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-300"></span>
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400">Ao vivo</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Ao vivo</span>
           </div>
           <p className="text-sm font-black text-white tracking-wide truncate mt-1">
             Área {SETORES[setor].nome} <span className="text-zinc-600 font-bold">• {SETORES[setor].descricao}</span>
@@ -104,7 +105,7 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
           <button onClick={() => { setNotifAberto(!notifAberto); setPerfilAberto(false) }} className="relative p-2 text-zinc-500 hover:text-white transition-colors">
             <Icon nome="bell" className="w-6 h-6" />
             {naoLidas.length > 0 && (
-              <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 bg-blue-500 border-2 border-black rounded-full shadow-[0_0_10px_#3b82f6] text-[9px] font-black text-white flex items-center justify-center">
+              <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] px-1 bg-blue-500 border-2 border-black rounded-full text-[9px] font-black text-white flex items-center justify-center">
                 {naoLidas.length > 9 ? '9+' : naoLidas.length}
               </span>
             )}
@@ -158,13 +159,13 @@ export default function Header({ setor, usuario, onMenu }: { setor: Setor; usuar
           </div>
           <div className="hidden sm:flex flex-col text-right">
             <span className="text-sm font-bold text-white tracking-wide">{usuario.nome}</span>
-            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
               {usuario.perfil === 'ADM' ? 'Admin' : usuario.perfil === 'GERENTE' ? 'Gerência' : usuario.funcao}
             </span>
           </div>
           <button
             onClick={() => { setPerfilAberto(!perfilAberto); setNotifAberto(false) }}
-            className="w-11 h-11 md:w-12 md:h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-sm font-black shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-105 transition-transform"
+            className="w-11 h-11 md:w-12 md:h-12 rounded-2xl overflow-hidden bg-white/[0.08] border border-white/[0.12] flex items-center justify-center text-white text-sm font-black hover:scale-105 transition-transform"
           >
             {usuario.foto ? <img src={usuario.foto} alt={usuario.nome} className="w-full h-full object-cover" /> : iniciais(usuario.nome)}
           </button>

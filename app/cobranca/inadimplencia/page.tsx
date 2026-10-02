@@ -32,7 +32,7 @@ export default function InadimplenciaPage() {
       ]}
       kpis={(rs) => [
         { label: 'Clientes em atraso', valor: new Set(rs.map((r) => r.cliente)).size, tom: 'red' },
-        { label: 'Valor em atraso', valor: brl(rs.reduce((a, r) => a + Number(r.valor || 0), 0)), tom: 'orange' },
+        { label: 'Valor em atraso', valor: brl(rs.reduce((a, r) => a + Number(r.valor || 0), 0)), tom: 'red' },
         { label: 'Atraso médio', valor: `${rs.length ? Math.round(rs.reduce((a, r) => a + diasAtraso(String(r.vencimento)), 0) / rs.length) : 0} dias`, tom: 'zinc' },
       ]}
       acoes={[

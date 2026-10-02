@@ -24,10 +24,10 @@ export default function ProducaoDashboardPage() {
       tituloEquipe="Revelação • metas diárias e mensais"
       antesDaEquipe={
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-          <StatCard tom="violet" label="Álbuns hoje" valor={num(r.hoje)} detalhe={`Meta do dia: ${num(Math.round(r.meta.diaria))}`} />
-          <StatCard tom="blue" label="Álbuns no mês" valor={num(r.mes)} detalhe={`Meta: ${num(r.meta.mensal)} • projeção ${num(Math.round(r.projecao))}`} />
-          <StatCard tom="emerald" label="Lançaram hoje" valor={`${lancaramHoje.size}/${time.length}`} detalhe="Pessoas que já informaram o dia" />
-          <StatCard tom={abaixoDoPiso ? 'red' : 'emerald'} label="Abaixo do piso" valor={abaixoDoPiso} detalhe="No ritmo atual do mês" />
+          <StatCard label="Álbuns hoje" valor={num(r.hoje)} detalhe={`Meta do dia: ${num(Math.round(r.meta.diaria))}`} />
+          <StatCard label="Álbuns no mês" valor={num(r.mes)} detalhe={`Meta: ${num(r.meta.mensal)} • projeção ${num(Math.round(r.projecao))}`} />
+          <StatCard label="Lançaram hoje" valor={`${lancaramHoje.size}/${time.length}`} detalhe="Pessoas que já informaram o dia" />
+          <StatCard tom={abaixoDoPiso ? 'red' : 'zinc'} label="Abaixo do piso" valor={abaixoDoPiso} detalhe="No ritmo atual do mês" />
         </div>
       }
     />

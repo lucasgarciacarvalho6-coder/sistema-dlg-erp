@@ -27,7 +27,7 @@ export default function AprovacoesPage() {
         { chave: 'decididoPor', label: 'Decidido por', tipo: 'texto' },
         { chave: 'decididoEm', label: 'Em', tipo: 'data' },
       ]}
-      status={{ campo: 'status', tons: { Pendente: 'yellow', Aprovado: 'emerald', Rejeitado: 'red' } }}
+      status={{ campo: 'status', tons: { Pendente: 'yellow' } }}
       kpis={(rs) => [
         { label: 'Pendentes', valor: rs.filter((r) => r.status === 'Pendente').length, tom: 'yellow' },
         { label: 'Aprovadas', valor: rs.filter((r) => r.status === 'Aprovado').length, tom: 'emerald' },

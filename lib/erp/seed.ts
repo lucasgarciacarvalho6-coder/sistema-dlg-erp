@@ -28,7 +28,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 12 // v12: histórico da Produção com as datas de cada etapa (variação do dia na Visão TV)
+export const VERSAO_DADOS = 13 // v13: atividade de cada pessoa nos últimos dias (gerente virtual da Visão TV)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -714,6 +714,32 @@ export function gerarSeed(): ErpState {
   })
 
   s.auditoria = []
+  // Atividade da equipe (demo do gerente virtual): cada pessoa registrou algo nos dias úteis anteriores.
+  // A Tainá está há 2 dias úteis sem registrar (amarelo) e o Marcos há 4 (vermelho).
+  const diasUteisAtras = (n: number) => {
+    let d = hojeISO
+    for (let k = 0; k < n; ) {
+      d = addDias(d, -1)
+      if (ehDiaUtil(d)) k++
+    }
+    return d
+  }
+  for (const [id, nome, , setor] of COLABORADORES) {
+    if (id === 'u-adm' || setor === 'externo') continue
+    const parou = id === 'u-re2' ? 3 : id === 'u-pr2' ? 5 : 0
+    for (let k = parou; k < parou + 10; k++)
+      s.auditoria.push({
+        id: uid(),
+        data: new Date(`${diasUteisAtras(k)}T${String(8 + (k % 9)).padStart(2, '0')}:00:00`).toISOString(),
+        tipo: 'EDITAR',
+        usuarioId: id,
+        usuarioNome: nome,
+        setor,
+        descricao: 'Registro do dia (demonstração)',
+        ip: 'local (mock)',
+      })
+  }
+  s.auditoria.sort((x, y) => y.data.localeCompare(x.data))
   s.notificacoes = []
   s.notificacoes.push({
     id: 'n-boas-vindas',

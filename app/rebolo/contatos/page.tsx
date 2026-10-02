@@ -7,8 +7,8 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { hoje } from '@/lib/erp/format'
-import { EM_ABERTO, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
-import { EmptyState, Modal, PageHeader, Panel, TONS } from '@/components/erp/ui'
+import { EM_ABERTO, SITUACOES_FICHA } from '@/lib/erp/rebolo'
+import { EmptyState, Modal, PageHeader, Panel } from '@/components/erp/ui'
 import Atendimento from '@/components/rebolo/Atendimento'
 import { dataHoraCurta, FaixaBadge, PacoteBadge, SituacaoBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
 
@@ -63,13 +63,12 @@ export default function ContatosReboloPage() {
 
       <div className="flex flex-wrap gap-2">
         {abas.map((a) => {
-          const tom = a === HOJE ? 'blue' : TOM_SITUACAO[a]
           const ativo = aba === a
           return (
             <button
               key={a}
               onClick={() => setAba(a)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${ativo ? `${TONS[tom].suave} ${TONS[tom].texto} ${TONS[tom].borda}` : 'border-white/[0.06] text-zinc-400 hover:text-white'}`}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${ativo ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' : 'border-white/[0.06] text-zinc-400 hover:text-white'}`}
             >
               {a} <span className="opacity-70">({contar(a)})</span>
             </button>
@@ -133,8 +132,8 @@ export default function ContatosReboloPage() {
                     <td className="px-5 py-3.5 whitespace-nowrap">{[f.cidade, f.uf].filter(Boolean).join('/') || '—'}</td>
                     <td className="px-5 py-3.5"><Telefones ficha={f} /></td>
                     <td className="px-5 py-3.5 whitespace-nowrap text-xs">
-                      {f.situacao === 'Agendado' && f.agendadoPara ? <p className="text-violet-300 font-bold">📅 {dataHoraCurta(f.agendadoPara)}</p> : <p>{dataHoraCurta(f.ultimoContato)}</p>}
-                      {Number(f.tentativas) > 0 && <p className="text-orange-400">{String(f.tentativas)} tentativa(s)</p>}
+                      {f.situacao === 'Agendado' && f.agendadoPara ? <p className="text-zinc-200 font-bold">📅 {dataHoraCurta(f.agendadoPara)}</p> : <p>{dataHoraCurta(f.ultimoContato)}</p>}
+                      {Number(f.tentativas) > 0 && <p className="text-zinc-400">{String(f.tentativas)} tentativa(s)</p>}
                     </td>
                     <td className="px-5 py-3.5 text-xs text-zinc-400 max-w-[220px]">
                       {f.motivoDescarte ? <span className="text-red-400">{String(f.motivoDescarte)} • </span> : null}

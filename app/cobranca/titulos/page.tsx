@@ -29,7 +29,7 @@ export default function TitulosPage() {
         { chave: 'cobradorId', label: 'Cobrador', tipo: 'select', opcoes: opcoesEquipe('cobranca'), tabela: false },
         { chave: 'status', label: 'Status', tipo: 'texto', formulario: false, tabela: false, padrao: () => 'Aberto' },
       ]}
-      status={{ campo: 'status', tons: { Aberto: 'blue', Atrasado: 'red', Pago: 'emerald', 'Em acordo': 'yellow' }, valor: statusTitulo }}
+      status={{ campo: 'status', tons: { Atrasado: 'red' }, valor: statusTitulo }}
       kpis={(rs) => {
         const soma = (f: (r: (typeof rs)[number]) => boolean) => brl(rs.filter(f).reduce((a, r) => a + Number(r.valor || 0), 0))
         return [

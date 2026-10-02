@@ -32,10 +32,10 @@ export function SituacaoBadge({ situacao }: { situacao: unknown }) {
 
 export function FaixaBadge({ ficha, tabela }: { ficha: Registro; tabela: ReturnType<typeof tabelaRebolo> }) {
   const f = faixaDaFicha(String(ficha.dataVisita), tabela)
-  return <Badge texto={`Faixa ${f}`} tom={f === 1 ? 'blue' : f === 2 ? 'violet' : 'orange'} />
+  return <Badge texto={`Faixa ${f}`} />
 }
 
-export const PacoteBadge = ({ pacote }: { pacote: Registro | undefined }) => <Badge texto={rotuloPacote(pacote)} tom="cyan" />
+export const PacoteBadge = ({ pacote }: { pacote: Registro | undefined }) => <Badge texto={rotuloPacote(pacote)} />
 
 // Telefones da ficha com atalho para o WhatsApp
 export function Telefones({ ficha }: { ficha: Registro }) {
@@ -49,7 +49,7 @@ export function Telefones({ ficha }: { ficha: Registro }) {
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 whitespace-nowrap"
+          className="flex items-center gap-1.5 text-xs font-bold text-blue-400 hover:text-blue-300 whitespace-nowrap"
           title="Abrir conversa no WhatsApp"
         >
           <span aria-hidden="true">💬</span> {t}

@@ -65,20 +65,19 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
     <aside className="w-[280px] h-screen bg-painel-2/95 border-r border-white/[0.05] flex flex-col justify-between print:hidden">
       {/* O Palco da Logomarca */}
       <div className="pt-10 pb-7 flex flex-col items-center justify-center relative border-b border-white/[0.02]">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-blue-600/30 brilho scale-150 rounded-full pointer-events-none"></div>
         <img
           src="/logo.png"
           alt="DLG Photos"
           onClick={() => ir(rotaInicial(usuario))}
-          className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_25px_rgba(37,99,235,0.6)] hover:scale-105 transition-transform duration-500 cursor-pointer"
+          className="w-24 h-24 object-contain relative z-10 hover:scale-105 transition-transform duration-500 cursor-pointer"
         />
         <div className="mt-5 text-center relative z-10">
           <h1 className="text-xl font-black text-white tracking-[0.2em] uppercase">
             DLG <span className="text-blue-500">PHOTOS</span>
           </h1>
-          <div className="mt-2 inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-            <span className="text-[9px] text-blue-300 uppercase tracking-widest font-bold">Área {SETORES[setor].nome}</span>
+          <div className="mt-2 inline-flex items-center gap-2 bg-white/[0.04] border border-white/[0.1] px-3 py-1 rounded-full">
+            <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full"></span>
+            <span className="text-[9px] text-zinc-300 uppercase tracking-widest font-bold">Área {SETORES[setor].nome}</span>
           </div>
         </div>
       </div>
@@ -146,7 +145,6 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
   return (
     <div className="flex h-screen bg-black text-white overflow-hidden font-sans selection:bg-blue-600 selection:text-white relative print:h-auto print:overflow-visible">
       {/* Luz Ambiente Global */}
-      <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-blue-600/10 brilho scale-150 rounded-full pointer-events-none z-0"></div>
 
       <div className="hidden md:flex sticky top-0 z-50">{sidebar}</div>
       {menuAberto && (
@@ -167,7 +165,7 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
       {aviso && (
         <div key={aviso.id} className="fixed bottom-6 right-6 z-[80] max-w-sm animate-fade-in-up print:hidden">
           <div className={`flex items-start gap-3 border p-4 rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.8)] ${aviso.tipo === 'erro' ? 'bg-erro-fundo/95 border-red-900/50' : 'bg-ok-fundo/95 border-emerald-900/50'}`}>
-            <span className={`mt-1 w-2 h-2 shrink-0 rounded-full ${aviso.tipo === 'erro' ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-emerald-500 shadow-[0_0_10px_#10b981]'}`}></span>
+            <span className={`mt-1 w-2 h-2 shrink-0 rounded-full ${aviso.tipo === 'erro' ? 'bg-red-500' : 'bg-emerald-500'}`}></span>
             <p className={`text-xs font-medium leading-relaxed ${aviso.tipo === 'erro' ? 'text-red-300' : 'text-emerald-300'}`}>{aviso.texto}</p>
           </div>
         </div>

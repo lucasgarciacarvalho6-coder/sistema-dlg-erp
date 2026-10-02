@@ -49,10 +49,10 @@ export default function GerenciaDashboardPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard destaque tom="blue" label="Bateram a meta hoje" valor={`${bateramHoje}/${linhas.length}`} detalhe="Colaboradores de todas as áreas" progresso={(bateramHoje / (linhas.length || 1)) * 100} />
-        <StatCard tom="emerald" label="Setores no ritmo da meta" valor={`${setoresNoRitmo}/${comMeta.length}`} detalhe="Projeção ≥ meta mensal" />
-        <StatCard tom="yellow" label="Aprovações pendentes" valor={pendentes.length} detalhe={`${pct(aprov.pctMes)} da meta de análises do mês`} />
-        <StatCard tom="orange" label="Valor pendente de aprovação" valor={brl(pendentes.reduce((a, p) => a + Number(p.valor || 0), 0))} />
+        <StatCard destaque label="Bateram a meta hoje" valor={`${bateramHoje}/${linhas.length}`} detalhe="Colaboradores de todas as áreas" progresso={(bateramHoje / (linhas.length || 1)) * 100} />
+        <StatCard label="Setores no ritmo da meta" valor={`${setoresNoRitmo}/${comMeta.length}`} detalhe="Projeção ≥ meta mensal" />
+        <StatCard tom={pendentes.length ? 'yellow' : 'zinc'} label="Aprovações pendentes" valor={pendentes.length} detalhe={`${pct(aprov.pctMes)} da meta de análises do mês`} />
+        <StatCard label="Valor pendente de aprovação" valor={brl(pendentes.reduce((a, p) => a + Number(p.valor || 0), 0))} />
       </div>
 
       <PlacarAreas s={s} mes={mes} />
@@ -93,7 +93,7 @@ export default function GerenciaDashboardPage() {
                     </div>
                   </td>
                   <td className="px-6 py-3.5 text-right">
-                    {r.pctDia >= 100 ? <Badge texto="Meta do dia ok" tom="emerald" /> : r.projecao >= r.meta.mensal ? <Badge texto="No ritmo" tom="blue" /> : <Badge texto="Abaixo" tom="orange" />}
+                    {r.pctDia >= 100 ? <Badge texto="Meta do dia ok" tom="emerald" /> : r.projecao >= r.meta.mensal ? <Badge texto="No ritmo" tom="emerald" /> : <Badge texto="Abaixo" tom="yellow" />}
                   </td>
                 </tr>
               ))}
@@ -114,11 +114,11 @@ export default function GerenciaDashboardPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-white truncate">{String(a.tipo)}</p>
                     <p className="text-[11px] text-zinc-500 truncate">{String(a.descricao)} • {String(a.solicitante)}</p>
-                    <p className="text-xs font-black text-yellow-400 mt-1">{brl(Number(a.valor))}</p>
+                    <p className="text-xs font-black text-white mt-1">{brl(Number(a.valor))}</p>
                   </div>
                   {podeFazer('gerencia', 'editar') && (
                     <div className="flex gap-2 shrink-0">
-                      <button onClick={() => decidirAprovacao(a.id, true)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-emerald-400 border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20">Aprovar</button>
+                      <button onClick={() => decidirAprovacao(a.id, true)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">Aprovar</button>
                       <button onClick={() => decidirAprovacao(a.id, false)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-red-400 border-red-500/20 bg-red-500/10 hover:bg-red-500/20">Rejeitar</button>
                     </div>
                   )}

@@ -97,10 +97,10 @@ export default function VendasReboloPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="cyan" label="A efetivar" valor={minhas.filter((v) => v.conferencia === 'Aguardando contrato').length} detalhe="faltando o contrato assinado" />
-        <StatCard tom="yellow" label="No Financeiro" valor={minhas.filter((v) => v.conferencia === 'Aguardando conferência').length} />
-        <StatCard tom="red" label="Devolvidas" valor={minhas.filter((v) => v.conferencia === 'Devolvida').length} detalhe="corrigir e reenviar" />
-        <StatCard tom="emerald" label="Aprovadas no mês" valor={brl(aprovadasMes.reduce((a, v) => a + (Number(v.valor) || 0), 0))} detalhe={`${aprovadasMes.length} venda(s)`} />
+        <StatCard tom={minhas.some((v) => v.conferencia === 'Aguardando contrato') ? 'yellow' : 'zinc'} label="A efetivar" valor={minhas.filter((v) => v.conferencia === 'Aguardando contrato').length} detalhe="faltando o contrato assinado" />
+        <StatCard label="No Financeiro" valor={minhas.filter((v) => v.conferencia === 'Aguardando conferência').length} />
+        <StatCard tom={minhas.some((v) => v.conferencia === 'Devolvida') ? 'red' : 'zinc'} label="Devolvidas" valor={minhas.filter((v) => v.conferencia === 'Devolvida').length} detalhe="corrigir e reenviar" />
+        <StatCard label="Aprovadas no mês" valor={brl(aprovadasMes.reduce((a, v) => a + (Number(v.valor) || 0), 0))} detalhe={`${aprovadasMes.length} venda(s)`} />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -127,7 +127,7 @@ export default function VendasReboloPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-black text-white">{String(v.responsavel)}</p>
-                      <Badge texto={String(v.pacote)} tom="cyan" />
+                      <Badge texto={String(v.pacote)} />
                       <Badge texto={`Ficha ${v.numeroFicha}`} tom="zinc" />
                     </div>
                     <p className="text-xs text-zinc-400 mt-1">

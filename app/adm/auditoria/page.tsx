@@ -9,14 +9,15 @@ import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, btnSecundario } from '@/components/erp/ui'
 
 const TIPOS: { id: TipoLog; label: string; tom: Tom }[] = [
-  { id: 'LOGIN', label: 'Login', tom: 'emerald' },
+  // cor só para alerta: login que falhou = vermelho; o resto neutro
+  { id: 'LOGIN', label: 'Login', tom: 'zinc' },
   { id: 'LOGIN_FALHOU', label: 'Login falhou', tom: 'red' },
   { id: 'LOGOUT', label: 'Logout', tom: 'zinc' },
-  { id: 'ACESSO', label: 'Acesso', tom: 'blue' },
-  { id: 'CRIAR', label: 'Criação', tom: 'cyan' },
-  { id: 'EDITAR', label: 'Alteração', tom: 'yellow' },
-  { id: 'EXCLUIR', label: 'Exclusão', tom: 'orange' },
-  { id: 'SENHA', label: 'Senha', tom: 'violet' },
+  { id: 'ACESSO', label: 'Acesso', tom: 'zinc' },
+  { id: 'CRIAR', label: 'Criação', tom: 'zinc' },
+  { id: 'EDITAR', label: 'Alteração', tom: 'zinc' },
+  { id: 'EXCLUIR', label: 'Exclusão', tom: 'zinc' },
+  { id: 'SENHA', label: 'Senha', tom: 'zinc' },
   { id: 'SISTEMA', label: 'Sistema', tom: 'zinc' },
 ]
 
@@ -43,11 +44,11 @@ export default function AuditoriaPage() {
       <PageHeader modulo="Auditoria e Segurança" titulo="Logs do Sistema" descricao="Registro de logins, logouts, acessos, alterações e exclusões, com usuário responsável, data/hora e IP." />
 
       <div className="grid grid-cols-2 xl:grid-cols-5 gap-6">
-        <StatCard label="Eventos registrados" valor={s.auditoria.length} tom="blue" />
-        <StatCard label="Logins" valor={conta('LOGIN')} tom="emerald" />
-        <StatCard label="Logins falhos" valor={conta('LOGIN_FALHOU')} tom="red" />
-        <StatCard label="Alterações" valor={conta('EDITAR') + conta('CRIAR')} tom="yellow" />
-        <StatCard label="Exclusões" valor={conta('EXCLUIR')} tom="orange" />
+        <StatCard label="Eventos registrados" valor={s.auditoria.length} />
+        <StatCard label="Logins" valor={conta('LOGIN')} />
+        <StatCard label="Logins falhos" valor={conta('LOGIN_FALHOU')} tom={conta('LOGIN_FALHOU') ? 'red' : 'zinc'} />
+        <StatCard label="Alterações" valor={conta('EDITAR') + conta('CRIAR')} />
+        <StatCard label="Exclusões" valor={conta('EXCLUIR')} />
       </div>
 
       <Panel

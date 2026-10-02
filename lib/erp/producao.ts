@@ -6,18 +6,21 @@
 
 import type { ErpState, Registro, Tom } from './types'
 import { colecao } from './metrics'
+import { diaLocal } from './format'
+import { diasUteisDepois } from './calendario'
 
 export const ETAPAS_LOTE = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'] as const
 export type EtapaLote = (typeof ETAPAS_LOTE)[number]
 
+// Etapas sem cor (regra do ADM: cor só para alerta). O atraso e a escola parada é que ganham amarelo/vermelho.
 export const TOM_ETAPA: Record<EtapaLote, Tom> = {
   'Aguardando fotos': 'zinc',
-  'Em edição': 'blue',
-  'Análise de qualidade': 'yellow',
-  'Conferência final': 'violet',
-  'Aguardando revelação': 'orange',
-  Revelando: 'cyan',
-  'Na caixa': 'emerald',
+  'Em edição': 'zinc',
+  'Análise de qualidade': 'zinc',
+  'Conferência final': 'zinc',
+  'Aguardando revelação': 'zinc',
+  Revelando: 'zinc',
+  'Na caixa': 'zinc',
 }
 
 // Etapas em que a Produção ainda está trabalhando (o resto já foi entregue à Revelação)
@@ -116,40 +119,97 @@ export function corDaCidade(s: ErpState, cidade: unknown, uf: unknown): { cor: s
 
 // ---- Visão TV: as etapas como na planilha da empresa ----
 // 6 linhas com os nomes que a empresa usa (a análise de qualidade e a conferência final ficam juntas em
-// "Aguardando aprovação (pagamento)"), nas cores da planilha.
+// "Aguardando aprovação (pagamento)"). Sem cor por etapa (regra do ADM): a linha só fica
+// vermelha com editor atrasado e amarela com escola parada além do prazo (dias úteis na mesma etapa).
 // Cada linha: álbuns, escolas e a VARIAÇÃO de hoje (agora × como estava no fim de ontem, pelo histórico das escolas).
 // "Na caixa" conta só as escolas que chegaram na caixa no mês (senão soma todas desde o começo).
-export const ETAPAS_PAINEL: { nome: string; descricao: string; cor: string; etapas: EtapaLote[] }[] = [
-  { nome: 'Aguardando envio editor', descricao: 'fotos que os fotógrafos mandam depois das sessões', cor: '#EAB308', etapas: ['Aguardando fotos'] },
-  { nome: 'Em edição', descricao: 'fotos que estão com os editores', cor: '#94A3B8', etapas: ['Em edição'] },
-  { nome: 'Aguardando aprovação (pagamento)', descricao: 'análise de qualidade e conferência final', cor: '#3B82F6', etapas: ['Análise de qualidade', 'Conferência final'] },
-  { nome: 'Aguardando revelação', descricao: 'fotos que estão no HD', cor: '#F97316', etapas: ['Aguardando revelação'] },
-  { nome: 'Revelando', descricao: 'fotos que estão em revelação', cor: '#D946EF', etapas: ['Revelando'] },
-  { nome: 'Na caixa', descricao: 'prontas na caixa, no estoque', cor: '#22C55E', etapas: ['Na caixa'] },
+export const ETAPAS_PAINEL: { nome: string; descricao: string; etapas: EtapaLote[]; prazo: number | null }[] = [
+  { nome: 'Aguardando envio editor', descricao: 'fotos que os fotógrafos mandam depois das sessões', etapas: ['Aguardando fotos'], prazo: 2 },
+  { nome: 'Em edição', descricao: 'fotos que estão com os editores', etapas: ['Em edição'], prazo: null }, // aqui vale a data prevista do editor
+  { nome: 'Aguardando aprovação (pagamento)', descricao: 'análise de qualidade e conferência final', etapas: ['Análise de qualidade', 'Conferência final'], prazo: 3 },
+  { nome: 'Aguardando revelação', descricao: 'fotos que estão no HD', etapas: ['Aguardando revelação'], prazo: 5 },
+  { nome: 'Revelando', descricao: 'fotos que estão em revelação', etapas: ['Revelando'], prazo: null },
+  { nome: 'Na caixa', descricao: 'prontas na caixa, no estoque', etapas: ['Na caixa'], prazo: null },
 ]
+const grupoDaEtapa = (e: EtapaLote) => ETAPAS_PAINEL.findIndex((p) => p.etapas.includes(e))
 
 export interface LinhaPainel {
   nome: string
   descricao: string
-  cor: string
   albuns: number
   escolas: number
   variacao: number | null // null = mês que não é o atual (a variação é sempre de hoje)
-  atrasadas: number // Em edição: escolas com o editor fora do prazo
+  atrasadas: number // Em edição: escolas com o editor fora do prazo (vermelho)
+  paradas: number // escolas paradas na etapa além do prazo (amarelo)
+  prazo: number | null // dias úteis que a escola pode ficar na etapa
 }
 
-// dia (no fuso local) de uma data/hora do histórico
-const diaLocal = (iso: string) => {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso // só a data: já é o dia
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+// histórico de cada escola, do mais antigo para o mais novo
+export function historicoPorLote(s: ErpState) {
+  const m = new Map<string, Registro[]>()
+  for (const h of colecao(s, 'producao_historico')) m.set(String(h.loteId), [...(m.get(String(h.loteId)) ?? []), h])
+  for (const lista of m.values()) lista.sort((a, b) => String(a.data).localeCompare(String(b.data)))
+  return m
 }
 
-export function painelEtapas(s: ErpState, mes: string, hojeISO: string): { linhas: LinhaPainel[]; total: { albuns: number; escolas: number; variacao: number | null } } {
+// Desde quando a escola está na etapa do painel em que está agora (pelo histórico; sem histórico, pela data da etapa)
+const DATA_DA_ETAPA: Record<EtapaLote, string> = {
+  'Aguardando fotos': 'dataFoto',
+  'Em edição': 'enviadoEditorEm',
+  'Análise de qualidade': 'devolvidoEditorEm',
+  'Conferência final': 'devolvidoEditorEm',
+  'Aguardando revelação': 'confirmadoEm',
+  Revelando: 'revelandoEm',
+  'Na caixa': 'naCaixaEm',
+}
+export function desdeNaEtapa(l: Registro, historico: Registro[] = []): string {
+  const grupo = grupoDaEtapa(etapaDoLote(l))
+  let desde = ''
+  for (const h of historico) {
+    const e = ETAPAS_LOTE.includes(String(h.etapa) as EtapaLote) ? grupoDaEtapa(String(h.etapa) as EtapaLote) : -1
+    if (e === grupo) desde ||= diaLocal(String(h.data))
+    else desde = ''
+  }
+  return desde || String(l[DATA_DA_ETAPA[etapaDoLote(l)]] || l.dataFoto || '').slice(0, 10)
+}
+
+// Escolas paradas além do prazo da etapa (amarelo no card da Produção e no gerente virtual)
+export interface EscolaParada {
+  lote: Registro
+  etapa: string // nome da etapa no painel
+  desde: string
+  dias: number // dias úteis na etapa
+  prazo: number
+}
+export function escolasParadas(s: ErpState, hojeISO: string, historico = historicoPorLote(s)): EscolaParada[] {
+  const lista: EscolaParada[] = []
+  for (const l of lotesProducao(s)) {
+    const p = ETAPAS_PAINEL[grupoDaEtapa(etapaDoLote(l))]
+    if (!p?.prazo) continue
+    const desde = desdeNaEtapa(l, historico.get(l.id))
+    if (!desde) continue
+    const dias = diasUteisDepois(desde, hojeISO)
+    if (dias > p.prazo) lista.push({ lote: l, etapa: p.nome, desde, dias, prazo: p.prazo })
+  }
+  return lista.sort((a, b) => b.dias - a.dias)
+}
+
+// Linha "Atrasadas" do card: escolas com o editor fora da data prevista + escolas paradas além do prazo da etapa
+export interface AtrasadasPainel {
+  albuns: number
+  escolas: number
+  editor: number // escolas com o editor atrasado (vermelho)
+  paradas: number // escolas paradas além do prazo (amarelo)
+}
+
+export function painelEtapas(
+  s: ErpState,
+  mes: string,
+  hojeISO: string,
+): { linhas: LinhaPainel[]; total: { albuns: number; escolas: number; variacao: number | null }; atrasadas: AtrasadasPainel } {
   const lotes = lotesProducao(s)
-  const historico = new Map<string, Registro[]>()
-  for (const h of colecao(s, 'producao_historico')) historico.set(String(h.loteId), [...(historico.get(String(h.loteId)) ?? []), h])
-  for (const lista of historico.values()) lista.sort((a, b) => String(a.data).localeCompare(String(b.data)))
+  const historico = historicoPorLote(s)
+  const paradas = new Set(escolasParadas(s, hojeISO, historico).map((x) => x.lote.id))
   const valida = (e: unknown) => (ETAPAS_LOTE.includes(String(e) as EtapaLote) ? (String(e) as EtapaLote) : null)
   // etapa no fim de ontem: a última do histórico antes de hoje • escola que entrou hoje: não existia • sem histórico: como está
   const etapaOntem = (l: Registro): EtapaLote | null => {
@@ -181,11 +241,28 @@ export function painelEtapas(s: ErpState, mes: string, hojeISO: string): { linha
         variacao = albuns - ontem.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
       }
     }
-    return { ...p, albuns, escolas: agora.length, variacao, atrasadas: agora.filter((l) => diasAtraso(l, hojeISO) > 0).length }
+    return {
+      nome: p.nome,
+      descricao: p.descricao,
+      albuns,
+      escolas: agora.length,
+      variacao,
+      atrasadas: agora.filter((l) => diasAtraso(l, hojeISO) > 0).length,
+      paradas: agora.filter((l) => paradas.has(l.id)).length,
+      prazo: p.prazo,
+    }
   })
   const semCaixa = linhas.slice(0, -1)
+  const comEditorAtrasado = lotes.filter((l) => diasAtraso(l, hojeISO) > 0)
+  const foraDoPrazo = lotes.filter((l) => diasAtraso(l, hojeISO) > 0 || paradas.has(l.id))
   return {
     linhas,
+    atrasadas: {
+      albuns: foraDoPrazo.reduce((a, l) => a + (Number(l.albuns) || 0), 0),
+      escolas: foraDoPrazo.length,
+      editor: comEditorAtrasado.length,
+      paradas: foraDoPrazo.length - comEditorAtrasado.length,
+    },
     total: {
       albuns: semCaixa.reduce((a, x) => a + x.albuns, 0),
       escolas: semCaixa.reduce((a, x) => a + x.escolas, 0),

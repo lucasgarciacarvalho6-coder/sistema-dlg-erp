@@ -352,7 +352,7 @@ export default function VendaWizard({
         {duvidas.has(k) ? (
           <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 text-[9px] font-black">CONFIRA</span>
         ) : lidos.has(k) ? (
-          <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 text-[9px] font-black">LIDO</span>
+          <span className="px-1.5 py-0.5 rounded bg-white/[0.08] text-zinc-300 text-[9px] font-black">LIDO</span>
         ) : null}
       </label>
       <input value={f[k]} onChange={(e) => set(k, e.target.value)} className={`${inputApp} ${duvidas.has(k) ? '!border-yellow-500/70' : ''}`} {...extra} />
@@ -383,7 +383,7 @@ export default function VendaWizard({
             key={e}
             type="button"
             onClick={() => i < etapa && setEtapa(i)}
-            className={`flex-1 h-1.5 rounded-full ${i < etapa ? 'bg-emerald-500' : i === etapa ? 'bg-blue-500' : 'bg-white/[0.08]'}`}
+            className={`flex-1 h-1.5 rounded-full ${i < etapa ? 'bg-zinc-400' : i === etapa ? 'bg-blue-500' : 'bg-white/[0.08]'}`}
             aria-label={`Etapa ${i + 1}: ${e}`}
           />
         ))}
@@ -399,7 +399,7 @@ export default function VendaWizard({
           <p className="text-sm text-zinc-400">Fotografe o contrato preenchido. O sistema lê e preenche a venda, ou preencha você mesmo.</p>
           <CapturaPaginas paginas={fotosContrato} onChange={setFotosContrato} />
           {leitura.estado === 'lendo' && (
-            <p className="text-sm font-bold text-blue-300 flex items-center gap-2">
+            <p className="text-sm font-bold text-zinc-200 flex items-center gap-2">
               <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></span>
               Lendo o contrato... {leitura.progresso && leitura.progresso > 0.2 ? `${Math.round(leitura.progresso * 100)}%` : ''}
             </p>
@@ -424,7 +424,7 @@ export default function VendaWizard({
           {leitura.estado !== 'ok' && <p className="text-xs text-zinc-400">Preencha com os dados do contrato de papel.</p>}
           {leitura.estado === 'ok' && (
             <p className="text-xs text-zinc-400">
-              Preenchido pela leitura (<span className="text-blue-400 font-bold">LIDO</span>).{' '}
+              Preenchido pela leitura (<span className="text-zinc-200 font-bold">LIDO</span>).{' '}
               {duvidas.size > 0 && <span className="text-yellow-400 font-bold">{duvidas.size} campo(s) em amarelo: confira com o papel.</span>}
               {leitura.msg && <span className="block text-yellow-400 mt-1">{leitura.msg}</span>}
             </p>
@@ -582,7 +582,7 @@ export default function VendaWizard({
           </p>
           {devolvida?.assinatura && !assinatura && <p className="text-xs text-emerald-400">✓ Assinatura anterior guardada (assine de novo só se precisar)</p>}
           {assinatura && (
-            <div className="rounded-2xl overflow-hidden border border-emerald-500/40 bg-white">
+            <div className="rounded-2xl overflow-hidden border border-white/[0.2] bg-white">
               <ImagemArquivo arquivo={assinatura} />
             </div>
           )}

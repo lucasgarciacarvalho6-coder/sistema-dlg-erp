@@ -67,10 +67,10 @@ export default function ControleOperacionalPage() {
 // ---------------------------------------------------------------------------
 const OPCOES_RESOLVER: { id: AcaoPendencia; t: string; d: string; cls: string }[] = [
   { id: 'Resolvido', t: '✅ Resolvido', d: 'Sai da lista. Se o problema continuar, volta amanhã.', cls: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' },
-  { id: 'Sem sucesso', t: '📵 Contato sem sucesso', d: 'Sai de hoje e volta amanhã para tentar de novo.', cls: 'border-orange-500/50 bg-orange-500/10 text-orange-300' },
+  { id: 'Sem sucesso', t: '📵 Contato sem sucesso', d: 'Sai de hoje e volta amanhã para tentar de novo.', cls: 'border-yellow-500/50 bg-yellow-500/10 text-yellow-300' },
   { id: 'Excluída', t: '🗑 Excluir pendência', d: 'Sai de vez: este item não volta mais.', cls: 'border-red-500/50 bg-red-500/10 text-red-300' },
 ]
-const TOM_ACAO: Record<string, 'emerald' | 'orange' | 'red'> = { Resolvido: 'emerald', 'Sem sucesso': 'orange', 'Excluída': 'red' }
+const TOM_ACAO: Record<string, 'emerald' | 'yellow' | 'red'> = { Resolvido: 'emerald', 'Sem sucesso': 'yellow', 'Excluída': 'red' }
 
 function ResolverPendencia({ p, onFechar, irPara }: { p: Pendencia; onFechar: () => void; irPara: (a: Aba) => void }) {
   const [acao, setAcao] = useState<AcaoPendencia | ''>('')
@@ -183,16 +183,16 @@ function GestaoDiaria({ irPara }: { irPara: (a: Aba) => void }) {
           <div className="divide-y divide-white/[0.03]">
             {pendencias.map((p) => (
               <div key={p.id} className="px-6 py-4 flex items-center gap-4 hover:bg-white/[0.02]">
-                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.prioridade === 'alta' ? 'bg-red-500 shadow-[0_0_10px_#ef4444]' : 'bg-yellow-500'}`}></span>
+                <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${p.prioridade === 'alta' ? 'bg-red-500' : 'bg-yellow-500'}`}></span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge texto={p.area} tom={p.area === 'Agenda' ? 'blue' : p.area === 'Contratos' ? 'orange' : p.area === 'Fechamento' ? 'violet' : 'zinc'} />
+                    <Badge texto={p.area} />
                     {p.prioridade === 'alta' && <span className="text-[10px] font-black uppercase tracking-widest text-red-400">Urgente</span>}
                   </div>
                   <p className="text-sm font-bold text-white mt-1.5">{p.titulo}</p>
                   <p className="text-[11px] text-zinc-500">{p.detalhe}</p>
                   {p.ultima && (
-                    <p className="text-[11px] text-orange-300 mt-1">
+                    <p className="text-[11px] text-zinc-400 mt-1">
                       ↺ {String(p.ultima.acao)} em {dataBR(String(p.ultima.data))}
                       {p.ultima.observacao ? `: ${String(p.ultima.observacao)}` : ''}
                     </p>
@@ -294,10 +294,10 @@ function DashboardOperacional() {
         <BarChart valores={serieMes(s.lancamentos, { setor: 'operacional', indicador: 'fichas' }, mes)} meta={r.meta.diaria} limite={diaReferencia(mes)} />
       </Panel>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard label="Rotas ativas" valor={rotas.length} tom="blue" />
+        <StatCard label="Rotas ativas" valor={rotas.length} />
         <StatCard label="Cidades nas rotas" valor={cidades.length} tom="zinc" />
-        <StatCard label="Cidades visitadas" valor={cidades.filter((c) => c.visitada === 'Sim').length} tom="emerald" />
-        <StatCard label="Contratos nas visitas" valor={cidades.reduce((a, c) => a + Number(c.contratos || 0), 0)} tom="orange" />
+        <StatCard label="Cidades visitadas" valor={cidades.filter((c) => c.visitada === 'Sim').length} />
+        <StatCard label="Contratos nas visitas" valor={cidades.reduce((a, c) => a + Number(c.contratos || 0), 0)} />
       </div>
     </div>
   )
@@ -379,7 +379,7 @@ function ControleRota() {
           <div key={rota.id} className="space-y-4">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
-                <span className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">{String(rota.uf)} • {nomePJ(s, rota.vendedorId)}</span>
+                <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest">{String(rota.uf)} • {nomePJ(s, rota.vendedorId)}</span>
                 <h3 className="text-xl font-black text-white mt-1">{String(rota.nome)}</h3>
               </div>
               <div className="flex flex-wrap gap-3 items-center">
@@ -416,13 +416,13 @@ function ControleRota() {
                 { chave: 'cidade', label: 'Cidade', tipo: 'texto', obrigatorio: true },
                 { chave: 'dataVisita', label: 'Data visita', tipo: 'data' },
                 { chave: 'visitada', label: 'Visitada', tipo: 'select', opcoes: ['Não', 'Sim'], obrigatorio: true, tabela: false },
-                { chave: 'fechou', label: 'Fechou?', tipo: 'select', opcoes: ['SIM', 'NÃO'], exibir: (r) => (r.fechou ? <Badge texto={String(r.fechou)} tom={r.fechou === 'SIM' ? 'emerald' : 'red'} /> : '—') },
+                { chave: 'fechou', label: 'Fechou?', tipo: 'select', opcoes: ['SIM', 'NÃO'], exibir: (r) => (r.fechou ? <Badge texto={String(r.fechou)} tom={r.fechou === 'SIM' ? 'emerald' : 'zinc'} /> : '—') },
                 { chave: 'contratos', label: 'Contratos', tipo: 'numero' },
                 { chave: 'motivo', label: 'Motivo (se não)', tipo: 'texto' },
                 { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
                 { chave: 'rotaId', label: 'Rota', tipo: 'texto', tabela: false, formulario: false, padrao: () => rota.id },
               ]}
-              status={{ campo: 'visitada', tons: { Visitada: 'emerald', Pendente: 'orange' }, valor: (r) => (r.visitada === 'Sim' ? 'Visitada' : 'Pendente') }}
+              status={{ campo: 'visitada', tons: {}, valor: (r) => (r.visitada === 'Sim' ? 'Visitada' : 'Pendente') }}
             />
           </div>
         )
@@ -460,7 +460,7 @@ function VendedoresContrato() {
           ...PIX,
           { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
         ]}
-        status={{ campo: 'status', tons: { Ativo: 'emerald', 'Em negociação': 'yellow', Inativo: 'red' } }}
+        status={{ campo: 'status', tons: {} }}
         kpis={(rs) => [
           { label: 'Cadastrados', valor: rs.length, tom: 'blue' },
           { label: 'Ativos', valor: rs.filter((r) => r.status === 'Ativo').length, tom: 'emerald' },
@@ -563,7 +563,7 @@ function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
           ...PIX,
           { chave: 'tipo', label: 'Tipo', tipo: 'texto', tabela: false, formulario: false, padrao: () => tipo },
         ]}
-        status={{ campo: 'status', tons: { Ativo: 'emerald', 'Pronto p/ viagem': 'emerald', Inativo: 'red' }, valor: (r) => (r.status === 'Ativo' ? (fotografo ? 'Ativo' : 'Pronto p/ viagem') : 'Inativo') }}
+        status={{ campo: 'status', tons: {}, valor: (r) => (r.status === 'Ativo' ? (fotografo ? 'Ativo' : 'Pronto p/ viagem') : 'Inativo') }}
         kpis={(rs) => [
           { label: 'Cadastrados', valor: rs.length, tom: 'blue' },
           { label: fotografo ? 'Ativos' : 'Ativos • prontos para viagem', valor: rs.filter((r) => r.status === 'Ativo').length, tom: 'emerald' },
@@ -614,7 +614,7 @@ function Veiculos() {
               return v ? (
                 <span className="text-xs">
                   <strong className="text-white">{dataBR(String(v.data))}</strong> <span className="text-zinc-400">• {String(v.cidade)}-{String(v.uf)}</span>
-                  {v.equipe ? <span className="text-blue-400"> • {String(v.equipe)}</span> : null}
+                  {v.equipe ? <span className="text-zinc-300"> • {String(v.equipe)}</span> : null}
                 </span>
               ) : (
                 <span className="text-xs text-zinc-500">—</span>
@@ -625,14 +625,14 @@ function Veiculos() {
         ]}
         status={{
           campo: 'status',
-          tons: { Disponível: 'emerald', 'Na estrada hoje': 'blue', 'Em manutenção': 'orange', Inativo: 'red' },
+          tons: { 'Em manutenção': 'yellow' },
           valor: (r) => (r.status === 'Disponível' && naEstradaHoje.has(r.id) ? 'Na estrada hoje' : String(r.status || 'Disponível')),
         }}
         kpis={(rs) => [
           { label: 'Cadastrados', valor: rs.length, tom: 'blue' },
           { label: 'Disponíveis', valor: rs.filter((r) => r.status === 'Disponível').length, tom: 'emerald' },
           { label: 'Na estrada hoje', valor: rs.filter((r) => naEstradaHoje.has(r.id)).length, tom: 'blue' },
-          { label: 'Em manutenção', valor: rs.filter((r) => r.status === 'Em manutenção').length, tom: 'orange' },
+          { label: 'Em manutenção', valor: rs.filter((r) => r.status === 'Em manutenção').length, tom: 'yellow' },
         ]}
       />
     </div>

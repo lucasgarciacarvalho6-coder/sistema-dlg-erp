@@ -5,7 +5,7 @@ import type { Registro } from '@/lib/erp/types'
 import { trazerParaProducao, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
-import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, diasAtraso, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
+import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, diasAtraso, escolasParadas, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, TONS, btnPrimario, btnSecundario, inputCls } from '@/components/erp/ui'
 import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 import { Drive } from '@/components/edicao/LinkDrive'
@@ -35,6 +35,8 @@ export default function ControleProducaoPage() {
   const entreguesMes = lotes.filter((l) => String(l.confirmadoEm).startsWith(mes))
   const dia = hoje()
   const atrasadas = lotes.filter((l) => diasAtraso(l, dia) > 0) // passou da entrega prevista e continua com o editor
+  // escolas paradas além do prazo da etapa (2, 3 ou 5 dias úteis): aviso amarelo na linha
+  const paradas = new Map(escolasParadas(s, dia).map((x) => [x.lote.id, x]))
 
   const termo = busca.trim().toLowerCase()
   const lista = lotes
@@ -55,9 +57,9 @@ export default function ControleProducaoPage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-        <StatCard tom="pink" label="Restante para produzir" valor={num(soma(emProducao))} detalhe={`álbuns • ${emProducao.length} escola(s) na Produção`} />
-        <StatCard tom="blue" label="Com os editores" valor={num(soma(comEditores))} detalhe={`álbuns • ${comEditores.length} escola(s) em edição`} />
-        <StatCard tom="emerald" label="Entregues à Revelação no mês" valor={num(soma(entreguesMes))} detalhe={`álbuns • ${entreguesMes.length} escola(s) confirmada(s)`} />
+        <StatCard label="Restante para produzir" valor={num(soma(emProducao))} detalhe={`álbuns • ${emProducao.length} escola(s) na Produção`} />
+        <StatCard tom={atrasadas.length ? 'red' : 'zinc'} label="Com os editores" valor={num(soma(comEditores))} detalhe={`álbuns • ${comEditores.length} escola(s) em edição`} />
+        <StatCard label="Entregues à Revelação no mês" valor={num(soma(entreguesMes))} detalhe={`álbuns • ${entreguesMes.length} escola(s) confirmada(s)`} />
       </div>
 
       {/* Etapas: clicar filtra a lista */}
@@ -74,11 +76,13 @@ export default function ControleProducaoPage() {
         </button>
         {ETAPAS_LOTE.map((e) => {
           const ls = lotes.filter((l) => etapaDoLote(l) === e)
+          const nParadas = ls.filter((l) => paradas.has(l.id)).length
           return (
             <button key={e} onClick={() => setFiltro(e)} className={pill(filtro === e)}>
               <p className={`text-[10px] font-black uppercase tracking-widest ${TONS[TOM_ETAPA[e]].texto}`}>{e}</p>
               <p className="text-xl font-black text-white mt-1">{ls.length}</p>
               <p className="text-[10px] text-zinc-500">{num(soma(ls))} álbuns</p>
+              {nParadas > 0 && <p className="text-[10px] font-bold text-yellow-400">{num(nParadas)} parada(s)</p>}
             </button>
           )
         })}
@@ -117,12 +121,12 @@ export default function ControleProducaoPage() {
                       key={l.id}
                       onClick={() => setAberto(l.id)}
                       title="Abrir as etapas desta escola"
-                      className={`cursor-pointer ${retorno ? 'bg-orange-500/[0.07] hover:bg-orange-500/[0.12]' : 'hover:bg-white/[0.03]'}`}
+                      className="cursor-pointer hover:bg-white/[0.03]"
                     >
                       <td className="px-4 py-3 text-xs font-bold text-zinc-300 min-w-[130px] max-w-[190px]">{String(l.vendedor || '—')}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="text-white font-bold">{dataBR(String(l.dataFoto))}</span>
-                        {retorno && <span className="block text-[10px] font-black uppercase tracking-widest text-orange-400">↺ Retorno</span>}
+                        {retorno && <span className="block text-[10px] font-black uppercase tracking-widest text-zinc-400">↺ Retorno</span>}
                       </td>
                       <td className="px-4 py-3 min-w-[220px]">
                         <span className="block text-white font-bold">{String(l.escola)}</span>
@@ -138,9 +142,9 @@ export default function ControleProducaoPage() {
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
                         {l.fotosRecebidasEm ? (
-                          <span className="font-bold text-emerald-400">✓ {curta(l.fotosRecebidasEm)}</span>
+                          <span className="font-bold text-zinc-300">✓ {curta(l.fotosRecebidasEm)}</span>
                         ) : indiceEtapa(l) > 0 ? (
-                          <span className="font-bold text-emerald-400">✓</span>
+                          <span className="font-bold text-zinc-300">✓</span>
                         ) : (
                           <span className="text-zinc-500">aguardando</span>
                         )}
@@ -183,6 +187,11 @@ export default function ControleProducaoPage() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <Badge texto={etapa} tom={TOM_ETAPA[etapa]} />
+                        {paradas.has(l.id) && (
+                          <span className="block mt-1 text-[10px] font-black text-yellow-400" title={`Mais de ${paradas.get(l.id)!.prazo} dias úteis nesta etapa`}>
+                            parada há {num(paradas.get(l.id)!.dias)} dias úteis
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -243,13 +252,13 @@ function TrazerEscolas() {
           </div>
           <div className="max-h-96 overflow-y-auto custom-scrollbar divide-y divide-white/[0.04] rounded-2xl border border-white/[0.06]">
             {fora.map((v) => (
-              <label key={v.id} className={`flex items-center gap-4 px-4 py-3 cursor-pointer ${v.retornoDe ? 'bg-orange-500/[0.07]' : 'hover:bg-white/[0.02]'}`}>
+              <label key={v.id} className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-white/[0.02]">
                 <input type="checkbox" checked={marcadas.has(v.id)} onChange={() => alternar(v.id)} className="w-4 h-4 accent-blue-500" />
                 <span className="w-24 shrink-0 text-xs font-bold text-white">{dataBR(String(v.data))}</span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-bold text-white truncate">
                     {String(v.escola)}
-                    {v.retornoDe ? <span className="text-orange-400 text-[10px] font-black uppercase tracking-widest"> • ↺ Retorno</span> : null}
+                    {v.retornoDe ? <span className="text-zinc-400 text-[10px] font-black uppercase tracking-widest"> • ↺ Retorno</span> : null}
                   </span>
                   <span className="block text-[11px] text-zinc-500">
                     {String(v.cidade)}/{String(v.uf)} • {vendedores.get(String(v.vendedorId)) ?? 'sem vendedor'}

@@ -100,7 +100,7 @@ export default function HistoricoLancamentos({ setor }: { setor: Setor }) {
                     <td className="px-6 py-3.5"><span className="bg-black/50 border border-white/[0.05] rounded-lg px-3 py-1.5 text-xs">{dataBR(l.data)}</span></td>
                     <td className="px-6 py-3.5 text-white font-bold">{nome(l.colaboradorId)}</td>
                     <td className="px-6 py-3.5 text-zinc-400">{ind(l.indicador)?.label}</td>
-                    <td className="px-6 py-3.5 text-right font-black text-blue-400">{formatar(l.quantidade, ind(l.indicador)?.unidade ?? 'qtd')}</td>
+                    <td className="px-6 py-3.5 text-right font-black text-white">{formatar(l.quantidade, ind(l.indicador)?.unidade ?? 'qtd')}</td>
                     <td className="px-6 py-3.5 text-zinc-500 text-xs">{l.descricao || '—'}</td>
                     <td className="px-6 py-3.5"><Badge texto={l.origem === 'manual' ? 'Manual' : 'Automático'} tom={l.origem === 'manual' ? 'zinc' : 'blue'} /></td>
                     <td className="px-6 py-3.5 text-right">

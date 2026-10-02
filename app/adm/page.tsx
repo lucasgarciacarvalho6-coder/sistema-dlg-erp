@@ -11,7 +11,8 @@ import { RankingGeral } from '@/components/erp/PainelSetores'
 import { GradeEvolucao, ModoTV, PlacarAreas } from '@/components/erp/VisaoTV'
 import { AbaixoDoPiso, FunilDoMes } from '@/components/erp/FunilADM'
 import EquipeCards from '@/components/erp/EquipeCards'
-import { Badge, PageHeader, Panel, StatCard, TONS, btnBranco } from '@/components/erp/ui'
+import { PainelGerente } from '@/components/erp/GerenteVirtual'
+import { Badge, PageHeader, Panel, StatCard, btnBranco } from '@/components/erp/ui'
 
 // VISÃO MESTRA (Diretoria): consolida em tempo real os dados que todos os setores
 // gravam no núcleo central. Nenhum setor "envia" para o ADM — o ADM lê o núcleo.
@@ -62,36 +63,35 @@ export default function AdmVisaoTVPage() {
         }
       />
 
-      {/* Números gigantes */}
+      {/* Gerente virtual: o que está atrasado ou parado hoje */}
+      <PainelGerente s={s} />
+
+      {/* Números gigantes (neutros: cor só para alerta) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 bg-painel-2/80 border border-blue-500/30 p-8 rounded-3xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-80 shadow-[0_0_15px_#3b82f6]"></div>
-          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-blue-500/20 brilho scale-150 rounded-full"></div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-400 relative z-10">Total Faturado • Cobrança</p>
-          <p className="text-5xl xl:text-6xl font-black text-white tracking-tighter mt-4 relative z-10 break-words">{brl(faturado)}</p>
-          <p className="text-[10px] text-zinc-400 mt-4 uppercase tracking-widest font-bold relative z-10">Hoje: {brl(faturadoHoje)} • {nomeMes(mes)}</p>
+        <div className="bg-painel-2/80 border border-white/[0.08] p-8 rounded-3xl">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Total Faturado • Cobrança</p>
+          <p className="text-5xl xl:text-6xl font-black text-white tracking-tighter mt-4 break-words">{brl(faturado)}</p>
+          <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold">Hoje: {brl(faturadoHoje)} • {nomeMes(mes)}</p>
         </div>
-        <div className="bg-painel-2/80 border border-white/[0.08] p-8 rounded-3xl relative overflow-hidden">
-          <div className={`absolute top-0 left-0 w-full h-1 ${TONS.blue.solido} opacity-50`}></div>
+        <div className="bg-painel-2/80 border border-white/[0.08] p-8 rounded-3xl">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Total Fotografado • Operacional</p>
           <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4">{num(fotografado.mes)}</p>
           <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold">Fichas • {pct(fotografado.pctMes)} da meta mensal</p>
         </div>
-        <div className="bg-painel-2/80 border border-violet-500/20 p-8 rounded-3xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-violet-500 opacity-60 shadow-[0_0_15px_#8b5cf6]"></div>
-          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-violet-500/10 brilho scale-150 rounded-full"></div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400 relative z-10">Álbuns revelados • Revelação</p>
-          <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4 relative z-10">{num(books.mes)}</p>
-          <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold relative z-10">Hoje {num(books.hoje)} • {pct(books.pctMes)} da meta mensal</p>
+        <div className="bg-painel-2/80 border border-white/[0.08] p-8 rounded-3xl">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Álbuns revelados • Revelação</p>
+          <p className="text-6xl xl:text-7xl font-black text-white tracking-tighter mt-4">{num(books.mes)}</p>
+          <p className="text-[10px] text-zinc-500 mt-4 uppercase tracking-widest font-bold">Hoje {num(books.hoje)} • {pct(books.pctMes)} da meta mensal</p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="emerald" label="Contratos no mês" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} progresso={contratos.pctMes} />
-        <StatCard tom="cyan" label="Vendas Rebolo" valor={brl(rebolo.mes)} detalhe={`Meta ${brl(rebolo.meta.mensal)} • ${num(booksRebolo.mes)} books • hoje ${brl(rebolo.hoje)}`} progresso={rebolo.pctMes} />
-        <StatCard tom="red" label="Inadimplência" valor={pct(inadimplencia)} detalhe={`${atrasados.length} título(s) em atraso`} />
+        <StatCard label="Contratos no mês" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} progresso={contratos.pctMes} />
+        <StatCard label="Vendas Rebolo" valor={brl(rebolo.mes)} detalhe={`Meta ${brl(rebolo.meta.mensal)} • ${num(booksRebolo.mes)} books • hoje ${brl(rebolo.hoje)}`} progresso={rebolo.pctMes} />
+        {/* alerta: vermelho só quando há título em atraso */}
+        <StatCard tom={atrasados.length ? 'red' : 'zinc'} label="Inadimplência" valor={pct(inadimplencia)} detalhe={`${atrasados.length} título(s) em atraso`} />
         <Link href="/gerencia/aprovacoes" className="block">
-          <StatCard tom="yellow" label="Aprovações pendentes" valor={aprovacoesPendentes} detalhe="Gerência • clique para ver" />
+          <StatCard tom={aprovacoesPendentes ? 'yellow' : 'zinc'} label="Aprovações pendentes" valor={aprovacoesPendentes} detalhe="Gerência • clique para ver" />
         </Link>
       </div>
 
@@ -115,8 +115,8 @@ export default function AdmVisaoTVPage() {
           subtitulo="Últimos registros de todas as áreas"
           semPadding
           acoes={
-            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Tempo real
+            <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              <span className="w-2 h-2 rounded-full bg-zinc-400 animate-pulse"></span> Tempo real
             </span>
           }
         >
@@ -127,14 +127,14 @@ export default function AdmVisaoTVPage() {
               return (
                 <div key={l.id} className="px-6 py-3.5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <Badge texto={cfg.nome} tom={cfg.tom} />
+                    <Badge texto={cfg.nome} />
                     <div className="min-w-0">
                       <p className="text-sm font-bold text-white truncate">{s.colaboradores.find((c) => c.id === l.colaboradorId)?.nome ?? cfg.nome}</p>
                       <p className="text-[11px] text-zinc-500 truncate">{ind?.label} • {l.descricao || '—'}</p>
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`text-sm font-black ${TONS[cfg.tom].texto}`}>+{formatar(l.quantidade, ind?.unidade ?? 'qtd')}</p>
+                    <p className="text-sm font-black text-white">+{formatar(l.quantidade, ind?.unidade ?? 'qtd')}</p>
                     <p className="text-[10px] text-zinc-600 font-mono">{dataHoraBR(l.criadoEm)}</p>
                   </div>
                 </div>

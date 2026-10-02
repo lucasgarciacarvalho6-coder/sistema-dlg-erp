@@ -72,10 +72,10 @@ export default function PacotesReboloPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="cyan" label="Pacotes na lista" valor={linhas.length} detalhe={`${total} álbuns`} />
-        <StatCard tom="yellow" label="Aguardando contato" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Aguardando contato').length, 0)} />
-        <StatCard tom="blue" label="Em negociação / agendados" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Em negociação' || f.situacao === 'Agendado').length, 0)} />
-        <StatCard tom="emerald" label="Vendidos" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Vendida').length, 0)} />
+        <StatCard label="Pacotes na lista" valor={linhas.length} detalhe={`${total} álbuns`} />
+        <StatCard label="Aguardando contato" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Aguardando contato').length, 0)} />
+        <StatCard label="Em negociação / agendados" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Em negociação' || f.situacao === 'Agendado').length, 0)} />
+        <StatCard label="Vendidos" valor={linhas.reduce((a, l) => a + l.fichas.filter((f) => f.situacao === 'Vendida').length, 0)} />
       </div>
 
       <Panel
@@ -119,7 +119,7 @@ export default function PacotesReboloPage() {
                   <tr key={p.id} className={`hover:bg-white/[0.02] cursor-pointer ${abertoId === p.id ? 'bg-blue-500/[0.06]' : ''}`} onClick={() => setAbertoId(p.id)}>
                     <td className="px-5 py-3.5 text-white font-bold whitespace-nowrap">{nome(p.vendedoraId)}</td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
-                      <p className="font-black text-cyan-300">P{String(p.numero)}</p>
+                      <p className="font-black text-white">P{String(p.numero)}</p>
                       <p className="text-[10px] text-zinc-500">
                         {fs.length}/{p.tipo === 'Avulso' ? 1 : 10} álbuns • {String(p.tipo)} {pacoteFinalizado(fs) && '• finalizado'}
                       </p>
@@ -210,11 +210,11 @@ export default function PacotesReboloPage() {
 
       <Modal aberto={novo} titulo="Novo pacote de vendas" subtitulo="Escolha o tipo de pacote" onFechar={() => setNovo(false)} largura="max-w-lg">
         <div className="space-y-3">
-          <button onClick={() => void abrir('Padrão')} className="w-full text-left p-5 rounded-2xl border border-orange-500/40 bg-orange-500/[0.06] hover:bg-orange-500/[0.1]">
+          <button onClick={() => void abrir('Padrão')} className="w-full text-left p-5 rounded-2xl border border-white/[0.12] bg-white/[0.03] hover:bg-white/[0.06]">
             <p className="font-black text-white">📦 Pacote Padrão (10 álbuns)</p>
             <p className="text-xs text-zinc-400 mt-1">A caixa que voltou do vendedor externo: 10 álbuns para contatar e vender.</p>
           </button>
-          <button onClick={() => void abrir('Avulso')} className="w-full text-left p-5 rounded-2xl border border-cyan-500/40 bg-cyan-500/[0.06] hover:bg-cyan-500/[0.1]">
+          <button onClick={() => void abrir('Avulso')} className="w-full text-left p-5 rounded-2xl border border-white/[0.12] bg-white/[0.03] hover:bg-white/[0.06]">
             <p className="font-black text-white">📘 Pacote Avulso (1 álbum)</p>
             <p className="text-xs text-zinc-400 mt-1">Um álbum solto ou uma venda de pacote ofertado antes do sistema. Segue o mesmo fluxo (contrato → Financeiro).</p>
           </button>

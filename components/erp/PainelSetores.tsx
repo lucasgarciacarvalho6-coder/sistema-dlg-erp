@@ -4,7 +4,7 @@ import type { ErpState, Setor } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { equipeComMeta, metaColaborador, progresso, somar } from '@/lib/erp/metrics'
 import { iniciais, pct } from '@/lib/erp/format'
-import { Avatar, Panel, ProgressBar, TONS } from './ui'
+import { Avatar, Panel, ProgressBar } from './ui'
 
 // (O placar das áreas e a evolução do mês ficam em VisaoTV.tsx)
 
@@ -25,7 +25,7 @@ export function RankingGeral({ s, mes, limite = 10 }: { s: ErpState; mes: string
       <div className="divide-y divide-white/[0.03]">
         {linhas.map((l, i) => (
           <div key={l.c.id} className="px-6 py-3.5 flex items-center gap-4">
-            <span className={`w-6 text-sm font-black ${i < 3 ? 'text-yellow-400' : 'text-zinc-600'}`}>{i + 1}</span>
+            <span className={`w-6 text-sm font-black ${i < 3 ? 'text-white' : 'text-zinc-600'}`}>{i + 1}</span>
             <Avatar texto={iniciais(l.c.nome)} foto={l.c.foto} />
             <div className="flex-1 min-w-0">
               <div className="flex justify-between items-center gap-2">
@@ -33,8 +33,8 @@ export function RankingGeral({ s, mes, limite = 10 }: { s: ErpState; mes: string
                 <span className={`text-xs font-black ${l.pct >= 100 ? 'text-emerald-400' : 'text-white'}`}>{pct(l.pct)}</span>
               </div>
               <div className="flex items-center gap-3 mt-1.5">
-                <span className={`text-[9px] font-bold uppercase tracking-widest w-20 shrink-0 ${TONS[SETORES[l.setor as Setor].tom].texto}`}>{SETORES[l.setor].nome}</span>
-                <ProgressBar valor={l.pct} tom={SETORES[l.setor].tom} altura="h-1" />
+                <span className="text-[9px] font-bold uppercase tracking-widest w-20 shrink-0 text-zinc-500">{SETORES[l.setor as Setor].nome}</span>
+                <ProgressBar valor={l.pct} altura="h-1" />
               </div>
             </div>
           </div>

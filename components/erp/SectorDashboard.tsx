@@ -75,26 +75,26 @@ export default function SectorDashboard({
         const r = resumo(s, setor, ind.id, mes)
         return (
           <div key={ind.id} className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-            <StatCard destaque tom="blue" label={`${ind.label} • Mês`} valor={formatar(r.mes, ind.unidade)} detalhe={`Meta mensal: ${formatar(r.meta.mensal, ind.unidade)}`} progresso={r.pctMes} />
-            <StatCard tom="emerald" label="Hoje vs meta diária" valor={formatar(r.hoje, ind.unidade)} detalhe={`Meta do dia: ${formatar(r.meta.diaria, ind.unidade)} • ${pct(r.pctDia)}`} progresso={r.pctDia} />
+            <StatCard destaque label={`${ind.label} • Mês`} valor={formatar(r.mes, ind.unidade)} detalhe={`Meta mensal: ${formatar(r.meta.mensal, ind.unidade)}`} progresso={r.pctMes} />
+            <StatCard label="Hoje vs meta diária" valor={formatar(r.hoje, ind.unidade)} detalhe={`Meta do dia: ${formatar(r.meta.diaria, ind.unidade)} • ${pct(r.pctDia)}`} progresso={r.pctDia} />
             <StatCard label="Projeção do mês" valor={formatar(r.projecao, ind.unidade)} detalhe={`${pct((r.projecao / (r.meta.mensal || 1)) * 100)} da meta • ritmo atual`} />
-            <StatCard tom="orange" label="Necessário / dia" valor={formatar(r.necessarioDia, ind.unidade)} detalhe={r.mes >= r.meta.mensal ? 'Meta mensal atingida 🎯' : `Faltam ${formatar(Math.max(0, r.meta.mensal - r.mes), ind.unidade)}`} />
+            <StatCard label="Necessário / dia" valor={formatar(r.necessarioDia, ind.unidade)} detalhe={r.mes >= r.meta.mensal ? 'Meta mensal atingida 🎯' : `Faltam ${formatar(Math.max(0, r.meta.mensal - r.mes), ind.unidade)}`} />
           </div>
         )
       })}
 
       {/* Gráficos diários */}
       <div className={`grid grid-cols-1 ${cfg.indicadores.length > 1 ? 'xl:grid-cols-2' : ''} gap-6`}>
-        {cfg.indicadores.map((ind, idx) => {
+        {cfg.indicadores.map((ind) => {
           const r = resumo(s, setor, ind.id, mes)
           return (
             <Panel
               key={ind.id}
               titulo={`Desempenho diário • ${ind.label}`}
               subtitulo={nomeMes(mes)}
-              acoes={<Legenda itens={[{ label: 'Acima da meta', tom: idx === 0 ? 'blue' : 'violet' }, { label: 'Abaixo', tom: 'orange' }]} />}
+              acoes={<Legenda itens={[{ label: 'Bateu a meta do dia', tom: 'zinc' }, { label: 'Abaixo da meta', tom: 'yellow' }]} />}
             >
-              <BarChart valores={serieMes(s.lancamentos, { setor, indicador: ind.id }, mes)} meta={r.meta.diaria} tom={idx === 0 ? 'blue' : 'violet'} limite={limite} formatar={(v) => formatar(v, ind.unidade)} />
+              <BarChart valores={serieMes(s.lancamentos, { setor, indicador: ind.id }, mes)} meta={r.meta.diaria} limite={limite} formatar={(v) => formatar(v, ind.unidade)} />
             </Panel>
           )
         })}
@@ -104,7 +104,7 @@ export default function SectorDashboard({
 
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <span className="w-2 h-2 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]"></span>
+          <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
           <h2 className="text-sm font-black text-white uppercase tracking-widest">{tituloEquipe}</h2>
         </div>
         <TeamGoalCards setor={setor} mes={mes} />
@@ -128,7 +128,7 @@ export default function SectorDashboard({
                     <p className="text-[11px] text-zinc-500 truncate">{l.descricao || '—'}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-black text-blue-400">+{formatar(l.quantidade, ind?.unidade ?? 'qtd')}</p>
+                    <p className="text-sm font-black text-white">+{formatar(l.quantidade, ind?.unidade ?? 'qtd')}</p>
                     <p className="text-[10px] text-zinc-600 font-mono">{dataHoraBR(l.criadoEm)}</p>
                   </div>
                 </div>

@@ -27,7 +27,7 @@ export default function TarefasOperacionaisPage() {
       ]}
       status={{
         campo: 'status',
-        tons: { Pendente: 'orange', 'Em andamento': 'blue', Concluída: 'emerald', Atrasada: 'red' },
+        tons: { Atrasada: 'red' },
         valor: (r) => (r.status !== 'Concluída' && String(r.prazo) < hoje() ? 'Atrasada' : String(r.status)),
       }}
       kpis={(rs) => [

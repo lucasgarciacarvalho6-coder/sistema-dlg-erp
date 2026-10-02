@@ -60,13 +60,13 @@ export default function FichasPage() {
                   const feitas = fichasPorLote.get(l.id) ?? 0
                   const alunos = Number(l.alunos) || 0
                   return (
-                    <tr key={l.id} onClick={() => setAberta(l.id)} title="Abrir as fichas desta escola" className={`cursor-pointer ${l.retorno ? 'bg-orange-500/[0.07] hover:bg-orange-500/[0.12]' : 'hover:bg-white/[0.03]'}`}>
+                    <tr key={l.id} onClick={() => setAberta(l.id)} title="Abrir as fichas desta escola" className="cursor-pointer hover:bg-white/[0.03]">
                       <td className="px-5 py-3 min-w-[240px]">
                         <span className="block text-white font-bold">{String(l.escola)}</span>
                         <span className="block text-[11px] text-zinc-500">
                           {String(l.cidade)}
                           {l.uf ? `/${String(l.uf)}` : ''}
-                          {l.retorno ? <span className="text-orange-400 font-black"> • ↺ Retorno</span> : null}
+                          {l.retorno ? <span className="text-zinc-400 font-black"> • ↺ Retorno</span> : null}
                         </span>
                       </td>
                       <td className="px-5 py-3 whitespace-nowrap font-bold text-white">{dataBR(String(l.dataFoto))}</td>
@@ -76,7 +76,7 @@ export default function FichasPage() {
                           <span className={`text-xs font-black whitespace-nowrap ${alunos > 0 && feitas >= alunos ? 'text-emerald-400' : 'text-white'}`}>
                             {num(feitas)} de {num(alunos)}
                           </span>
-                          <ProgressBar valor={alunos > 0 ? (feitas / alunos) * 100 : 0} tom="pink" />
+                          <ProgressBar valor={alunos > 0 ? (feitas / alunos) * 100 : 0} />
                         </div>
                       </td>
                     </tr>

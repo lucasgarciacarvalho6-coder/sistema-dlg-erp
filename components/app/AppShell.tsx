@@ -64,7 +64,7 @@ export default function AppShell({
           <img src="/logo.png" alt="DLG" className="w-9 h-9 object-contain" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-black leading-tight truncate">{titulo}</p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 truncate">{subtitulo ?? usuario.funcao}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 truncate">{subtitulo ?? usuario.funcao}</p>
           </div>
           <Avatar texto={iniciais(usuario.nome)} foto={usuario.foto} tamanho="w-9 h-9" arredondado="rounded-xl" textoCls="text-[10px]" />
           <button onClick={sair} className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:text-white px-2 py-2" aria-label="Sair">

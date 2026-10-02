@@ -35,8 +35,8 @@ export default function EnviosReboloPage() {
     <div className="space-y-8 animate-fade-in-up">
       <PageHeader modulo="Vendas Rebolo / Envios" titulo="Envios pelo Correio" descricao="Vendas aprovadas pelo Financeiro, prontas para despachar. Lance o código de rastreio e avise o cliente." />
       <div className="grid grid-cols-2 gap-6">
-        <StatCard tom="orange" label="A enviar" valor={aEnviar.length} detalhe="aprovadas pelo Financeiro" />
-        <StatCard tom="emerald" label="Enviados" valor={enviados.length} />
+        <StatCard tom={aEnviar.length ? 'yellow' : 'zinc'} label="A enviar" valor={aEnviar.length} detalhe="aprovadas pelo Financeiro" />
+        <StatCard label="Enviados" valor={enviados.length} />
       </div>
       <Tabs abas={[{ id: 'enviar' as Aba, label: `A enviar (${aEnviar.length})` }, { id: 'enviados' as Aba, label: `Enviados (${enviados.length})` }]} ativa={aba} onChange={setAba} />
       <Panel semPadding titulo={aba === 'enviar' ? 'A enviar' : 'Enviados'}>
@@ -52,7 +52,7 @@ export default function EnviosReboloPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-black text-white">{String(v?.responsavel ?? f.nomeMae ?? '—')}</p>
-                      <Badge texto={`P${pacoteDe(f)?.numero ?? '?'} • ficha ${f.numeroFicha}`} tom="cyan" />
+                      <Badge texto={`P${pacoteDe(f)?.numero ?? '?'} • ficha ${f.numeroFicha}`} />
                     </div>
                     <p className="text-xs text-zinc-400 mt-1">
                       {String(f.aluno)} • {String(v?.pacote ?? 'Book')} • {nome(f.vendedoraId)}
@@ -86,7 +86,7 @@ export default function EnviosReboloPage() {
                       <p className="text-white font-bold">{String(f.rastreio)}</p>
                       <p className="text-xs text-zinc-500">Enviado em {dataHoraCurta(f.enviadoEm)}</p>
                       {mensagem(f) && (
-                        <a href={mensagem(f)} target="_blank" rel="noreferrer" className="text-xs font-bold text-emerald-400 hover:text-emerald-300">
+                        <a href={mensagem(f)} target="_blank" rel="noreferrer" className="text-xs font-bold text-blue-400 hover:text-blue-300">
                           💬 Avisar o cliente no WhatsApp
                         </a>
                       )}

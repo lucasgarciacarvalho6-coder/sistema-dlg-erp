@@ -93,7 +93,7 @@ export default function LancamentoModal({ setor, aberto, onFechar }: { setor: Se
         {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
         {ok && (
           <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981]"></span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest">Registrado e enviado ao ADM</p>
           </div>
         )}

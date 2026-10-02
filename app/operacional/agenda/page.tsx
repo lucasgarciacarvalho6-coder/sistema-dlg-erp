@@ -11,7 +11,8 @@ import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import type { Tom } from '@/lib/erp/types'
 
-const TOM_STATUS: Record<string, Tom> = { Agendada: 'blue', Fotografada: 'emerald', 'Fechamento enviado': 'violet', Cancelada: 'red' }
+// status sem cor (regra do ADM: cor só para alerta); vermelho só na visita de dia anterior que ainda não foi encerrada
+const tomStatus = (v: Registro): Tom => (v.status === 'Agendada' && String(v.data) < hoje() ? 'red' : 'zinc')
 const DIAS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']
 const SEM_EQUIPE = '__sem__'
 const DIA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
@@ -79,7 +80,7 @@ export default function AgendaFotograficaPage() {
           <>
             {responsavelRMC && (
               <div className="bg-painel/80 border border-white/[0.05] px-5 py-3 rounded-2xl flex items-center gap-4">
-                <div className="w-9 h-9 rounded-xl bg-blue-600/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-black text-xs">
+                <div className="w-9 h-9 rounded-xl bg-white/[0.06] text-zinc-200 border border-white/[0.12] flex items-center justify-center font-black text-xs">
                   {responsavelRMC.nome.split(' ').map((p) => p[0]).slice(0, 2).join('')}
                 </div>
                 <div>
@@ -111,17 +112,17 @@ export default function AgendaFotograficaPage() {
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Previstas</p>
             <p className="text-xl font-black text-white">{num(previstas)}</p>
           </div>
-          <div className="bg-blue-500/10 border border-blue-500/20 px-5 py-3 rounded-2xl text-center">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-blue-400 mb-1">Confirmadas</p>
-            <p className="text-xl font-black text-blue-400">{num(confirmadas)}</p>
+          <div className="bg-white/[0.02] border border-white/[0.05] px-5 py-3 rounded-2xl text-center">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Confirmadas</p>
+            <p className="text-xl font-black text-white">{num(confirmadas)}</p>
           </div>
-          <div className="bg-orange-500/10 border border-orange-500/20 px-5 py-3 rounded-2xl text-center">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-orange-400 mb-1">Faltam confirmar</p>
-            <p className="text-xl font-black text-orange-400">{num(Math.max(0, previstas - confirmadas))}</p>
+          <div className={`px-5 py-3 rounded-2xl text-center border ${previstas > confirmadas ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-white/[0.02] border-white/[0.05]'}`}>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Faltam confirmar</p>
+            <p className={`text-xl font-black ${previstas > confirmadas ? 'text-yellow-400' : 'text-white'}`}>{num(Math.max(0, previstas - confirmadas))}</p>
           </div>
-          <div className="bg-emerald-500/10 border border-emerald-500/20 px-5 py-3 rounded-2xl text-center">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Fotografadas</p>
-            <p className="text-xl font-black text-emerald-400">{num(fotografadas)}</p>
+          <div className="bg-white/[0.02] border border-white/[0.05] px-5 py-3 rounded-2xl text-center">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Fotografadas</p>
+            <p className="text-xl font-black text-white">{num(fotografadas)}</p>
           </div>
         </div>
       </div>
@@ -169,7 +170,7 @@ export default function AgendaFotograficaPage() {
       <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6 shadow-2xl overflow-x-auto custom-scrollbar">
         <div className="flex justify-between items-center mb-6 border-b border-white/[0.05] pb-4 min-w-[900px]">
           <h3 className="text-sm font-bold text-white uppercase tracking-widest">{doMes.length} visita(s) no mês</h3>
-          <span className="text-xs text-zinc-500">A cor à esquerda de cada card é a equipe • clique para ver dados, equipe e fichas</span>
+          <span className="text-xs text-zinc-500">Vermelho = visita de dia anterior ainda sem encerrar • clique para ver dados, equipe e fichas</span>
         </div>
         <div className="grid grid-cols-7 gap-3 mb-3 text-center min-w-[900px]">
           {DIAS.map((d) => (
@@ -200,7 +201,7 @@ export default function AgendaFotograficaPage() {
                     {doDia.map((v) => {
                       const eq = equipeDaVisita(s, v)
                       const cor = TONS[corEquipe(eq.nome)]
-                      const st = TONS[TOM_STATUS[String(v.status)] ?? 'zinc']
+                      const st = TONS[tomStatus(v)]
                       return (
                         <button
                           key={v.id}
@@ -214,7 +215,7 @@ export default function AgendaFotograficaPage() {
                             <span className={`text-[9px] font-black uppercase tracking-wider truncate ${eq.nome ? cor.texto : 'text-zinc-500'}`}>{eq.nome || 'Sem equipe'}</span>
                           </div>
                           <p className="text-[11px] font-bold text-white group-hover:text-blue-400 transition-colors leading-tight line-clamp-2">{String(v.escola)}</p>
-                          {v.retornoDe && <p className="text-[9px] font-black uppercase tracking-wider text-cyan-400">↺ Retorno</p>}
+                          {v.retornoDe && <p className="text-[9px] font-black uppercase tracking-wider text-zinc-400">↺ Retorno</p>}
                           <p className="text-[10px] text-zinc-400 truncate">{String(v.cidade)}</p>
                           <div className="flex items-center justify-between gap-1 text-[9px] font-bold">
                             <span className="text-zinc-400">
@@ -225,7 +226,7 @@ export default function AgendaFotograficaPage() {
                               {rotuloStatus(v.status)}
                             </span>
                           </div>
-                          {v.status === 'Agendada' && !eq.completa && <p className="text-[9px] font-bold text-orange-400 leading-tight">⚠ falta {eq.faltando.join(', ')}</p>}
+                          {v.status === 'Agendada' && !eq.completa && <p className="text-[9px] font-bold text-yellow-400 leading-tight">⚠ falta {eq.faltando.join(', ')}</p>}
                         </button>
                       )
                     })}
@@ -265,10 +266,10 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
         const fichas = lista.reduce((a, v) => a + Number(v.status === 'Agendada' ? v.fichasPrevistas : v.fichasFotografadas) || 0, 0)
         const diasDuplos = new Set(lista.filter((v, i) => lista.some((o, j) => j !== i && o.data === v.data && o.cidade !== v.cidade)).map((v) => String(v.data)))
         return (
-          <div key={nome || SEM_EQUIPE} className={`bg-painel/80 border rounded-3xl overflow-hidden ${nome ? cor.borda : 'border-orange-500/20'}`}>
+          <div key={nome || SEM_EQUIPE} className={`bg-painel/80 border rounded-3xl overflow-hidden ${nome ? cor.borda : 'border-yellow-500/20'}`}>
             <div className="px-6 py-4 border-b border-white/[0.05] flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className={`w-3 h-3 rounded-full ${nome ? cor.solido : 'bg-orange-500'}`}></span>
+                <span className={`w-3 h-3 rounded-full ${nome ? cor.solido : 'bg-yellow-500'}`}></span>
                 <div>
                   <p className="text-base font-black text-white">{nome || 'Sem equipe definida'}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
@@ -278,15 +279,15 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
               </div>
               {nome && (
                 <div className="text-[11px] text-zinc-300 text-right space-y-0.5">
-                  <p>🚐 {eq.veiculo ? nomeVeiculo(eq.veiculo) : String(ref.carro || '') || <span className="text-orange-400">sem veículo</span>}</p>
-                  <p>🧑‍✈️ {eq.motorista ? String(eq.motorista.nome) : <span className="text-orange-400">sem motorista</span>}</p>
-                  <p>📷 {eq.fotografos.length ? eq.fotografos.map((f) => String(f.nome).split(' ')[0]).join(', ') : <span className="text-orange-400">sem fotógrafo</span>}</p>
+                  <p>🚐 {eq.veiculo ? nomeVeiculo(eq.veiculo) : String(ref.carro || '') || <span className="text-yellow-400">sem veículo</span>}</p>
+                  <p>🧑‍✈️ {eq.motorista ? String(eq.motorista.nome) : <span className="text-yellow-400">sem motorista</span>}</p>
+                  <p>📷 {eq.fotografos.length ? eq.fotografos.map((f) => String(f.nome).split(' ')[0]).join(', ') : <span className="text-yellow-400">sem fotógrafo</span>}</p>
                 </div>
               )}
             </div>
             <div className="divide-y divide-white/[0.03]">
               {lista.map((v) => {
-                const st = TONS[TOM_STATUS[String(v.status)] ?? 'zinc']
+                const st = TONS[tomStatus(v)]
                 const e = equipeDaVisita(s, v)
                 return (
                   <button key={v.id} onClick={() => onAbrir(v.id)} className="w-full text-left px-6 py-3 flex items-center gap-4 hover:bg-white/[0.02] transition-colors">
@@ -298,9 +299,9 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
                       <p className="text-xs font-bold text-white truncate">{String(v.escola)}</p>
                       <p className="text-[10px] text-zinc-400">
                         {String(v.cidade)}-{String(v.uf)}
-                        {v.retornoDe && <span className="text-cyan-400 font-bold"> • ↺ Retorno</span>}
-                        {diasDuplos.has(String(v.data)) && <span className="text-orange-400 font-bold"> • 2 cidades no mesmo dia</span>}
-                        {v.status === 'Agendada' && !e.completa && <span className="text-orange-400 font-bold"> • falta {e.faltando.join(', ')}</span>}
+                        {v.retornoDe && <span className="text-zinc-400 font-bold"> • ↺ Retorno</span>}
+                        {diasDuplos.has(String(v.data)) && <span className="text-yellow-400 font-bold"> • 2 cidades no mesmo dia</span>}
+                        {v.status === 'Agendada' && !e.completa && <span className="text-yellow-400 font-bold"> • falta {e.faltando.join(', ')}</span>}
                       </p>
                     </div>
                     <span className={`flex items-center gap-1.5 text-[9px] font-bold uppercase whitespace-nowrap ${st.texto}`}>
@@ -415,7 +416,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
       <div className="flex flex-wrap items-center gap-2">
         {passos.map((p, i) => (
           <span key={p} className="flex items-center gap-2">
-            <span className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full border ${i < etapa ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : i === etapa ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-white/[0.02] text-zinc-500 border-white/[0.05]'}`}>
+            <span className={`px-3 py-1 text-[10px] font-bold uppercase rounded-full border ${i < etapa ? 'bg-white/[0.04] text-zinc-300 border-white/[0.1]' : i === etapa ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-white/[0.02] text-zinc-500 border-white/[0.05]'}`}>
               {i + 1}. {p}
             </span>
             {i < passos.length - 1 && <span className="text-zinc-600">→</span>}
@@ -425,7 +426,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
 
       {/* Dados da escola */}
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-3">
-        <div className="flex items-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-widest">Dados da escola</div>
+        <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-widest">Dados da escola</div>
         <p className="text-base font-black text-white">{String(visita.escola)}</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-white/[0.05]">
           <div>
@@ -438,7 +439,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
           </div>
           <div>
             <p className="text-[10px] text-zinc-500 uppercase font-bold">Telefone</p>
-            <p className="text-xs text-blue-400 font-mono font-bold">{String(visita.telefone || '—')}</p>
+            <p className="text-xs text-white font-mono font-bold">{String(visita.telefone || '—')}</p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-white/[0.05]">
@@ -464,8 +465,8 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
         {[
           ['Data', dataBR(String(visita.data)), 'text-white'],
           ['Previstas', num(Number(visita.fichasPrevistas)), 'text-white'],
-          ['Confirmadas', num(Number(visita.fichasConfirmadas)), 'text-emerald-400'],
-          ['Fotografadas', num(Number(visita.fichasFotografadas)), 'text-blue-400'],
+          ['Confirmadas', num(Number(visita.fichasConfirmadas)), 'text-white'],
+          ['Fotografadas', num(Number(visita.fichasFotografadas)), 'text-white'],
           ['Equipe', atual.nome || '—', 'text-white'],
         ].map(([r, v, c]) => (
           <div key={r}>
@@ -484,7 +485,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
               {atual.completa ? (
                 <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">✓ Equipe completa</span>
               ) : (
-                <span className="text-[10px] font-bold uppercase tracking-widest text-orange-400">Falta: {atual.faltando.join(', ')}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-400">Falta: {atual.faltando.join(', ')}</span>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -568,10 +569,10 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
             </div>
 
             {veiculoEscolhido && Number(veiculoEscolhido.lugares) > 0 && pessoas > Number(veiculoEscolhido.lugares) && (
-              <p className="text-[11px] font-bold text-orange-400">⚠ O veículo tem {String(veiculoEscolhido.lugares)} lugares e a equipe tem {pessoas} pessoas.</p>
+              <p className="text-[11px] font-bold text-yellow-400">⚠ O veículo tem {String(veiculoEscolhido.lugares)} lugares e a equipe tem {pessoas} pessoas.</p>
             )}
             {conflitos.map((c) => (
-              <p key={c} className="text-[11px] font-bold text-orange-400">⚠ {c}</p>
+              <p key={c} className="text-[11px] font-bold text-yellow-400">⚠ {c}</p>
             ))}
           </div>
 
@@ -595,8 +596,8 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
           </div>
 
           {/* Encerrar */}
-          <div className="bg-emerald-500/[0.05] border border-emerald-500/20 rounded-2xl p-5 space-y-4">
-            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Encerrar visita (após o trabalho)</p>
+          <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl p-5 space-y-4">
+            <p className="text-xs font-bold text-white uppercase tracking-wider">Encerrar visita (após o trabalho)</p>
             <div className="flex flex-col md:flex-row gap-4 md:items-end">
               <div className="space-y-2 flex-1">
                 <label className={labelCls}>Fichas fotografadas</label>
@@ -608,7 +609,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
                   setMsg(null)
                   setCaixaRetorno('encerrar') // pergunta se haverá retorno antes de encerrar
                 }}
-                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
+                className="px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
               >
                 Encerrar visita
               </button>
@@ -641,15 +642,15 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
 
       {/* Retorno: fichas que ficaram para outro dia */}
       {encerrada && retorno && (
-        <div className="bg-cyan-500/[0.05] border border-cyan-500/20 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-bold text-cyan-300">
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-bold text-zinc-300">
             ↺ Retorno agendado: <span className="text-white">{num(Number(retorno.fichasPrevistas))} fichas</span> em <span className="text-white">{dataBR(String(retorno.data))}</span>
           </p>
           <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{rotuloStatus(retorno.status)}</span>
         </div>
       )}
       {encerrada && !retorno && podeEditar && (
-        <div className="bg-cyan-500/[0.05] border border-cyan-500/20 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
           <p className="text-xs text-zinc-300">Ficaram fichas para outro dia? Agende o retorno: ele entra na agenda como uma nova visita.</p>
           <button onClick={() => setCaixaRetorno('agendar')} className={btnSecundario}>
             ↺ Agendar retorno
@@ -679,7 +680,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
         {historico.map((h) => (
           <div key={h.id} className="bg-black/50 border border-white/[0.05] p-4 rounded-2xl space-y-2">
             <div className="flex justify-between items-center gap-2">
-              <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-black uppercase rounded">{String(h.tipo)}</span>
+              <span className="px-2.5 py-0.5 bg-white/[0.05] text-zinc-300 border border-white/[0.1] text-[9px] font-black uppercase rounded">{String(h.tipo)}</span>
               <span className="text-[10px] text-zinc-500 font-mono">
                 {dataBR(String(h.data))}
                 {h.fichasDepois !== '' && h.fichasDepois !== null && (
@@ -742,7 +743,7 @@ function CaixaRetorno({ visita, modo, fotografadas, onFechar, onAviso }: { visit
       type="button"
       onClick={() => (setHaRetorno(valor), setErro(''))}
       className={`flex-1 px-5 py-4 rounded-2xl border text-sm font-black uppercase tracking-widest transition-all ${
-        haRetorno === valor ? (valor ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-300' : 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300') : 'border-white/[0.08] text-zinc-400 hover:text-white'
+        haRetorno === valor ? 'border-blue-500/60 bg-blue-500/15 text-blue-300' : 'border-white/[0.08] text-zinc-400 hover:text-white'
       }`}
     >
       {rotulo}

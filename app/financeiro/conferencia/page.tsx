@@ -117,10 +117,10 @@ export default function ConferenciaVendasPage() {
       />
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard tom="orange" label="Aguardando conferência" valor={aguardando.length} detalhe={brl(aguardando.reduce((a, v) => a + Number(v.valor || 0), 0))} />
-        <StatCard tom="red" label="Devolvidas ao vendedor" valor={devolvidas.length} detalhe="aguardando correção" />
-        <StatCard tom="emerald" label="Conferidas no mês" valor={conferidas.length} detalhe={brl(conferidas.reduce((a, v) => a + Number(v.valor || 0), 0))} />
-        <StatCard tom="blue" label="Conferidas hoje" valor={externas.filter((v) => v.conferencia === 'Conferida' && String(v.conferidoEm || '').slice(0, 10) === hoje()).length} />
+        <StatCard tom={aguardando.length ? 'yellow' : 'zinc'} label="Aguardando conferência" valor={aguardando.length} detalhe={brl(aguardando.reduce((a, v) => a + Number(v.valor || 0), 0))} />
+        <StatCard tom={devolvidas.length ? 'red' : 'zinc'} label="Devolvidas ao vendedor" valor={devolvidas.length} detalhe="aguardando correção" />
+        <StatCard label="Conferidas no mês" valor={conferidas.length} detalhe={brl(conferidas.reduce((a, v) => a + Number(v.valor || 0), 0))} />
+        <StatCard label="Conferidas hoje" valor={externas.filter((v) => v.conferencia === 'Conferida' && String(v.conferidoEm || '').slice(0, 10) === hoje()).length} />
       </div>
 
       <Tabs
@@ -157,7 +157,7 @@ export default function ConferenciaVendasPage() {
                     <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataHora(v.criadoEm)}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <p className="text-white font-bold">{nomeVendedor(s, v)}</p>
-                      <Badge texto={v.canal === 'Rebolo' ? 'Rebolo' : 'Externa'} tom={v.canal === 'Rebolo' ? 'cyan' : 'orange'} />
+                      <Badge texto={v.canal === 'Rebolo' ? 'Rebolo' : 'Externa'} />
                     </td>
                     <td className="px-4 py-3 min-w-[180px]">
                       <p className="text-white text-xs font-bold">{String(v.responsavel)}</p>
@@ -169,7 +169,7 @@ export default function ConferenciaVendasPage() {
                       {Number(v.parcelas) > 1 ? ` • ${String(v.parcelas)}x` : ''}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap font-black text-white">{brl(Number(v.valor || 0))}</td>
-                    <td className="px-4 py-3">{completo(v) ? <Badge texto="Completos" tom="emerald" /> : <Badge texto="Faltando" tom="red" />}</td>
+                    <td className="px-4 py-3">{completo(v) ? <Badge texto="Completos" /> : <Badge texto="Faltando" tom="yellow" />}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => (setAberta(v), setDevolvendo(false), setMotivo(''))} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 whitespace-nowrap">
                         {aba === 'aguardando' ? 'Conferir' : 'Ver'}

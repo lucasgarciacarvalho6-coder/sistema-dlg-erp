@@ -77,7 +77,7 @@ export default function VendedoresExternosPage() {
             formulario: false,
             exibir: (r) => {
               const c = login(r)
-              if (!c) return <span className="text-xs font-bold text-orange-400">Sem acesso</span>
+              if (!c) return <span className="text-xs font-bold text-yellow-400">Sem acesso</span>
               return (
                 <span className="text-xs">
                   <span className={`font-bold ${c.status === 'ATIVO' ? 'text-emerald-400' : 'text-red-400'}`}>{c.status === 'ATIVO' ? '✓ Liberado' : '✕ Bloqueado'}</span>
@@ -105,7 +105,7 @@ export default function VendedoresExternosPage() {
           { chave: 'pixBanco', label: 'PIX • banco', tipo: 'texto', tabela: false },
           { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },
         ]}
-        status={{ campo: 'status', tons: { Ativo: 'emerald', 'Em negociação': 'yellow', Inativo: 'red' } }}
+        status={{ campo: 'status', tons: {} }}
         acoes={[
           { label: 'Criar acesso', icone: 'key', tom: 'blue', visivel: (r) => !login(r), executar: (r) => abrir('criar', r) },
           { label: 'Nova senha', icone: 'lock', tom: 'blue', visivel: (r) => !!login(r), executar: (r) => abrir('senha', r) },
@@ -116,7 +116,7 @@ export default function VendedoresExternosPage() {
           { label: 'Vendedores de contrato', valor: rs.filter((r) => r.tipo !== 'Books').length, tom: 'blue' },
           { label: 'Vendedores de books', valor: rs.filter((r) => r.tipo === 'Books').length, tom: 'orange' },
           { label: 'Com acesso ao app', valor: rs.filter((r) => login(r)?.status === 'ATIVO').length, tom: 'emerald' },
-          { label: 'Sem acesso', valor: rs.filter((r) => !login(r)).length, tom: 'red' },
+          { label: 'Sem acesso', valor: rs.filter((r) => !login(r)).length, tom: 'yellow' },
         ]}
       />
 

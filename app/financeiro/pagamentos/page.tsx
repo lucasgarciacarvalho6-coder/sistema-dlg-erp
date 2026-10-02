@@ -48,7 +48,7 @@ export default function PagamentosOperacionaisPage() {
             tipo: 'texto',
             exibir: (r) => (
               <span className="block">
-                <span className="font-mono text-xs text-blue-400">{String(r.pixChave || '—')}</span>
+                <span className="font-mono text-xs text-zinc-300">{String(r.pixChave || '—')}</span>
                 <span className="block text-[11px] text-zinc-500">{String(r.pixBanco || '')}</span>
               </span>
             ),
@@ -56,7 +56,7 @@ export default function PagamentosOperacionaisPage() {
           { chave: 'pixBanco', label: 'Banco', tipo: 'texto', tabela: false },
           { chave: 'valor', label: 'Valor', tipo: 'moeda', formulario: false, exibir: (r) => <span className="text-white font-black">{Number(r.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span> },
         ]}
-        status={{ campo: 'status', tons: { 'A pagar': 'orange', Pago: 'emerald', 'Aguardando aprovação': 'yellow', Rejeitada: 'zinc' } }}
+        status={{ campo: 'status', tons: { 'Aguardando aprovação': 'yellow' } }}
         kpis={(rs) => {
           const soma = (f: (r: (typeof rs)[number]) => boolean) => brl(rs.filter(f).reduce((a, r) => a + Number(r.valor || 0), 0))
           return [
@@ -137,7 +137,7 @@ function DevolverFechamento({ conta, onFechar }: { conta: Registro; onFechar: ()
             </span>
             <span className="text-right shrink-0">
               <span className="block text-white font-black">{brl(Number(c.valor) || 0)}</span>
-              <span className={`block text-[10px] font-bold uppercase tracking-widest ${c.status === 'Pago' ? 'text-emerald-400' : 'text-orange-400'}`}>{String(c.status)}</span>
+              <span className={`block text-[10px] font-bold uppercase tracking-widest text-zinc-400`}>{String(c.status)}</span>
             </span>
           </div>
         ))}

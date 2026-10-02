@@ -89,8 +89,8 @@ export function GraficoDiasUteis({
           </div>
         )}
         {pisoDiario > 0 && (
-          <div className="absolute left-0 right-0 border-t border-dashed z-0" style={{ bottom: `${(pisoDiario / max) * 100}%`, borderColor: STATUS.atencao.cor, opacity: 0.7 }}>
-            {!compacto && <span className="absolute top-0.5 right-0 text-[9px] font-bold uppercase tracking-widest bg-painel px-1" style={{ color: STATUS.atencao.cor }}>piso {dec(pisoDiario)}</span>}
+          <div className="absolute left-0 right-0 border-t border-dashed border-zinc-500/70 z-0" style={{ bottom: `${(pisoDiario / max) * 100}%` }}>
+            {!compacto && <span className="absolute top-0.5 right-0 text-[9px] font-bold uppercase tracking-widest bg-painel px-1 text-zinc-400">piso {dec(pisoDiario)}</span>}
           </div>
         )}
         {valores.map((v, i) => {
@@ -162,7 +162,7 @@ export default function PainelMeta({
             {r.piso > 0 && (
               <div className={caixa} title="Mínimo por dia para não dar prejuízo">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Piso diário</p>
-                <p className={`font-black ${grande ? 'text-2xl' : 'text-lg'}`} style={{ color: STATUS.atencao.cor }}>{dec(r.pisoDiario)}</p>
+                <p className={`font-black text-white ${grande ? 'text-2xl' : 'text-lg'}`}>{dec(r.pisoDiario)}</p>
               </div>
             )}
             <div className={caixa}>
@@ -194,17 +194,17 @@ export default function PainelMeta({
             </div>
             <div className="relative">
               <div className="h-3 rounded-full bg-white/[0.06] overflow-hidden">
-                <div className="h-full rounded-full bg-blue-600 transition-all duration-700" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, r.pctMes)}%`, backgroundColor: STATUS[sit].cor }}></div>
               </div>
               {r.piso > 0 && r.meta.mensal > 0 && (
-                <div className="absolute -inset-y-1 w-0.5 rounded" style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 1px)`, backgroundColor: STATUS.atencao.cor }} title={`Piso ${f(r.piso)}`}></div>
+                <div className="absolute -inset-y-1 w-0.5 rounded bg-zinc-300" style={{ left: `calc(${Math.min(100, (r.piso / r.meta.mensal) * 100)}% - 1px)` }} title={`Piso ${f(r.piso)}`}></div>
               )}
             </div>
             <div className={`grid gap-3 pt-1 ${r.piso > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {r.piso > 0 && (
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Piso do mês</p>
-                  <p className="text-base font-black" style={{ color: STATUS.atencao.cor }}>{f(r.piso)}</p>
+                  <p className="text-base font-black text-white">{f(r.piso)}</p>
                 </div>
               )}
               <div>

@@ -1,12 +1,14 @@
 'use client'
 
 // Cards da Visão TV do ADM: bateu o olho, sabe o que está acontecendo.
-//  • Card da pessoa: o número do mês grande, a cor da situação no card inteiro
-//    (verde no ritmo • amarelo acima do piso • vermelho abaixo do piso), barra da meta,
-//    Hoje / Faltam e as barrinhas por dia útil.
+//  • Card da pessoa: card NEUTRO (regra do ADM: cor só para alerta). A cor da situação
+//    (verde no ritmo • amarelo acima do piso • vermelho abaixo do piso) fica só no selo, no número do mês,
+//    na barra da meta e nas barrinhas de cada dia útil; Hoje / Faltam ficam neutros.
 //  • Card de Operações: maior, com 4 mini-cards do mesmo tamanho: custo por ficha do mês (por dia útil) e do ano
 //    (por mês) — a barra é a quantidade de crianças fotografadas e o valor colorido é o R$ de cada ficha —,
 //    alunos fotografados e agenda dos próximos 20 dias.
+//    Cards NEUTROS (regra do ADM: cor só para alerta). A cor fica nas barras dos gráficos (verde bom, amarelo
+//    alerta, vermelho ruim) e no R$ (vermelho = o custo subiu / acima da média, verde = caiu / abaixo).
 //  • Card da Produção (CardProducaoTV): as etapas das escolas como na planilha, do tamanho de 2×2 cards.
 //  • GradeTV: todos os cards na mesma tela. Com mais gente, os cards diminuem e se encaixam sozinhos
 //    (os textos e gráficos acompanham o tamanho do card).
@@ -32,7 +34,6 @@ const reais = (v: number) => brl(v).replace(/\s/g, ' ').replace(/,00$/, '') // T
 
 // o card inteiro vira um "container" de tamanho: fontes e gráficos em cqmin acompanham o espaço
 const tamanho: CSSProperties = { containerType: 'size' }
-const tinta = (cor: string): CSSProperties => ({ borderColor: `${cor}99`, background: `linear-gradient(160deg, ${cor}33 0%, ${cor}0d 55%, transparent 100%)` })
 
 const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: '✕ Abaixo' } as const
 
@@ -65,9 +66,23 @@ function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }:
   )
 }
 
-function Chip({ cor, children }: { cor: string; children: ReactNode }) {
+// sem cor = neutro (informação); com cor = situação
+function Chip({ cor, children }: { cor?: string; children: ReactNode }) {
   return (
-    <span className="px-[1.6cqmin] py-[0.8cqmin] rounded-lg font-black whitespace-nowrap text-[clamp(9px,3.4cqmin,15px)] border" style={{ color: cor, borderColor: `${cor}66`, backgroundColor: `${cor}1f` }}>
+    <span
+      className={`px-[1.6cqmin] py-[0.8cqmin] rounded-lg font-black whitespace-nowrap text-[clamp(9px,3.4cqmin,15px)] border ${cor ? '' : 'text-zinc-200 border-white/[0.12] bg-white/[0.04]'}`}
+      style={cor ? { color: cor, borderColor: `${cor}66`, backgroundColor: `${cor}1f` } : undefined}
+    >
+      {children}
+    </span>
+  )
+}
+
+// legenda das barras: texto neutro com o ponto na cor que a barra usa
+function ChipLegenda({ cor, children }: { cor: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-[1cqmin] px-[1.6cqmin] py-[0.8cqmin] rounded-lg font-black whitespace-nowrap text-zinc-200 border border-white/[0.12] bg-white/[0.04] text-[clamp(9px,3.4cqmin,15px)]">
+      <span className="w-[clamp(6px,2cqmin,10px)] h-[clamp(6px,2cqmin,10px)] rounded-full" style={{ backgroundColor: cor }}></span>
       {children}
     </span>
   )
@@ -82,7 +97,7 @@ function ChipBonus({ albuns }: { albuns: number }) {
       💰 Bônus {reais(valor)} • +{reais(prox.valor)} em {num(prox.faltam)}
     </Chip>
   ) : (
-    <Chip cor={AZUL}>
+    <Chip>
       💰 Bônus {reais(prox.valor)} aos {num(META_BONUS)}
     </Chip>
   )
@@ -99,7 +114,6 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
   const f = (v: number) => formatar(v, ind.unidade).replace(/,00$/, '')
   const hj = hoje()
   const valores = d.uteis.map((dia) => (dia <= hj ? (d.serie[Number(dia.slice(8)) - 1] ?? 0) : null))
-  const corHoje = corDoDia(r.hoje, r.meta.diaria, r.pisoDiario)
   return (
     <div style={tamanho} className="h-full w-full min-h-0">
       <div
@@ -107,15 +121,14 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
         tabIndex={onAbrir ? 0 : undefined}
         onClick={onAbrir}
         onKeyDown={(e) => onAbrir && (e.key === 'Enter' || e.key === ' ') && onAbrir()}
-        className={`h-full w-full rounded-3xl border-2 bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2.2cqmin] overflow-hidden ${onAbrir ? 'cursor-pointer hover:brightness-110 transition-all' : ''}`}
-        style={tinta(cor)}
+        className={`h-full w-full rounded-3xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2.2cqmin] overflow-hidden ${onAbrir ? 'cursor-pointer hover:border-white/[0.2] transition-all' : ''}`}
       >
         {/* pessoa + situação */}
         <div className="flex items-center gap-[2.5cqmin] min-w-0">
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-[clamp(28px,13cqmin,64px)] h-[clamp(28px,13cqmin,64px)]" arredondado="rounded-full" textoCls="text-[clamp(10px,4cqmin,18px)]" />
           <div className="min-w-0 flex-1">
             <p className="font-black text-white leading-tight truncate text-[clamp(11px,5.2cqmin,24px)]" title={c.nome}>{c.nome}</p>
-            <p className="font-bold uppercase tracking-widest truncate text-[clamp(7px,2.6cqmin,12px)]" style={{ color: cor }}>{cfg.nome}</p>
+            <p className="font-bold uppercase tracking-widest truncate text-zinc-400 text-[clamp(7px,2.6cqmin,12px)]">{cfg.nome}</p>
           </div>
           <span className="shrink-0 px-[1.8cqmin] py-[0.9cqmin] rounded-full font-black whitespace-nowrap text-[clamp(8px,3cqmin,14px)] text-white" style={{ backgroundColor: cor }}>
             {ROTULO_SITUACAO[sit]}
@@ -126,7 +139,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
         <div>
           <p className="font-bold uppercase tracking-widest text-zinc-400 text-[clamp(7px,2.6cqmin,12px)] truncate">{ind.label} no mês</p>
           <p className="font-black leading-none tracking-tighter text-white">
-            <span className="text-[clamp(20px,13cqmin,72px)]" style={{ color: cor }}>{f(r.mes)}</span>
+            <span className="text-[clamp(20px,13cqmin,72px)] text-white">{f(r.mes)}</span>
             <span className="text-zinc-400 text-[clamp(10px,4.5cqmin,26px)]"> / {f(r.meta.mensal)}</span>
           </p>
         </div>
@@ -147,14 +160,14 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
 
         {/* barra da meta com a marca do piso */}
         <div className="relative h-[clamp(6px,3cqmin,16px)] rounded-full bg-white/[0.08]">
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, r.pctMes)}%`, backgroundColor: cor }}></div>
+          <div className="h-full rounded-full transition-all duration-700 bg-zinc-400/80" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
           {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute -inset-y-1 w-[3px] rounded bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }} title={`Piso ${f(r.piso)}`}></div>}
         </div>
 
-        {/* hoje / faltam (+ bônus da Produção) */}
+        {/* hoje / faltam (+ bônus da Produção): neutros; verde só na meta batida */}
         <div className="flex flex-wrap gap-[1.5cqmin]">
-          <Chip cor={corHoje}>Hoje {f(r.hoje)}</Chip>
-          {r.falta > 0 ? <Chip cor={r.faltaPiso > 0 ? VERMELHO : AMARELO}>Faltam {f(r.falta)}</Chip> : <Chip cor={VERDE}>🎯 Meta batida</Chip>}
+          <Chip>Hoje {f(r.hoje)}</Chip>
+          {r.falta > 0 ? <Chip>Faltam {f(r.falta)}</Chip> : <Chip cor={VERDE}>🎯 Meta batida</Chip>}
           {c.setor === 'edicao' && <ChipBonus albuns={r.mes} />}
         </div>
 
@@ -166,10 +179,10 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
 }
 
 // ---------------- Card de Operações (maior, com 3 mini-cards) ----------------
-function MiniTV({ titulo, cor, children }: { titulo: ReactNode; cor: string; children: ReactNode }) {
+function MiniTV({ titulo, children }: { titulo: ReactNode; children: ReactNode }) {
   return (
     <div style={tamanho} className="h-full min-h-0 min-w-0">
-      <div className="h-full rounded-2xl border-2 bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden" style={tinta(cor)}>
+      <div className="h-full rounded-2xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
         <p className="font-black uppercase tracking-[0.15em] text-zinc-300 text-[clamp(8px,3.4cqmin,14px)] truncate">{titulo}</p>
         {children}
       </div>
@@ -266,8 +279,6 @@ function LegendaCusto() {
 export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: { s: ErpState; c: Colaborador; mes: string; compacto?: boolean; faixa?: boolean }) {
   const x = useDados(s, c, mes)
   const r = x.r
-  const sitAlunos = r ? situacaoResumo(r, mes) : 'bom'
-  const corAlunos = STATUS[sitAlunos].cor
   const corCusto = x.custoRef > x.custoMes * 1.03 ? VERMELHO : x.custoRef > 0 && x.custoRef < x.custoMes * 0.97 ? VERDE : AZUL
   // custo por ficha: mês (cada dia útil) e ano (cada mês) — regra do dono: operações × fixo + fichas × variável
   const custo = useMemo(() => {
@@ -308,16 +319,15 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
   }, [s, c.id, mes, x])
   const corAno = custo.mensal.fichas > 0 && custo.anual.fichas > 0 ? (custo.mensal.media > custo.anual.media * 1.03 ? VERMELHO : custo.mensal.media < custo.anual.media * 0.97 ? VERDE : AZUL) : AZUL
   const a = x.agenda
-  const corAgenda = a.capacidade === null ? AZUL : a.capacidade >= 100 ? VERDE : a.capacidade >= 80 ? AMARELO : VERMELHO
   const COR_DIA = { OK: VERDE, Pendente: AMARELO, Vazio: VERMELHO }
   const subiu = x.alunosHoje >= x.alunosAntes
   return (
     <div style={tamanho} className="h-full w-full min-h-0">
-      <div className="h-full w-full rounded-3xl border-2 border-cyan-500/50 bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden" style={{ background: 'linear-gradient(160deg, rgba(6,182,212,0.18) 0%, transparent 60%)' }}>
+      <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
         <div className="flex items-center gap-[1.6cqmin] min-w-0">
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-[clamp(28px,8cqmin,60px)] h-[clamp(28px,8cqmin,60px)]" arredondado="rounded-full" textoCls="text-[clamp(10px,2.6cqmin,18px)]" />
           <div className="min-w-0 flex-1">
-            <p className="font-black uppercase tracking-[0.2em] text-cyan-300 text-[clamp(8px,2.2cqmin,14px)]">Operações</p>
+            <p className="font-black uppercase tracking-[0.2em] text-zinc-400 text-[clamp(8px,2.2cqmin,14px)]">Operações</p>
             <p className="font-black text-white truncate text-[clamp(11px,3.4cqmin,24px)]">{c.nome}</p>
           </div>
           {r && r.meta.mensal > 0 && (
@@ -342,7 +352,7 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
           }
         >
           {/* custo por ficha no mês: cada dia útil */}
-          <MiniTV titulo={`Custo por ficha • ${nomeCurto(mes)} (dias úteis)`} cor={corCusto}>
+          <MiniTV titulo={`Custo por ficha • ${nomeCurto(mes)} (dias úteis)`}>
             <TopoCusto media={custo.mensal.media} cor={corCusto} legenda="custo médio por ficha no mês" total={custo.mensal.total} fichas={custo.mensal.fichas} operacoes={custo.mensal.operacoes} />
             <BarrasCusto
               rotulos={x.uteis.map((d) => String(Number(d.slice(8))))}
@@ -356,7 +366,7 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
           </MiniTV>
 
           {/* custo por ficha no ano: cada mês */}
-          <MiniTV titulo={`Custo por ficha • ${mes.slice(0, 4)} (meses)`} cor={corAno}>
+          <MiniTV titulo={`Custo por ficha • ${mes.slice(0, 4)} (meses)`}>
             <TopoCusto media={custo.anual.media} cor={corAno} legenda="custo médio por ficha no ano" total={custo.anual.total} fichas={custo.anual.fichas} operacoes={custo.anual.operacoes} />
             <BarrasCusto
               rotulos={MESES_CURTOS}
@@ -371,16 +381,16 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
           </MiniTV>
 
           {/* alunos fotografados */}
-          <MiniTV titulo="Alunos fotografados" cor={corAlunos}>
+          <MiniTV titulo="Alunos fotografados">
             <div className="flex items-end gap-[2cqmin]">
-              <span className="font-black leading-none tracking-tighter text-[clamp(20px,16cqmin,80px)]" style={{ color: x.corHoje }}>{num(x.alunosHoje)}</span>
-              <span className="font-black pb-[1cqmin] text-[clamp(12px,7cqmin,34px)]" style={{ color: subiu ? VERDE : VERMELHO }}>{subiu ? '↗' : '↘'}</span>
+              <span className="font-black leading-none tracking-tighter text-white text-[clamp(20px,16cqmin,80px)]">{num(x.alunosHoje)}</span>
+              <span className="font-black pb-[1cqmin] text-zinc-400 text-[clamp(12px,7cqmin,34px)]">{subiu ? '↗' : '↘'}</span>
             </div>
             <p className="font-bold text-zinc-300 -mt-[1cqmin] text-[clamp(8px,3.4cqmin,15px)]">{x.atual ? 'hoje' : 'último dia útil'}</p>
             <BarrasTV dias={x.uteis} valores={x.serieAlunos} rotulo={(v) => num(v)} cor={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : AZUL)} destaque={x.atual ? x.hojeISO : undefined} diasGrandes />
             {r && (
               <div className="relative h-[clamp(14px,8cqmin,34px)] rounded-xl bg-white/[0.08] overflow-hidden">
-                <div className="h-full rounded-xl" style={{ width: `${Math.min(100, r.pctMes)}%`, backgroundColor: corAlunos }}></div>
+                <div className="h-full rounded-xl bg-zinc-400/60" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
                 {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute inset-y-0 w-[3px] bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }}></div>}
                 <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow text-[clamp(9px,4.4cqmin,20px)]">
                   {num(r.mes)} / {num(r.meta.mensal)}
@@ -390,22 +400,22 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
           </MiniTV>
 
           {/* agenda futura */}
-          <MiniTV titulo="Agenda • próximos 20 dias" cor={corAgenda}>
+          <MiniTV titulo="Agenda • próximos 20 dias">
             <div className="flex items-end justify-between gap-2">
               <div>
                 <span className="font-black leading-none tracking-tighter text-white text-[clamp(18px,13cqmin,68px)]">{num(a.total)}</span>
                 <p className="font-bold text-zinc-300 text-[clamp(8px,3.4cqmin,15px)]">fichas confirmadas</p>
               </div>
               {a.capacidade !== null && (
-                <span className="font-black leading-none text-[clamp(14px,9cqmin,48px)]" style={{ color: corAgenda }} title="Fichas confirmadas ÷ o que a meta pede nesses dias">
+                <span className="font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas confirmadas ÷ o que a meta pede nesses dias">
                   {Math.round(a.capacidade)}%
                 </span>
               )}
             </div>
             <div className="flex flex-wrap gap-[1.2cqmin]">
-              <Chip cor={VERDE}>{a.ok} OK</Chip>
-              <Chip cor={AMARELO}>{a.pendentes} Pend.</Chip>
-              <Chip cor={VERMELHO}>{a.vazios} Vazio</Chip>
+              <ChipLegenda cor={VERDE}>{a.ok} OK</ChipLegenda>
+              <ChipLegenda cor={AMARELO}>{a.pendentes} Pend.</ChipLegenda>
+              <ChipLegenda cor={VERMELHO}>{a.vazios} Vazio</ChipLegenda>
             </div>
             <BarrasTV dias={a.dias.map((d) => d.data)} valores={a.dias.map((d) => d.alunos)} rotulo={(v) => num(v)} cor={(_, i) => COR_DIA[a.dias[i].situacao]} diasGrandes />
           </MiniTV>

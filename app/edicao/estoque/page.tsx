@@ -4,7 +4,8 @@ import { useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { atualizarRegistro, conferirCaixa, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { dataBR, num } from '@/lib/erp/format'
+import { dataBR, hoje, num } from '@/lib/erp/format'
+import { diasUteisDepois } from '@/lib/erp/calendario'
 import { PALETA_CIDADES, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp/producao'
 import { EmptyState, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import Icon from '@/components/erp/Icon'
@@ -40,6 +41,8 @@ export default function EstoquePage() {
   const nome = (id: unknown) => s.colaboradores.find((c) => c.id === id)?.nome ?? ''
   const caixas = colecao(s, 'producao_caixas').filter((c) => lotes.has(String(c.loteId)))
   const aguardando = caixas.filter((c) => c.status !== 'Em estoque')
+  // amarelo só quando tem caixa esperando a conferência há mais de 1 dia útil (mesma regra do gerente virtual)
+  const aguardandoMaisDeUmDia = aguardando.some((c) => diasUteisDepois(String(c.data).slice(0, 10), hoje()) > 1)
   const estoque = caixas.filter((c) => c.status === 'Em estoque')
   const cidades = [...new Set(caixas.map((c) => cidadeDe(lotes.get(String(c.loteId)))).filter(Boolean))].sort()
   const soma = (ls: Registro[], campo: string) => ls.reduce((a, c) => a + (Number(c[campo]) || 0), 0)
@@ -115,13 +118,13 @@ export default function EstoquePage() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-        <StatCard tom="orange" label="Aguardando conferência" valor={num(aguardando.length)} detalhe={`caixa(s) • ${num(soma(aguardando, 'albuns'))} álbuns`} />
-        <StatCard tom="emerald" label="Em estoque" valor={num(estoque.length)} detalhe={`caixa(s) • ${num(estoque.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0))} álbuns`} />
+        <StatCard tom={aguardandoMaisDeUmDia ? 'yellow' : 'zinc'} label="Aguardando conferência" valor={num(aguardando.length)} detalhe={`caixa(s) • ${num(soma(aguardando, 'albuns'))} álbuns`} />
+        <StatCard label="Em estoque" valor={num(estoque.length)} detalhe={`caixa(s) • ${num(estoque.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0))} álbuns`} />
       </div>
 
       {/* acabou de conferir: o comprovante para imprimir e lacrar */}
       {recentes.length > 0 && (
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 space-y-3">
+        <div className="rounded-2xl border border-white/[0.1] bg-white/[0.03] p-5 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Conferidas agora — imprima o comprovante e lacre a caixa</p>
             {recentes.length > 1 && (
@@ -283,7 +286,7 @@ function CaixaConferir({ caixa: c, lote: l, cor, revelacao, onConferida }: { cai
             <span className="px-3 py-1 rounded-full text-white text-[10px] font-black uppercase tracking-widest ring-1 ring-white/30" style={{ backgroundColor: cor.cor }} title={`Cor da cidade: ${cor.nome}`}>
               📍 {cidadeDe(l)} • {cor.nome}
             </span>
-            <span className="px-3 py-1 rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-300 text-[10px] font-black uppercase tracking-widest">🏫 {String(l?.escola ?? '')}</span>
+            <span className="px-3 py-1 rounded-full border border-white/[0.15] bg-white/[0.04] text-zinc-200 text-[10px] font-black uppercase tracking-widest">🏫 {String(l?.escola ?? '')}</span>
             <span className="px-3 py-1 rounded-full border border-white/20 bg-white/[0.05] text-white text-[10px] font-black uppercase tracking-widest">📦 Caixa {String(c.numero)}</span>
           </div>
         </div>
@@ -318,7 +321,7 @@ function CaixaConferir({ caixa: c, lote: l, cor, revelacao, onConferida }: { cai
       </label>
       {podeFazer('edicao', 'editar') && (
         <div className="flex justify-end">
-          <button disabled={enviando || (!bate && !obs.trim())} onClick={confirmar} className={`${btnPrimario} !bg-red-600 hover:!bg-red-500`}>
+          <button disabled={enviando || (!bate && !obs.trim())} onClick={confirmar} className={btnPrimario}>
             ✓ Confirmar conferência
           </button>
         </div>

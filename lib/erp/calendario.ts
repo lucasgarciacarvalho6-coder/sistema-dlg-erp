@@ -78,6 +78,20 @@ export function diasUteisAte(mes: string, iso: string) {
   return diasUteisDoMes(mes).filter((d) => d <= iso).length
 }
 
+// Último dia útil ANTES da data (segunda-feira → a sexta anterior)
+export function ultimoDiaUtilAntes(iso: string) {
+  let d = addDias(iso, -1)
+  while (!ehDiaUtil(d)) d = addDias(d, -1)
+  return d
+}
+
+// Dias úteis depois de `de` até `ate` (inclusive): entrou na segunda → na quinta são 3
+export function diasUteisDepois(de: string, ate: string) {
+  let n = 0
+  for (let d = addDias(de, 1); d <= ate; d = addDias(d, 1)) if (ehDiaUtil(d)) n++
+  return n
+}
+
 // Meta diária derivada da mensal (ex.: 1.200 ÷ 21 = 57,14)
 export function metaDiariaDoMes(metaMensal: number, mes: string) {
   const uteis = totalDiasUteis(mes)

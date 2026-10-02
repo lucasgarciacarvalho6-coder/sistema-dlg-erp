@@ -139,7 +139,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         </p>
         {faixa && (
           <p className="text-xs text-zinc-400">
-            <strong className="text-cyan-300">Faixa {faixa}</strong> ({mesesDesde(f.dataVisita)} meses desde a visita) •{' '}
+            <strong className="text-white">Faixa {faixa}</strong> ({mesesDesde(f.dataVisita)} meses desde a visita) •{' '}
             {PRODUTOS_REBOLO.filter((p) => tabela.preco(faixa, p.id, 'pix') > 0)
               .map((p) => `${p.nome}: ${FORMAS_REBOLO.map((x) => brl(tabela.preco(faixa, p.id, x.id))).join(' / ')}`)
               .join(' • ')}
@@ -160,7 +160,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         <div className="space-y-1.5">
           <label className={labelCls}>Data da visita *</label>
           <input type="date" value={f.dataVisita} onChange={(e) => set('dataVisita', e.target.value)} className={inputCls} />
-          {visitas.get(f.escola) && <p className="text-[10px] text-emerald-400">Da agenda: fotografada em {dataBR(visitas.get(f.escola)!.data)}</p>}
+          {visitas.get(f.escola) && <p className="text-[10px] text-zinc-400">Da agenda: fotografada em {dataBR(visitas.get(f.escola)!.data)}</p>}
         </div>
         {campo('numeroFicha', 'Nº da ficha *', { inputMode: 'numeric' })}
         {campo('aluno', 'Nome do aluno *', {}, 'md:col-span-2')}
@@ -193,7 +193,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         {campo('fazenda', 'Fazenda', {}, 'md:col-span-3')}
         {campo('proprietarioFazenda', 'Proprietário da fazenda', {}, 'md:col-span-3')}
       </div>
-      {aviso && <p className="text-xs text-blue-300">{aviso}</p>}
+      {aviso && <p className="text-xs text-zinc-300">{aviso}</p>}
 
       <p className="text-sm font-black text-white pt-3 border-t border-white/[0.06]">Contato</p>
       {f.uf && (
@@ -205,12 +205,12 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
               type="button"
               onClick={() => aplicarDDD(r.ddd)}
               title={`${r.regiao} — clique para colocar nos telefones digitados sem DDD`}
-              className={`px-2.5 py-1 rounded-lg border font-bold ${r.ddd === ddd ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300' : 'border-white/[0.08] text-zinc-300 hover:bg-white/[0.04]'}`}
+              className={`px-2.5 py-1 rounded-lg border font-bold ${r.ddd === ddd ? 'border-blue-500/50 bg-blue-500/10 text-blue-300' : 'border-white/[0.08] text-zinc-300 hover:bg-white/[0.04]'}`}
             >
               {r.ddd} <span className="font-normal text-zinc-500">{r.regiao.split(',').slice(0, 2).join(',')}</span>
             </button>
           ))}
-          {ddd && <span className="text-emerald-400">Sugerido: {ddd}</span>}
+          {ddd && <span className="text-zinc-300">Sugerido: {ddd}</span>}
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useErp } from '@/lib/erp/store'
 import { diaReferencia, fluxoCaixa, mesesDisponiveis } from '@/lib/erp/metrics'
 import { brl, mesAtual, nomeMes } from '@/lib/erp/format'
-import { BarChart, Legenda, PageHeader, Panel, StatCard } from '@/components/erp/ui'
+import { BarChart, PageHeader, Panel, StatCard } from '@/components/erp/ui'
 
 export default function FluxoCaixaPage() {
   const s = useErp()
@@ -32,15 +32,18 @@ export default function FluxoCaixaPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard destaque tom="emerald" label="Entradas" valor={brl(f.totalEntradas)} />
-        <StatCard tom="red" label="Saídas" valor={brl(f.totalSaidas)} />
-        <StatCard tom={f.saldo >= 0 ? 'blue' : 'red'} label="Saldo do período" valor={brl(f.saldo)} />
+        <StatCard destaque label="Entradas" valor={brl(f.totalEntradas)} />
+        <StatCard label="Saídas" valor={brl(f.totalSaidas)} />
+        {/* vermelho só quando o saldo fica negativo */}
+        <StatCard tom={f.saldo >= 0 ? 'zinc' : 'red'} label="Saldo do período" valor={brl(f.saldo)} />
       </div>
 
-      <Panel titulo="Entradas x Saídas" subtitulo={nomeMes(mes)} acoes={<Legenda itens={[{ label: 'Entradas', tom: 'emerald' }, { label: 'Saídas', tom: 'red' }]} />}>
-        <BarChart valores={f.entradas} tom="emerald" altura="h-56" limite={limite} formatar={brl} />
+      <Panel titulo="Entradas x Saídas" subtitulo={nomeMes(mes)}>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Entradas</p>
+        <BarChart valores={f.entradas} altura="h-56" limite={limite} formatar={brl} />
         <div className="mt-4">
-          <BarChart valores={f.saidas} tom="red" altura="h-32" limite={limite} formatar={brl} compacto />
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Saídas</p>
+          <BarChart valores={f.saidas} altura="h-32" limite={limite} formatar={brl} compacto />
         </div>
       </Panel>
 
@@ -64,8 +67,8 @@ export default function FluxoCaixaPage() {
               {linhas.map((l) => (
                 <tr key={l.dia} className="hover:bg-white/[0.02]">
                   <td className="px-6 py-3.5 text-white font-bold">{String(l.dia).padStart(2, '0')}/{mes.slice(5, 7)}</td>
-                  <td className="px-6 py-3.5 text-right text-emerald-400 font-bold">{brl(l.entrada)}</td>
-                  <td className="px-6 py-3.5 text-right text-red-400 font-bold">{brl(l.saida)}</td>
+                  <td className="px-6 py-3.5 text-right text-white font-bold">{brl(l.entrada)}</td>
+                  <td className="px-6 py-3.5 text-right text-zinc-300 font-bold">{brl(l.saida)}</td>
                   <td className={`px-6 py-3.5 text-right font-black ${l.saldo >= 0 ? 'text-white' : 'text-red-400'}`}>{brl(l.saldo)}</td>
                 </tr>
               ))}

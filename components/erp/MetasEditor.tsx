@@ -106,7 +106,7 @@ function LinhaMetas({ c, mes, editavel }: { c: Colaborador; mes: string; editave
         const origem = textoOrigem(metaDefinida(c, ind.id, mes).origem)
         return (
           <td key={ind.id} className="px-6 py-4 min-w-[300px]">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">{ind.label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">{ind.label}</p>
             {/* Digita-se a meta e o piso do MÊS; os valores por dia são mensal ÷ dias úteis (seg–sex, sem feriados) */}
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
@@ -182,8 +182,8 @@ export default function MetasEditor({ modulo }: { modulo: string }) {
         {cfg.indicadores.map((ind) => {
           const m = metaSetor(s, setor, ind.id, mes)
           return (
-            <div key={ind.id} className="bg-painel-2/80 border border-blue-500/20 p-6 rounded-3xl">
-              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-blue-400 mb-2">Meta do setor • {ind.label} • {nomeMes(mes)}</p>
+            <div key={ind.id} className="bg-painel-2/80 border border-white/[0.08] p-6 rounded-3xl">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-400 mb-2">Meta do setor • {ind.label} • {nomeMes(mes)}</p>
               <p className="text-3xl font-black text-white">
                 {formatar(m.mensal, ind.unidade)} <span className="text-sm text-zinc-500">/ mês</span> • {dec(m.diaria)} <span className="text-sm text-zinc-500">/ dia</span>
               </p>

@@ -28,7 +28,7 @@ export default function ContasPagarPage() {
       ]}
       status={{
         campo: 'status',
-        tons: { 'A pagar': 'orange', Vencida: 'red', Pago: 'emerald', 'Aguardando aprovação': 'yellow', Rejeitada: 'zinc' },
+        tons: { Vencida: 'red', 'Aguardando aprovação': 'yellow' },
         valor: (r) => (r.status === 'A pagar' && String(r.vencimento) < hoje() ? 'Vencida' : String(r.status)),
       }}
       kpis={(rs) => {

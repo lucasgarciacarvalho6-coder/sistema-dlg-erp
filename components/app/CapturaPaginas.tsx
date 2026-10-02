@@ -14,7 +14,7 @@ export default function CapturaPaginas({ paginas, onChange }: { paginas: File[];
   return (
     <div className="space-y-3">
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-xs text-zinc-300 leading-relaxed">
-        <p className="font-bold text-blue-400 uppercase tracking-widest text-[10px] mb-1">Dica para a leitura sair certa</p>
+        <p className="font-bold text-zinc-300 uppercase tracking-widest text-[10px] mb-1">Dica para a leitura sair certa</p>
         Folha em superfície plana, <strong className="text-white">boa luz</strong>, sem sombra do celular, e a <strong className="text-white">folha inteira</strong> aparecendo na foto.
       </div>
 
