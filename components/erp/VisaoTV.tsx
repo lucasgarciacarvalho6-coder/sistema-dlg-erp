@@ -381,7 +381,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
   } else if (atual.id === 'equipe') {
     conteudo = (
       <div className="h-[calc(100vh-12rem)] 2xl:h-[calc(100vh-13.5rem)]">
-        <GradeTV s={s} mes={mes} pessoas={pessoas} ajustar />
+        <GradeTV s={s} mes={mes} pessoas={pessoas} producao ajustar />
       </div>
     )
   } else {

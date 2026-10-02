@@ -7,6 +7,7 @@
 //  • Card de Operações: maior, com 4 mini-cards do mesmo tamanho: custo por ficha do mês (por dia útil) e do ano
 //    (por mês) — a barra é a quantidade de crianças fotografadas e o valor colorido é o R$ de cada ficha —,
 //    alunos fotografados e agenda dos próximos 20 dias.
+//  • Card da Produção (CardProducaoTV): as etapas das escolas como na planilha, do tamanho de 2×2 cards.
 //  • GradeTV: todos os cards na mesma tela. Com mais gente, os cards diminuem e se encaixam sozinhos
 //    (os textos e gráficos acompanham o tamanho do card).
 
@@ -16,11 +17,12 @@ import { SETORES } from '@/lib/erp/config'
 import { diasDeMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { brl, formatar, hoje, iniciais, nomeMes, num } from '@/lib/erp/format'
 import { custoPorAluno, financeiroOperacoes } from '@/lib/erp/operacoes-financeiro'
-import { META_BONUS, bonusAlbuns, proximoBonus } from '@/lib/erp/producao'
+import { META_BONUS, bonusAlbuns, lotesProducao, proximoBonus } from '@/lib/erp/producao'
 import { Avatar } from './ui'
 import { STATUS } from './status'
 import { corDoDia } from './PainelMeta'
 import { useDados } from './PainelOperacoes'
+import { CardProducaoTV } from './CardProducaoTV'
 
 const VERDE = STATUS.bom.cor
 const AMARELO = STATUS.atencao.cor
@@ -419,7 +421,24 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
 // ajustar = false (página): colunas pela largura e altura fixa por card.
 // base (com ajustar): o tamanho dos cards é calculado pela equipe toda e fica FIXO — ao filtrar um setor,
 // os cards não esticam: ficam do mesmo tamanho, alinhados a partir do canto de cima.
-export function GradeTV({ s, mes, pessoas, base, ajustar = false, onAbrir }: { s: ErpState; mes: string; pessoas: Colaborador[]; base?: Colaborador[]; ajustar?: boolean; onAbrir?: (c: Colaborador) => void }) {
+// producao: mostra o card das etapas da Produção (quando tem escola na Produção), no lugar de 2×2 cards (3×2 em telas com muitas colunas).
+export function GradeTV({
+  s,
+  mes,
+  pessoas,
+  base,
+  ajustar = false,
+  producao = false,
+  onAbrir,
+}: {
+  s: ErpState
+  mes: string
+  pessoas: Colaborador[]
+  base?: Colaborador[]
+  ajustar?: boolean
+  producao?: boolean
+  onAbrir?: (c: Colaborador) => void
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const [area, setArea] = useState({ w: 1600, h: 900 })
   useEffect(() => {
@@ -435,29 +454,48 @@ export function GradeTV({ s, mes, pessoas, base, ajustar = false, onAbrir }: { s
   // quem define o tamanho: a equipe toda (base) ou quem está na tela
   const opsBase = (base ?? pessoas).some((c) => c.setor === 'operacional')
   const nBase = (base ?? pessoas).filter((c) => c.setor !== 'operacional').length
+  const temLotes = lotesProducao(s).length > 0
+  const prod = producao && temLotes
+  const prodBase = base ? temLotes : prod // com base, o lugar do card fica reservado mesmo filtrando outro setor
   const GAP = 14
 
   const layout = useMemo(() => {
+    // card da Produção: 2 colunas × 2 linhas (1 × 1 numa coluna só). Na TV, com 7 colunas ou mais, pode ter 3 de largura:
+    // fica a combinação em que os cards das pessoas e o da Produção ficam maiores.
+    const blocos = (cols: number) => (!prodBase ? [{ pc: 0, pr: 0 }] : cols === 1 ? [{ pc: 1, pr: 1 }] : cols >= 7 ? [{ pc: 3, pr: 2 }, { pc: 2, pr: 2 }] : [{ pc: 2, pr: 2 }])
     if (!ajustar) {
       const cols = Math.max(2, Math.min(5, Math.floor((area.w + GAP) / (330 + GAP))))
-      return { cols, rows: 0, opsRows: 2, opsCols: Math.min(cols, 3), opsH: 0, w: 0, h: 0 }
+      return { cols, rows: 0, opsRows: 2, opsCols: Math.min(cols, 3), opsH: 0, w: 0, h: 0, ...blocos(cols).at(-1)! }
     }
     // Operações em cima na largura toda (a faixa diminui um pouco quando tem muita gente);
-    // embaixo, as colunas que deixam os cards das pessoas maiores (proporção ~ 1 : 0,95)
+    // embaixo, as colunas que deixam os cards das pessoas maiores (proporção ~ 1 : 0,95), com o card da Produção junto
     const n = nBase
-    const opsH = !opsBase ? 0 : n === 0 ? area.h : Math.round((area.h - GAP) * (n <= 12 ? 0.47 : n <= 20 ? 0.42 : 0.37))
+    const celulas = n + (prodBase ? 4 : 0)
+    const opsH = !opsBase ? 0 : celulas === 0 ? area.h : Math.round((area.h - GAP) * (celulas <= 12 ? 0.47 : celulas <= 20 ? 0.42 : 0.37))
     const resto = area.h - (opsBase ? opsH + GAP : 0)
-    let melhor = { cols: 4, rows: 1, opsRows: 0, opsCols: 0, opsH, w: 0, h: 0, nota: -1 }
+    let melhor = { cols: 4, rows: 1, opsRows: 0, opsCols: 0, opsH, w: 0, h: 0, pc: 0, pr: 0, nota: -1 }
     for (let cols = 1; cols <= 14; cols++) {
-      const rows = Math.max(1, Math.ceil(n / cols))
-      const w = (area.w - GAP * (cols - 1)) / cols
-      const h = (resto - GAP * (rows - 1)) / rows
-      if (w <= 0 || h <= 0) continue
-      const nota = Math.min(w, h / 0.95)
-      if (nota > melhor.nota) melhor = { cols, rows, opsRows: 0, opsCols: 0, opsH, w, h, nota }
+      for (const b of blocos(cols)) {
+        const rows = Math.max(1, b.pr, Math.ceil((n + b.pc * b.pr) / cols))
+        const w = (area.w - GAP * (cols - 1)) / cols
+        const h = (resto - GAP * (rows - 1)) / rows
+        if (w <= 0 || h <= 0) continue
+        // nota = tamanho do card da pessoa; com a Produção, o card dela também precisa caber bem (a tabela gosta de largura)
+        const prodNota = b.pc ? Math.min((b.pc * w + (b.pc - 1) * GAP) / 1.3, b.pr * h + (b.pr - 1) * GAP) / 2 : Infinity
+        const nota = Math.min(w, h / 0.95, prodNota)
+        if (nota > melhor.nota) melhor = { cols, rows, opsRows: 0, opsCols: 0, opsH, w, h, ...b, nota }
+      }
     }
     return melhor
-  }, [ajustar, area, opsBase, nBase])
+  }, [ajustar, area, opsBase, nBase, prodBase])
+
+  // altura do card da Produção na TV: baixo demais → sem a explicação de cada etapa
+  const prodH = layout.pr * layout.h + (layout.pr - 1) * GAP
+  const cardProducao = prod && (
+    <div key="producao" className="min-h-0 min-w-0" style={{ gridColumn: `span ${layout.pc}`, gridRow: `span ${layout.pr}` }}>
+      <CardProducaoTV s={s} mes={mes} compacto={ajustar && prodH < 360} />
+    </div>
+  )
 
   const pessoasCards = outros.map((c) => (
     <div key={c.id} className="min-h-0 min-w-0">
@@ -474,15 +512,16 @@ export function GradeTV({ s, mes, pessoas, base, ajustar = false, onAbrir }: { s
             <CardOperacoesTV s={s} c={ops} mes={mes} faixa compacto={layout.opsH < 330} />
           </div>
         )}
-        {outros.length > 0 && (
+        {(outros.length > 0 || cardProducao) && (
           <div
             className="flex-1 min-h-0 grid content-start"
             style={
               base
-                ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.w)}px)`, gridAutoRows: Math.floor(layout.h), gap: GAP }
-                : { gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gap: GAP }
+                ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.w)}px)`, gridAutoRows: Math.floor(layout.h), gridAutoFlow: 'dense', gap: GAP }
+                : { gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gridAutoFlow: 'dense', gap: GAP }
             }
           >
+            {cardProducao}
             {pessoasCards}
           </div>
         )}
@@ -497,6 +536,7 @@ export function GradeTV({ s, mes, pessoas, base, ajustar = false, onAbrir }: { s
           <CardOperacoesTV s={s} c={ops} mes={mes} />
         </div>
       )}
+      {cardProducao}
       {pessoasCards}
     </div>
   )

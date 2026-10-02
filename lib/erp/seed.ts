@@ -28,7 +28,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 11 // v11: Produção com fichas dos alunos e caixas da Revelação (estoque)
+export const VERSAO_DADOS = 12 // v12: histórico da Produção com as datas de cada etapa (variação do dia na Visão TV)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -476,6 +476,12 @@ export function gerarSeed(): ErpState {
       atrasoAvisado: '',
     })
     if (etapa === 'Em edição' && i === 1) l.enviadoEditorEm = addDias(hoje(), -6)
+    // histórico com as datas de verdade (a Visão TV calcula a variação do dia por ele):
+    // entrou no dia da foto e chegou na etapa atual no dia da última data preenchida
+    const meioDia = (dia: string) => new Date(`${dia}T12:00:00`).toISOString()
+    for (const h of col(s, 'producao_historico').filter((x) => x.loteId === l.id)) h.data = meioDia(d0)
+    const diaEtapa = [l.fotosRecebidasEm || d0, l.enviadoEditorEm, l.devolvidoEditorEm, l.aprovadoQualidadeEm, l.confirmadoEm, l.revelandoEm, l.naCaixaEm][ordem]
+    if (ordem > 0) inserir(s, 'producao_historico', { loteId: l.id, data: meioDia(String(diaEtapa || d0)), etapa, acao: etapa, quantidade: null, descricao: `Chegou em "${etapa}".`, autor: 'Sistema' })
     // conferência final feita: os álbuns entraram na meta de quem aprovou a qualidade (1 vez por escola)
     if (passou(4)) {
       lancar(s, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: quem, quantidade: Number(l.albuns), descricao: `Álbuns entregues: ${l.escola}`, data: String(l.confirmadoEm) })

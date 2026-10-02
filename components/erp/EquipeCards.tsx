@@ -234,7 +234,7 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
         </div>
       </div>
       <div className="flex-1 min-h-0">
-        <GradeTV key={filtro || 'todos'} s={s} mes={mes} pessoas={lista.map(({ c }) => c)} base={todos.map(({ c }) => c)} ajustar />
+        <GradeTV key={filtro || 'todos'} s={s} mes={mes} pessoas={lista.map(({ c }) => c)} base={todos.map(({ c }) => c)} producao={!filtro || filtro === 'edicao'} ajustar />
       </div>
     </div>,
     document.body,
@@ -289,8 +289,8 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
         </div>
       </div>
       {telaCheia && <TelaCheiaEquipe s={s} mes={mes} todos={todos} filtroInicial={filtro} onSair={() => setTelaCheia(false)} />}
-      {/* Cards da TV: Operações é o card maior (com os mini-cards); cada pessoa com a cor da situação */}
-      <GradeTV s={s} mes={mes} pessoas={lista.map(({ c }) => c)} onAbrir={(c) => setAberto(c)} />
+      {/* Cards da TV: Operações é o card maior (com os mini-cards), depois as etapas da Produção; cada pessoa com a cor da situação */}
+      <GradeTV s={s} mes={mes} pessoas={lista.map(({ c }) => c)} producao={!filtro || filtro === 'edicao'} onAbrir={(c) => setAberto(c)} />
 
       <Modal
         aberto={!!aberto && aberto.setor !== 'operacional'}

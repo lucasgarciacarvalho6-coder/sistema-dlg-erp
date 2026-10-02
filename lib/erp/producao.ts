@@ -114,6 +114,107 @@ export function corDaCidade(s: ErpState, cidade: unknown, uf: unknown): { cor: s
   return { cor, nome: nomeDaCor(cor) }
 }
 
+// ---- Visão TV: as etapas como na planilha da empresa ----
+// 6 linhas com os nomes que a empresa usa (a análise de qualidade e a conferência final ficam juntas em
+// "Aguardando aprovação (pagamento)"), nas cores da planilha.
+// Cada linha: álbuns, escolas e a VARIAÇÃO de hoje (agora × como estava no fim de ontem, pelo histórico das escolas).
+// "Na caixa" conta só as escolas que chegaram na caixa no mês (senão soma todas desde o começo).
+export const ETAPAS_PAINEL: { nome: string; descricao: string; cor: string; etapas: EtapaLote[] }[] = [
+  { nome: 'Aguardando envio editor', descricao: 'fotos que os fotógrafos mandam depois das sessões', cor: '#EAB308', etapas: ['Aguardando fotos'] },
+  { nome: 'Em edição', descricao: 'fotos que estão com os editores', cor: '#94A3B8', etapas: ['Em edição'] },
+  { nome: 'Aguardando aprovação (pagamento)', descricao: 'análise de qualidade e conferência final', cor: '#3B82F6', etapas: ['Análise de qualidade', 'Conferência final'] },
+  { nome: 'Aguardando revelação', descricao: 'fotos que estão no HD', cor: '#F97316', etapas: ['Aguardando revelação'] },
+  { nome: 'Revelando', descricao: 'fotos que estão em revelação', cor: '#D946EF', etapas: ['Revelando'] },
+  { nome: 'Na caixa', descricao: 'prontas na caixa, no estoque', cor: '#22C55E', etapas: ['Na caixa'] },
+]
+
+export interface LinhaPainel {
+  nome: string
+  descricao: string
+  cor: string
+  albuns: number
+  escolas: number
+  variacao: number | null // null = mês que não é o atual (a variação é sempre de hoje)
+  atrasadas: number // Em edição: escolas com o editor fora do prazo
+}
+
+// dia (no fuso local) de uma data/hora do histórico
+const diaLocal = (iso: string) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso // só a data: já é o dia
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function painelEtapas(s: ErpState, mes: string, hojeISO: string): { linhas: LinhaPainel[]; total: { albuns: number; escolas: number; variacao: number | null } } {
+  const lotes = lotesProducao(s)
+  const historico = new Map<string, Registro[]>()
+  for (const h of colecao(s, 'producao_historico')) historico.set(String(h.loteId), [...(historico.get(String(h.loteId)) ?? []), h])
+  for (const lista of historico.values()) lista.sort((a, b) => String(a.data).localeCompare(String(b.data)))
+  const valida = (e: unknown) => (ETAPAS_LOTE.includes(String(e) as EtapaLote) ? (String(e) as EtapaLote) : null)
+  // etapa no fim de ontem: a última do histórico antes de hoje • escola que entrou hoje: não existia • sem histórico: como está
+  const etapaOntem = (l: Registro): EtapaLote | null => {
+    const h = historico.get(l.id) ?? []
+    if (!h.length) return etapaDoLote(l)
+    const antes = h.filter((x) => diaLocal(String(x.data)) < hojeISO)
+    return antes.length ? (valida(antes[antes.length - 1].etapa) ?? etapaDoLote(l)) : null
+  }
+  // dia em que a escola chegou na caixa (a data da escola ou, se faltar, o histórico)
+  const diaNaCaixa = (l: Registro) => {
+    if (l.naCaixaEm) return String(l.naCaixaEm).slice(0, 10)
+    const h = (historico.get(l.id) ?? []).filter((x) => x.etapa === 'Na caixa')
+    return h.length ? diaLocal(String(h[h.length - 1].data)) : ''
+  }
+  const atual = mes === hojeISO.slice(0, 7)
+  const linhas = ETAPAS_PAINEL.map((p): LinhaPainel => {
+    const caixa = p.etapas.includes('Na caixa')
+    const agora = lotes.filter((l) => p.etapas.includes(etapaDoLote(l)) && (!caixa || diaNaCaixa(l).slice(0, 7) === mes))
+    const albuns = agora.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
+    let variacao: number | null = null
+    if (atual) {
+      // na caixa: o que chegou hoje • as outras: agora − fim de ontem
+      if (caixa) variacao = agora.filter((l) => diaNaCaixa(l) === hojeISO).reduce((a, l) => a + (Number(l.albuns) || 0), 0)
+      else {
+        const ontem = lotes.filter((l) => {
+          const e = etapaOntem(l)
+          return e !== null && p.etapas.includes(e)
+        })
+        variacao = albuns - ontem.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
+      }
+    }
+    return { ...p, albuns, escolas: agora.length, variacao, atrasadas: agora.filter((l) => diasAtraso(l, hojeISO) > 0).length }
+  })
+  const semCaixa = linhas.slice(0, -1)
+  return {
+    linhas,
+    total: {
+      albuns: semCaixa.reduce((a, x) => a + x.albuns, 0),
+      escolas: semCaixa.reduce((a, x) => a + x.escolas, 0),
+      variacao: atual ? semCaixa.reduce((a, x) => a + (x.variacao ?? 0), 0) : null,
+    },
+  }
+}
+
+// ---- Fotos de cada fotógrafo na escola (a Produção lança) ----
+export const fotosDoLote = (s: ErpState, loteId: string) =>
+  colecao(s, 'producao_fotos')
+    .filter((f) => f.loteId === loteId)
+    .sort((a, b) => String(a.fotografoNome).localeCompare(String(b.fotografoNome), 'pt-BR'))
+export interface FotografoDaEscola {
+  id: string
+  nome: string
+  naEquipe: boolean // estava na equipe da visita (Operações)
+}
+// Demo: a mesma lista do banco (SQL 025, producao_fotografos): os da equipe da visita primeiro; inativos só se estavam na equipe
+export function fotografosDaEscola(s: ErpState, loteId: string): FotografoDaEscola[] {
+  const l = lotesProducao(s).find((x) => x.id === loteId)
+  const v = l ? colecao(s, 'agenda_visitas').find((x) => x.id === l.visitaId) : undefined
+  const equipe = String(v?.fotografoIds ?? '').split(',').filter(Boolean)
+  return colecao(s, 'freelancers')
+    .filter((f) => f.tipo === 'Fotógrafo' && (f.status === 'Ativo' || equipe.includes(f.id)))
+    .map((f) => ({ id: f.id, nome: String(f.nome), naEquipe: equipe.includes(f.id) }))
+    .sort((a, b) => Number(b.naEquipe) - Number(a.naEquipe) || a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
 export const fichasDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_fichas')
     .filter((f) => f.loteId === loteId)

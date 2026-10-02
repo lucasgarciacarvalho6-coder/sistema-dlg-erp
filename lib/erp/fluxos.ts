@@ -855,6 +855,21 @@ export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: num
   return null
 }
 
+// Produção: lança (ou troca) quantas fotos o fotógrafo tirou na escola — mesma regra do SQL 025 (producao_salvar_fotos)
+export function salvarFotosFotografo(d: ErpState, loteId: string, fotografoId: string, quantidade: number, ctx: Contexto): string | null {
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada na Produção.'
+  const f = col(d, 'freelancers').find((x) => x.id === fotografoId && x.tipo === 'Fotógrafo')
+  if (!f) return 'Escolha o fotógrafo.'
+  const q = Math.floor(Number(quantidade))
+  if (!(q > 0)) return 'Informe a quantidade de fotos (maior que zero).'
+  const ja = col(d, 'producao_fotos').find((x) => x.loteId === loteId && x.fotografoId === fotografoId)
+  if (ja) Object.assign(ja, { quantidade: q, fotografoNome: f.nome })
+  else inserir(d, 'producao_fotos', { loteId, fotografoId, fotografoNome: f.nome, quantidade: q })
+  auditar(d, ctx, ja ? 'EDITAR' : 'CRIAR', `Produção • ${l.escola}: ${q} fotos de ${f.nome}`, 'edicao')
+  return null
+}
+
 // Caixa registrada errado (ainda sem conferência): sai da meta junto
 export function excluirCaixa(d: ErpState, caixaId: string, ctx: Contexto): string | null {
   const c = col(d, 'producao_caixas').find((x) => x.id === caixaId)

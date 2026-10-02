@@ -21,7 +21,7 @@ import { carregarDoSupabase, traduzirErro } from './supabase-sync'
 import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
 import { lerJSON } from './operacional'
 import { chaveCustoVariavel } from './operacoes-financeiro'
-import type { AcaoLote, DadosAcaoLote, EtapaLote } from './producao'
+import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, type FotografoDaEscola } from './producao'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -846,6 +846,34 @@ export function excluirCaixa(caixaId: string): Promise<string | null> {
 export function conferirCaixa(caixaId: string, dados: { albuns: number; posteres: number; observacao: string }): Promise<string | null> {
   const params = { p_caixa: caixaId, p_albuns: dados.albuns, p_posteres: dados.posteres, p_observacao: dados.observacao.trim() || null }
   return acaoProducao('producao_conferir_caixa', params, (d, ctx) => F.conferirCaixa(d, caixaId, dados, ctx), 'Caixa conferida: está no estoque.')
+}
+
+// Fotos de cada fotógrafo na escola (SQL 025). A lista para escolher vem do banco, só com os nomes
+// (a Produção não enxerga o cadastro dos fotógrafos); os da equipe da visita vêm primeiro.
+export async function listarFotografosDaEscola(loteId: string): Promise<FotografoDaEscola[]> {
+  if (MODO !== 'supabase') return fotografosDaEscola(carregar(), loteId)
+  const { data, error } = await sb().rpc('producao_fotografos', { p_lote: loteId })
+  if (error) {
+    avisar(traduzirErro(error))
+    return []
+  }
+  return ((data ?? []) as { id: string; nome: string; na_equipe: boolean }[]).map((f) => ({ id: f.id, nome: f.nome, naEquipe: !!f.na_equipe }))
+}
+// Lança (ou troca) a quantidade de fotos de um fotógrafo na escola
+export function salvarFotosFotografo(loteId: string, fotografoId: string, quantidade: number): Promise<string | null> {
+  const params = { p_lote: loteId, p_fotografo: fotografoId, p_quantidade: quantidade }
+  return acaoProducao('producao_salvar_fotos', params, (d, ctx) => F.salvarFotosFotografo(d, loteId, fotografoId, quantidade, ctx), 'Fotos lançadas.')
+}
+// Lançou errado: apaga o lançamento daquele fotógrafo
+export async function removerFotosFotografo(id: string): Promise<string | null> {
+  if (MODO === 'supabase') return gravar(() => sb().from('producao_fotos').delete().eq('id', id), 'Lançamento das fotos removido.')
+  mutar((d, ctx) => {
+    const f = F.col(d, 'producao_fotos').find((x) => x.id === id)
+    d.colecoes.producao_fotos = F.col(d, 'producao_fotos').filter((x) => x.id !== id)
+    if (f) F.auditar(d, ctx, 'EXCLUIR', `Produção: fotos de ${String(f.fotografoNome)} removidas`, 'edicao')
+  })
+  avisar('Lançamento das fotos removido.', 'ok')
+  return null
 }
 
 // Aviso de atraso do editor (sininho da Produção e do ADM). Não existe relógio no servidor:
