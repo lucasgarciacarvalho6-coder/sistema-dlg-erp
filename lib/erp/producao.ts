@@ -1,7 +1,8 @@
 // PRODUÇÃO (setor 'edicao' por dentro): controle das fotos de cada escola até a Revelação.
 // Cada visita encerrada nas Operações vira um LOTE (uma linha, como na planilha antiga), que passa pelas etapas:
-//   Aguardando fotos → Em edição (editor) → Análise de qualidade → Conferência final (ADM) →
-//   Aguardando revelação → Revelando (a Revelação pegou o HD) → Na caixa (já revelado).
+//   Aguardando fotos → Em edição (editor) → Análise de qualidade → Pronto para conferência Beatriz (aprovada,
+//   falta enviar) → Conferência final (ADM) → Aguardando revelação → Revelando (a Revelação pegou o HD) → Na caixa.
+// (a etapa leva o nome de quem faz a conferência final a pedido do dono: é sempre ela — 05/10/2026)
 // 1 aluno = 1 álbum (o número dá para ajustar); pôster fica anotado à parte e não conta na meta.
 
 import type { ErpState, Registro, Tom } from './types'
@@ -10,7 +11,7 @@ import { diaLocal } from './format'
 import { diasUteisDepois } from './calendario'
 import { estoqueAgora, variacaoEstoqueHoje } from './estoque'
 
-export const ETAPAS_LOTE = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'] as const
+export const ETAPAS_LOTE = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Pronto para conferência Beatriz', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'] as const
 export type EtapaLote = (typeof ETAPAS_LOTE)[number]
 
 // Etapas sem cor (regra do ADM: cor só para alerta). O atraso e a escola parada é que ganham amarelo/vermelho.
@@ -18,6 +19,7 @@ export const TOM_ETAPA: Record<EtapaLote, Tom> = {
   'Aguardando fotos': 'zinc',
   'Em edição': 'zinc',
   'Análise de qualidade': 'zinc',
+  'Pronto para conferência Beatriz': 'zinc',
   'Conferência final': 'zinc',
   'Aguardando revelação': 'zinc',
   Revelando: 'zinc',
@@ -30,6 +32,7 @@ const COR_ETAPA: Record<EtapaLote, Tom> = {
   'Aguardando fotos': 'yellow',
   'Em edição': 'emerald',
   'Análise de qualidade': 'yellow',
+  'Pronto para conferência Beatriz': 'yellow',
   'Conferência final': 'yellow',
   'Aguardando revelação': 'yellow',
   Revelando: 'emerald',
@@ -38,7 +41,7 @@ const COR_ETAPA: Record<EtapaLote, Tom> = {
 export const corDaEtapa = (etapa: EtapaLote, foraDoPrazo: boolean): Tom => (foraDoPrazo ? 'red' : COR_ETAPA[etapa])
 
 // Etapas em que a Produção ainda está trabalhando (o resto já foi entregue à Revelação)
-export const ETAPAS_EM_PRODUCAO: EtapaLote[] = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final']
+export const ETAPAS_EM_PRODUCAO: EtapaLote[] = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Pronto para conferência Beatriz', 'Conferência final']
 
 // Bônus de cada colaboradora (regra do dono): 1.000 álbuns no mês → R$ 300; + R$ 30 a cada 100 COMPLETOS acima.
 // Ex.: 999 → 0 • 1.000 a 1.099 → 300 • 1.100 → 330 • 1.500 → 450
@@ -58,13 +61,14 @@ export const lotesProducao = (s: ErpState) => colecao(s, 'producao_lotes')
 export const etapaDoLote = (l: Registro) => (ETAPAS_LOTE.includes(String(l.etapa) as EtapaLote) ? (String(l.etapa) as EtapaLote) : 'Aguardando fotos')
 export const indiceEtapa = (l: Registro) => ETAPAS_LOTE.indexOf(etapaDoLote(l))
 
-// Botões de cada etapa (as mesmas regras do banco: SQL 021, producao_avancar)
+// Botões de cada etapa (as mesmas regras do banco: SQL 030, producao_avancar)
 export type AcaoLote =
   | 'fotos'
   | 'enviar_editor'
   | 'editor_devolveu'
   | 'aprovar_qualidade'
   | 'reprovar_qualidade'
+  | 'enviar_conferencia' // aprovada na análise: a Produção envia para a conferência final
   | 'confirmar' // conferência final: só o ADM
   | 'reprovar_conferencia' // conferência final: só o ADM
   | 'revelando'
@@ -76,7 +80,7 @@ export interface DadosAcaoLote {
   analistaId?: string // quem fez a análise de qualidade (quando o ADM/Gerência aprova por ela)
   prevista?: string // data prevista da entrega do editor (ao enviar e ao devolver álbuns reprovados)
   data?: string // data do recebimento do editor
-  drive?: string // drive do envio / do recebimento (texto livre: OneDrive, Google Drive...)
+  drive?: string // drive do envio / do recebimento / do envio à conferência (texto livre: OneDrive, Google Drive...)
 }
 
 // Dias de atraso do editor: passou da data prevista e a escola continua "Em edição" (0 = no prazo / sem prazo)
@@ -92,6 +96,7 @@ export const ETAPA_DA_ACAO: Record<AcaoLote, EtapaLote> = {
   editor_devolveu: 'Em edição',
   aprovar_qualidade: 'Análise de qualidade',
   reprovar_qualidade: 'Análise de qualidade',
+  enviar_conferencia: 'Pronto para conferência Beatriz',
   confirmar: 'Conferência final',
   reprovar_conferencia: 'Conferência final',
   revelando: 'Aguardando revelação',
@@ -132,15 +137,16 @@ export function corDaCidade(s: ErpState, cidade: unknown, uf: unknown): { cor: s
 }
 
 // ---- Visão TV: as etapas como na planilha da empresa ----
-// 6 linhas com os nomes que a empresa usa (a análise de qualidade e a conferência final ficam juntas em
-// "Aguardando aprovação (pagamento)"). Sem cor por etapa (regra do ADM): a linha só fica
+// 7 linhas com os nomes que a empresa usa: "Aguardando aprovação" é a análise de qualidade e
+// "Pronto para conferência Beatriz" junta as prontas para enviar e as que já estão na conferência final (pedido de 05/10/2026). Sem cor por etapa (regra do ADM): a linha só fica
 // vermelha com editor atrasado e amarela com escola parada além do prazo (dias úteis na mesma etapa).
 // Cada linha: álbuns, escolas e a VARIAÇÃO de hoje (agora × como estava no fim de ontem, pelo histórico das escolas).
 // "Na caixa" conta só as escolas que chegaram na caixa no mês (senão soma todas desde o começo).
 export const ETAPAS_PAINEL: { nome: string; descricao: string; etapas: EtapaLote[]; prazo: number | null }[] = [
   { nome: 'Aguardando envio editor', descricao: 'fotos que os fotógrafos mandam depois das sessões', etapas: ['Aguardando fotos'], prazo: 2 },
   { nome: 'Em edição', descricao: 'fotos que estão com os editores', etapas: ['Em edição'], prazo: null }, // aqui vale a data prevista do editor
-  { nome: 'Aguardando aprovação (pagamento)', descricao: 'análise de qualidade e conferência final', etapas: ['Análise de qualidade', 'Conferência final'], prazo: 3 },
+  { nome: 'Aguardando aprovação', descricao: 'análise de qualidade', etapas: ['Análise de qualidade'], prazo: 3 },
+  { nome: 'Pronto para conferência Beatriz', descricao: 'prontas para enviar e na conferência final', etapas: ['Pronto para conferência Beatriz', 'Conferência final'], prazo: 3 },
   { nome: 'Aguardando revelação', descricao: 'fotos que estão no HD', etapas: ['Aguardando revelação'], prazo: 5 },
   { nome: 'Revelando', descricao: 'fotos que estão em revelação', etapas: ['Revelando'], prazo: null },
   // o estoque de agora (os mesmos números do Financeiro › Estoque e Cargas): caixas conferidas que não saíram com vendedor
@@ -172,7 +178,8 @@ const DATA_DA_ETAPA: Record<EtapaLote, string> = {
   'Aguardando fotos': 'dataFoto',
   'Em edição': 'enviadoEditorEm',
   'Análise de qualidade': 'devolvidoEditorEm',
-  'Conferência final': 'devolvidoEditorEm',
+  'Pronto para conferência Beatriz': 'aprovadoQualidadeEm',
+  'Conferência final': 'aprovadoQualidadeEm',
   'Aguardando revelação': 'confirmadoEm',
   Revelando: 'revelandoEm',
   'Na caixa': 'naCaixaEm',

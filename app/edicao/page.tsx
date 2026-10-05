@@ -11,7 +11,7 @@ import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 import { Drive } from '@/components/edicao/LinkDrive'
 
 // PRODUÇÃO › Controle: a planilha da Produção dentro do sistema. Uma linha por escola (visita encerrada nas Operações),
-// com a etapa em que está: Aguardando fotos → Em edição → Análise de qualidade → Conferência final → Aguardando revelação
+// com a etapa em que está: Aguardando fotos → Em edição → Análise de qualidade → Pronto para conferência Beatriz → Conferência final → Aguardando revelação
 // → Revelando → Na caixa. Retorno fica em laranja, como na planilha.
 
 type Filtro = 'andamento' | 'atrasadas' | EtapaLote
@@ -63,7 +63,7 @@ export default function ControleProducaoPage() {
       </div>
 
       {/* Etapas: clicar filtra a lista */}
-      <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-10 gap-3">
         <button onClick={() => setFiltro('andamento')} className={pill(filtro === 'andamento')}>
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-300">Em andamento</p>
           <p className="text-xl font-black text-white mt-1">{lotes.filter((l) => etapaDoLote(l) !== 'Na caixa').length}</p>

@@ -22,7 +22,7 @@ const COLUNAS = 'minmax(0, 44fr) minmax(0, 46fr) minmax(0, 10fr)'
 // cor da linha: só quando há alerta
 const corDaLinha = (l: LinhaPainel) => (l.atrasadas > 0 ? VERMELHO : l.paradas > 0 ? AMARELO : null)
 
-// nome da etapa; o que vem entre parênteses sai um pouco menor, para caber ao lado (ex.: "Aguardando aprovação (pagamento)")
+// nome da etapa; o que vem entre parênteses sai um pouco menor, para caber ao lado (ex.: "Etapa (detalhe)")
 function NomeEtapa({ nome }: { nome: string }) {
   const m = nome.match(/^(.*?)\s*(\(.+\))$/)
   if (!m) return <>{nome}</>

@@ -447,12 +447,12 @@ export function gerarSeed(): ErpState {
     .sort((a, b) => String(b.data).localeCompare(String(a.data)))
     .slice(0, 14)
   // da mais nova para a mais antiga: quanto mais antiga a foto, mais adiante está na produção
-  const etapasDemo = ['Aguardando fotos', 'Em edição', 'Em edição', 'Em edição', 'Análise de qualidade', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Aguardando revelação', 'Revelando', 'Na caixa', 'Na caixa', 'Na caixa', 'Na caixa']
+  const etapasDemo = ['Aguardando fotos', 'Em edição', 'Em edição', 'Em edição', 'Análise de qualidade', 'Pronto para conferência Beatriz', 'Conferência final', 'Aguardando revelação', 'Aguardando revelação', 'Revelando', 'Na caixa', 'Na caixa', 'Na caixa', 'Na caixa']
   recentes.forEach((v, i) => {
     const l = criarLoteProducao(s, v, ctxOp, 'Chegou das Operações')
     if (!l) return
     const etapa = etapasDemo[i]
-    const ordem = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'].indexOf(etapa)
+    const ordem = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Pronto para conferência Beatriz', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'].indexOf(etapa)
     const d0 = String(v.data)
     const ate = (n: number) => (addDias(d0, n) > hoje() ? hoje() : addDias(d0, n)) // nenhuma data depois de hoje
     const passou = (n: number) => ordem >= n
@@ -467,10 +467,12 @@ export function gerarSeed(): ErpState {
       reprovados: i === 5 ? 4 : i === 11 ? 2 : 0,
       aprovadoQualidadeEm: passou(3) ? ate(9) : '',
       aprovadoQualidadePor: passou(3) ? quem : '',
-      confirmadoEm: passou(4) ? ate(10) : '',
-      confirmadoPor: passou(4) ? 'u-adm' : '',
-      revelandoEm: passou(5) ? ate(12) : '',
-      naCaixaEm: passou(6) ? ate(15) : '',
+      enviadoConferenciaEm: passou(4) ? ate(9) : '',
+      driveConferencia: passou(4) ? 'Google Drive' : '',
+      confirmadoEm: passou(5) ? ate(10) : '',
+      confirmadoPor: passou(5) ? 'u-adm' : '',
+      revelandoEm: passou(6) ? ate(12) : '',
+      naCaixaEm: passou(7) ? ate(15) : '',
       posteres: i === 7 ? 2 : 0,
       albuns: Number(l.alunos) - (i === 7 ? 2 : 0),
       // prazo do editor e drives (a 1ª escola com o editor fica atrasada, para mostrar o aviso)
@@ -484,10 +486,10 @@ export function gerarSeed(): ErpState {
     // entrou no dia da foto e chegou na etapa atual no dia da última data preenchida
     const meioDia = (dia: string) => new Date(`${dia}T12:00:00`).toISOString()
     for (const h of col(s, 'producao_historico').filter((x) => x.loteId === l.id)) h.data = meioDia(d0)
-    const diaEtapa = [l.fotosRecebidasEm || d0, l.enviadoEditorEm, l.devolvidoEditorEm, l.aprovadoQualidadeEm, l.confirmadoEm, l.revelandoEm, l.naCaixaEm][ordem]
+    const diaEtapa = [l.fotosRecebidasEm || d0, l.enviadoEditorEm, l.devolvidoEditorEm, l.aprovadoQualidadeEm, l.enviadoConferenciaEm, l.confirmadoEm, l.revelandoEm, l.naCaixaEm][ordem]
     if (ordem > 0) inserir(s, 'producao_historico', { loteId: l.id, data: meioDia(String(diaEtapa || d0)), etapa, acao: etapa, quantidade: null, descricao: `Chegou em "${etapa}".`, autor: 'Sistema' })
     // conferência final feita: os álbuns entraram na meta de quem aprovou a qualidade (1 vez por escola)
-    if (passou(4)) {
+    if (passou(5)) {
       lancar(s, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: quem, quantidade: Number(l.albuns), descricao: `Álbuns entregues: ${l.escola}`, data: String(l.confirmadoEm) })
       l.albunsContados = Number(l.albuns)
     }

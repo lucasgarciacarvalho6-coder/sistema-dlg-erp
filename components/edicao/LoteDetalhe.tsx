@@ -52,7 +52,7 @@ export default function LoteDetalhe({ loteId, onFechar }: { loteId: string | nul
   )
 }
 
-// As 7 etapas: ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
+// As 8 etapas (2 linhas de 4): ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
 function LinhaDoTempo({ l }: { l: Registro }) {
   const s = useErp()
   const atual = indiceEtapa(l)
@@ -62,13 +62,14 @@ function LinhaDoTempo({ l }: { l: Registro }) {
     'Aguardando fotos': l.fotosRecebidasEm ? `fotos ✓ ${curta(l.fotosRecebidasEm)}` : `foto ${curta(l.dataFoto)}`,
     'Em edição': [editor ? String(editor.nome) : '', curta(l.enviadoEditorEm), l.entregaPrevista ? `prev. ${curta(l.entregaPrevista)}` : ''].filter(Boolean).join(' • '),
     'Análise de qualidade': curta(l.devolvidoEditorEm),
-    'Conferência final': [curta(l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
+    'Pronto para conferência Beatriz': [curta(l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
+    'Conferência final': curta(l.enviadoConferenciaEm),
     'Aguardando revelação': curta(l.confirmadoEm),
     Revelando: curta(l.revelandoEm),
     'Na caixa': curta(l.naCaixaEm),
   }
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
       {ETAPAS_LOTE.map((e, i) => {
         const feito = i < atual
         const agora = i === atual
@@ -115,7 +116,7 @@ function Numeros({ l }: { l: Registro }) {
           {l.confirmadoEm ? ` (conferência final em ${dataBR(String(l.confirmadoEm))})` : ''}
         </p>
       )}
-      {(!!l.driveEnvio || !!l.driveDevolucao) && (
+      {(!!l.driveEnvio || !!l.driveDevolucao || !!l.driveConferencia) && (
         <p className="text-[11px] text-zinc-400">
           {!!l.driveEnvio && (
             <>
@@ -126,6 +127,12 @@ function Numeros({ l }: { l: Registro }) {
           {!!l.driveDevolucao && (
             <>
               Drive do recebimento: <Drive valor={l.driveDevolucao} />
+            </>
+          )}
+          {(!!l.driveEnvio || !!l.driveDevolucao) && !!l.driveConferencia && ' • '}
+          {!!l.driveConferencia && (
+            <>
+              Envio à conferência: <Drive valor={l.driveConferencia} />
             </>
           )}
         </p>
@@ -452,8 +459,30 @@ function ProximoPasso({ l }: { l: Registro }) {
           </div>
         ),
       )
+    case 'Pronto para conferência Beatriz':
+      return caixa(
+        'Pronto para conferência Beatriz',
+        `${num(albuns)} álbuns aprovados na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}${l.aprovadoQualidadeEm ? ` em ${dataBR(String(l.aprovadoQualidadeEm))}` : ''}. Envie para a conferência final e marque aqui.`,
+        <div className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className={labelCls}>Como foi enviado (opcional)</span>
+            <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Cole o link do Google Drive / OneDrive ou escreva (pendrive, HD...)" className={inputCls} />
+          </label>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[11px] text-zinc-500">O envio fica registrado com a data de hoje ({dataBR(dia)}).</p>
+            <button disabled={enviando} onClick={() => fazer('enviar_conferencia', { drive })} className={btnPrimario}>
+              Enviado para a conferência →
+            </button>
+          </div>
+        </div>,
+      )
     case 'Conferência final':
-      if (!souAdm) return caixa('Conferência final', `Aprovada na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}. Aguardando a conferência final do ADM.`, null)
+      if (!souAdm)
+        return caixa(
+          'Conferência final',
+          `Aprovada na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}${l.enviadoConferenciaEm ? ` e enviada para a conferência em ${dataBR(String(l.enviadoConferenciaEm))}` : ''}. Aguardando a conferência final do ADM.`,
+          null,
+        )
       return caixa(
         'Conferência final (ADM)',
         `${num(albuns)} álbuns aprovados na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}. Ao aprovar, a escola vai para a Revelação e os álbuns entram na meta de quem fez a análise.`,

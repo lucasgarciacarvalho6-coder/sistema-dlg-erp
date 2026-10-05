@@ -810,7 +810,7 @@ function historicoLote(d: ErpState, l: Registro, ctx: Contexto, h: { etapa: stri
   auditar(d, ctx, 'EDITAR', `Produção • ${l.escola}: ${h.acao}`, 'edicao')
 }
 
-// Botões das etapas da Produção — mesmas regras do SQL 022 (producao_avancar).
+// Botões das etapas da Produção — mesmas regras do SQL 030 (producao_avancar).
 // Na conferência final (só o ADM) os álbuns entram na meta de quem aprovou a análise de qualidade, 1 vez por escola.
 export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: DadosAcaoLote, ctx: Contexto): string | null {
   const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
@@ -874,11 +874,20 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         analista = daProducao(dados.analistaId)
         if (!analista) return 'Quem fez a análise precisa ser da Produção.'
       } else if (!analista && d.colaboradores.some((c) => c.setor === 'edicao' && c.status === 'ATIVO')) return 'Escolha quem fez a análise de qualidade.'
-      Object.assign(l, { aprovadoQualidadeEm: dia, aprovadoQualidadePor: analista?.id ?? '', etapa: 'Conferência final' })
-      h = { etapa: 'Conferência final', acao: 'Aprovado na análise de qualidade', quantidade: albuns, descricao: `${albuns} álbuns aprovados${analista ? ` por ${analista.nome}` : ''}.` }
-      notificar(d, ctx, { setores: ['adm'], tipo: 'info', titulo: 'Escola pronta para a conferência final', descricao: `${l.escola}: ${albuns} álbuns aprovados na análise de qualidade.`, link: '/edicao' })
+      Object.assign(l, { aprovadoQualidadeEm: dia, aprovadoQualidadePor: analista?.id ?? '', etapa: 'Pronto para conferência Beatriz', enviadoConferenciaEm: '', driveConferencia: '' })
+      h = {
+        etapa: 'Pronto para conferência Beatriz',
+        acao: 'Aprovado na análise de qualidade',
+        quantidade: albuns,
+        descricao: `${albuns} álbuns aprovados${analista ? ` por ${analista.nome}` : ''}. Pronto para enviar para a conferência.`,
+      }
       break
     }
+    case 'enviar_conferencia':
+      Object.assign(l, { enviadoConferenciaEm: dia, driveConferencia: drive, etapa: 'Conferência final' })
+      h = { etapa: 'Conferência final', acao: 'Enviado para a conferência', quantidade: albuns, descricao: `${albuns} álbuns enviados para a conferência final${drive ? ` (${drive})` : ''}.` }
+      notificar(d, ctx, { setores: ['adm'], tipo: 'info', titulo: 'Escola pronta para a conferência final', descricao: `${l.escola}: ${albuns} álbuns enviados para a conferência.`, link: '/edicao' })
+      break
     case 'reprovar_qualidade':
     case 'reprovar_conferencia': {
       if (acao === 'reprovar_conferencia' && eu?.perfil !== 'ADM') return SO_ADM_CONFERENCIA
@@ -898,6 +907,8 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         atrasoAvisado: '',
         aprovadoQualidadeEm: '',
         aprovadoQualidadePor: '',
+        enviadoConferenciaEm: '',
+        driveConferencia: '',
       })
       h = {
         etapa: 'Em edição',
@@ -966,7 +977,7 @@ export function ajustarLote(d: ErpState, loteId: string, albuns: number, postere
 
 // ADM corrige a etapa (escola trazida de antes do controle ou botão clicado por engano).
 // As datas das etapas seguintes são apagadas; os álbuns que já entraram na meta não contam de novo.
-// Mesma regra do SQL 022 (producao_corrigir_etapa).
+// Mesma regra do SQL 030 (producao_corrigir_etapa).
 export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote, editorId: string, motivo: string, ctx: Contexto): string | null {
   if (d.colaboradores.find((c) => c.id === ctx.autorId)?.perfil !== 'ADM') return 'Só o ADM corrige a etapa.'
   const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
@@ -989,10 +1000,12 @@ export function corrigirEtapaLote(d: ErpState, loteId: string, etapa: EtapaLote,
     driveDevolucao: k >= 2 ? l.driveDevolucao : '',
     aprovadoQualidadeEm: k >= 3 ? l.aprovadoQualidadeEm : '',
     aprovadoQualidadePor: k >= 3 ? l.aprovadoQualidadePor : '',
-    confirmadoEm: k >= 4 ? l.confirmadoEm : '',
-    confirmadoPor: k >= 4 ? l.confirmadoPor : '',
-    revelandoEm: k >= 5 ? l.revelandoEm : '',
-    naCaixaEm: k >= 6 ? l.naCaixaEm : '',
+    enviadoConferenciaEm: k >= 4 ? l.enviadoConferenciaEm : '',
+    driveConferencia: k >= 4 ? l.driveConferencia : '',
+    confirmadoEm: k >= 5 ? l.confirmadoEm : '',
+    confirmadoPor: k >= 5 ? l.confirmadoPor : '',
+    revelandoEm: k >= 6 ? l.revelandoEm : '',
+    naCaixaEm: k >= 7 ? l.naCaixaEm : '',
   })
   // o editor só aparece no histórico quando mudou
   const nomeEd = editorFinal && editorFinal !== editorAntes ? String(col(d, 'editores').find((e) => e.id === editorFinal)?.nome ?? '') : ''
