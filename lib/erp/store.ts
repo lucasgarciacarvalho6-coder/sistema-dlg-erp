@@ -589,8 +589,9 @@ export async function atualizarRegistro(nome: string, id: string, dados: Partial
   mutar((d, ctx) => {
     const r = F.col(d, nome).find((x) => x.id === id)
     if (!r) return
+    const antes = { ...r }
     Object.assign(r, dados)
-    F.aposAtualizar(d, nome, r, ctx)
+    F.aposAtualizar(d, nome, r, ctx, antes)
     F.auditar(d, ctx, 'EDITAR', `Registro atualizado em ${nome}`, setor || ctx.autorSetor)
   })
   return null
@@ -733,9 +734,12 @@ export async function encerrarVisita(visitaId: string, fichas: number): Promise<
   if (MODO === 'supabase') {
     return gravar(() => sb().from('agenda_visitas').update({ fichas_fotografadas: fichas, status: 'Fotografada' }).eq('id', visitaId), 'Visita encerrada.')
   }
-  mutar((d, ctx) => F.encerrarVisita(d, visitaId, fichas, ctx))
-  avisar('Visita encerrada.', 'ok')
-  return null
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.encerrarVisita(d, visitaId, fichas, ctx)
+  })
+  avisar(erro ?? 'Visita encerrada.', erro ? 'erro' : 'ok')
+  return erro
 }
 
 // Retorno: as fichas que faltaram viram uma visita nova na agenda (mesma escola), na data informada
@@ -749,6 +753,88 @@ export async function agendarRetorno(visitaId: string, fichas: number, data: str
   })
   avisar(erro ?? 'Retorno agendado na agenda.', erro ? 'erro' : 'ok')
   return erro
+}
+
+// ---- Editar e cancelar nas Operações (SQL 028) ----
+
+// Editar agendamento (visita ou retorno agendado): data, fichas e dados da escola; a visita leva as mudanças para o contrato
+export async function editarAgendamento(visitaId: string, dados: F.DadosAgendamento, motivo: string): Promise<string | null> {
+  const ok = 'Agendamento atualizado.'
+  if (MODO === 'supabase')
+    return gravar(
+      () =>
+        sb().rpc('editar_agendamento', {
+          p_visita: visitaId,
+          p_data: dados.data || null,
+          p_fichas_previstas: dados.fichasPrevistas,
+          p_fichas_confirmadas: dados.fichasConfirmadas,
+          p_escola: dados.escola,
+          p_cidade: dados.cidade,
+          p_uf: dados.uf,
+          p_endereco: dados.endereco,
+          p_telefone: dados.telefone,
+          p_responsavel: dados.responsavel,
+          p_motivo: motivo.trim() || null,
+        }),
+      ok,
+    )
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.editarAgendamento(d, visitaId, dados, motivo, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Cancelar agendamento com motivo: a visita sai da agenda e o contrato volta para a conferência (retorno: só o retorno)
+export async function cancelarAgendamento(visitaId: string, motivo: string): Promise<string | null> {
+  const ok = 'Agendamento cancelado.'
+  if (!motivo.trim()) {
+    avisar('Informe o motivo do cancelamento.')
+    return 'Informe o motivo do cancelamento.'
+  }
+  if (MODO === 'supabase') return gravar(() => sb().rpc('cancelar_agendamento', { p_visita: visitaId, p_motivo: motivo.trim() }), ok)
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.cancelarAgendamento(d, visitaId, motivo, ctx)
+  })
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return erro
+}
+
+// Visita encerrada: corrigir fichas fotografadas / desfazer encerramento. Devolve o erro ou o aviso (rascunho de fechamento a conferir).
+async function acaoVisitaEncerrada(
+  rpc: string,
+  params: Record<string, unknown>,
+  demo: (d: ErpState, ctx: F.Contexto) => { erro: string } | { aviso: string | null },
+  ok: string,
+): Promise<{ erro: string | null; aviso: string | null }> {
+  if (MODO === 'supabase') {
+    const { data, error } = await sb().rpc(rpc, params)
+    if (error) {
+      const msg = traduzirErro(error)
+      avisar(msg)
+      return { erro: msg, aviso: null }
+    }
+    avisar(ok, 'ok')
+    agendarRecarga(150)
+    return { erro: null, aviso: typeof data === 'string' && data ? data : null }
+  }
+  let r = { aviso: null } as { erro: string } | { aviso: string | null }
+  mutar((d, ctx) => {
+    r = demo(d, ctx)
+  })
+  const erro = 'erro' in r ? r.erro : null
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return { erro, aviso: 'aviso' in r ? r.aviso : null }
+}
+
+export function corrigirFichasVisita(visitaId: string, fichas: number, motivo: string) {
+  return acaoVisitaEncerrada('corrigir_fichas_visita', { p_visita: visitaId, p_fichas: fichas, p_motivo: motivo.trim() }, (d, ctx) => F.corrigirFichasVisita(d, visitaId, fichas, motivo, ctx), 'Fichas corrigidas.')
+}
+
+export function desfazerEncerramento(visitaId: string, motivo: string) {
+  return acaoVisitaEncerrada('desfazer_encerramento', { p_visita: visitaId, p_motivo: motivo.trim() }, (d, ctx) => F.desfazerEncerramento(d, visitaId, motivo, ctx), 'Encerramento desfeito: a visita voltou para agendada.')
 }
 
 // Fechamento → Financeiro: cada beneficiário vira uma conta a pagar com os dados PIX

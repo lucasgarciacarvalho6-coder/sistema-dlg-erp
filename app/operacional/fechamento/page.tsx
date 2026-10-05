@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { Registro, Tom } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
-import { atualizarRegistro, criarRegistro, enviarFechamento, useErp, usePode } from '@/lib/erp/store'
+import { atualizarRegistro, criarRegistro, enviarFechamento, excluirRegistro, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import {
   calcularFechamentoEscola,
@@ -57,6 +57,22 @@ function AvisoDevolucao({ f }: { f?: Registro }) {
         {f.devolvidoPor ? ` • por ${t(f.devolvidoPor)}` : ''} • corrija e clique em “Enviar ao financeiro” de novo.
       </p>
     </div>
+  )
+}
+
+// Rascunho feito por engano: as Operações excluem (o que já foi para o Financeiro, só o Financeiro devolve)
+function ExcluirRascunho({ f, onExcluido }: { f?: Registro; onExcluido: () => void }) {
+  const podeFazer = usePode()
+  const [confirmar, setConfirmar] = useState(false)
+  if (!f || f.status !== 'Rascunho' || !podeFazer('operacional', 'excluir')) return null
+  return (
+    <button
+      onClick={() => (confirmar ? excluirRegistro('fechamentos', f.id, 'operacional').then((e) => !e && onExcluido()) : setConfirmar(true))}
+      onBlur={() => setConfirmar(false)}
+      className={`mr-auto px-4 py-3 text-xs font-bold uppercase tracking-widest rounded-xl ${confirmar ? 'bg-red-600 hover:bg-red-500 text-white' : 'text-red-400 hover:bg-red-500/10'}`}
+    >
+      {confirmar ? 'Clique de novo para excluir' : 'Excluir rascunho'}
+    </button>
   )
 }
 
@@ -326,6 +342,7 @@ function EditorEscola({ visita, onFechar }: { visita: Registro; onFechar: () => 
       largura="max-w-3xl"
       rodape={
         <>
+          <ExcluirRascunho f={existente} onExcluido={onFechar} />
           <button onClick={onFechar} className={btnSecundario}>Fechar</button>
           <button onClick={() => imprimirRecibos(`Recibos • ${visita.escola}`, s.empresa.nome, calc.beneficiarios)} disabled={!calc.beneficiarios.length} className={btnSecundario}>
             <Icon nome="report" className="w-4 h-4" /> Imprimir recibos
@@ -493,6 +510,7 @@ function EditorSemanal({ tipo, pessoa, semana, onFechar }: { tipo: 'vendedor' | 
       largura="max-w-2xl"
       rodape={
         <>
+          <ExcluirRascunho f={existente} onExcluido={onFechar} />
           <button onClick={onFechar} className={btnSecundario}>Fechar</button>
           <button onClick={() => imprimirRecibos(`Recibo • ${pessoa.nome}`, s.empresa.nome, beneficiarios)} disabled={!beneficiarios.length} className={btnSecundario}>
             <Icon nome="report" className="w-4 h-4" /> Imprimir recibo

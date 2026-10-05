@@ -70,6 +70,52 @@ export function retornoDaVisita(s: ErpState, visita: Registro) {
 
 export const fotografosDa = (visita: Registro) => t(visita.fotografoIds).split(',').filter(Boolean)
 
+// ---------------- Visita encerrada: corrigir fichas / desfazer encerramento (mesmas regras do SQL 028) ----------------
+
+// O que impede mexer numa visita encerrada: o fechamento da escola, ou o semanal do vendedor, já foi para o Financeiro
+export function bloqueioVisitaEncerrada(s: ErpState, v: Registro): string | null {
+  const fech = colecao(s, 'fechamentos')
+  if (v.status === 'Fechamento enviado' || fech.some((f) => f.tipo === 'escola' && f.refId === v.id && f.status !== 'Rascunho'))
+    return 'O fechamento desta escola já foi para o Financeiro. Peça para o Financeiro devolver o fechamento e tente de novo.'
+  const semana = inicioSemana(t(v.data))
+  if (t(v.vendedorId) && fech.some((f) => f.tipo === 'vendedor' && f.refId === v.vendedorId && f.periodo === semana && f.status !== 'Rascunho'))
+    return `O fechamento semanal do vendedor (semana de ${dataBR(semana).slice(0, 5)}) já foi para o Financeiro com as fichas desta visita. Peça para o Financeiro devolver esse fechamento e tente de novo.`
+  return null
+}
+
+// Rascunhos de fechamento feitos com as fichas desta visita (avisar para conferir depois da correção)
+export function avisosRascunhoVisita(s: ErpState, v: Registro, comEscola = true): string | null {
+  const fech = colecao(s, 'fechamentos')
+  const a: string[] = []
+  if (comEscola && fech.some((f) => f.tipo === 'escola' && f.refId === v.id && f.status === 'Rascunho')) a.push('Confira o fechamento da escola: o rascunho foi feito com as fichas antigas.')
+  const semana = inicioSemana(t(v.data))
+  if (t(v.vendedorId) && fech.some((f) => f.tipo === 'vendedor' && f.refId === v.vendedorId && f.periodo === semana && f.status === 'Rascunho'))
+    a.push(`Confira o fechamento semanal do vendedor (semana de ${dataBR(semana).slice(0, 5)}): o rascunho foi feito com as fichas antigas.`)
+  return a.length ? a.join(' ') : null
+}
+
+// Cadastro com histórico não é excluído (a tela sugere inativar) — mesma regra do gatilho do SQL 028.
+// Devolve onde o cadastro aparece (ex.: "visitas na agenda") ou null.
+export function historicoDoCadastro(s: ErpState, colecaoNome: string, r: Registro): string | null {
+  const visitas = colecao(s, 'agenda_visitas')
+  const fech = colecao(s, 'fechamentos')
+  if (colecaoNome === 'pj_vendedores') {
+    if (colecao(s, 'contratos_escola').some((c) => c.vendedorId === r.id)) return 'contratos de escola'
+    if (visitas.some((v) => v.vendedorId === r.id)) return 'visitas na agenda'
+    if (fech.some((f) => f.tipo === 'vendedor' && f.refId === r.id)) return 'fechamentos'
+    if (colecao(s, 'rotas').some((x) => x.vendedorId === r.id)) return 'rotas'
+    if (colecao(s, 'documentos_externos').some((x) => x.vendedorId === r.id)) return 'documentos enviados pelo app'
+    if (colecao(s, 'vendas_ebooks').some((x) => x.vendedorExternoId === r.id)) return 'vendas de books'
+    if (t(r.usuarioId)) return 'acesso ao app'
+  }
+  if (colecaoNome === 'freelancers') {
+    if (visitas.some((v) => v.motoristaId === r.id || fotografosDa(v).includes(r.id))) return 'visitas na agenda'
+    if (fech.some((f) => f.tipo === 'freelancer' && f.refId === r.id)) return 'fechamentos'
+  }
+  if (colecaoNome === 'veiculos' && visitas.some((v) => v.veiculoId === r.id)) return 'visitas na agenda'
+  return null
+}
+
 // ---------------- Equipe da viagem (veículo + motorista + 1 a 4 fotógrafos) ----------------
 
 export const MAX_FOTOGRAFOS = 4

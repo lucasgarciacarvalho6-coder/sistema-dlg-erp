@@ -22,13 +22,14 @@ import {
   pagarConta,
   registrarContatoRebolo,
   registrarHistoricoVisita,
+  registrarEscolaDemo,
   type Contexto,
 } from './fluxos'
 import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 13 // v13: atividade de cada pessoa nos últimos dias (gerente virtual da Visão TV)
+export const VERSAO_DADOS = 15 // v15: escolas dos contratos e da agenda no cadastro de escolas (Operações › Escolas)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -712,6 +713,10 @@ export function gerarSeed(): ErpState {
     tipo: 'Desconto rebolo', setorOrigem: 'rebolo', descricao: 'Exemplo de pedido de desconto (demonstração)', valor: 0, refColecao: 'rebolo_fichas', refId: '',
     solicitante: 'Tainá Moreira', status: 'Rejeitado', decididoPor: 'Mariana Duarte', decididoEm: addDias(hojeISO, -5),
   })
+
+  // escolas dos contratos entram no cadastro de escolas (como o SQL 027 faz no banco)
+  for (const c of col(s, 'contratos_escola')) registrarEscolaDemo(s, c)
+  for (const v of col(s, 'agenda_visitas')) if (!v.contratoId && v.status !== 'Cancelada') registrarEscolaDemo(s, v)
 
   s.auditoria = []
   // Atividade da equipe (demo do gerente virtual): cada pessoa registrou algo nos dias úteis anteriores.

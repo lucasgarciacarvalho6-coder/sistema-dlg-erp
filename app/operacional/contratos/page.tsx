@@ -1,13 +1,14 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
 import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, baixarArquivoContrato, cancelarContratoEscola, confirmarContratoEscola, criarRegistro, excluirContratoEscola, urlArquivoContrato, useErp, usePode } from '@/lib/erp/store'
 import { lerContratoLocal } from '@/lib/erp/leitura-contrato'
 import { colecao } from '@/lib/erp/metrics'
 import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, corEquipe, equipeDaVisita, lerJSON, nomePJ, nomeVeiculo, pixCompleto } from '@/lib/erp/operacional'
-import { brl, dataBR, num } from '@/lib/erp/format'
+import { brl, dataBR, mesAtual, num } from '@/lib/erp/format'
+import { dadosNovoContrato, escolasComHistorico } from '@/lib/erp/escolas'
 import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, Tabs, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
@@ -74,6 +75,23 @@ export default function ContratosEscolaPage() {
   // páginas já guardadas do contrato (fotos enviadas pelo app do vendedor ou arquivo anexado antes)
   const [paginasSalvas, setPaginasSalvas] = useState<{ caminho: string; url: string }[]>([])
   const [verTexto, setVerTexto] = useState(false)
+
+  // Novo contrato de uma escola que volta (vindo de Operações › Escolas, ?escola=ID): abre já preenchido com os dados
+  // da escola e o PIX, a bonificação e o vendedor do último contrato. Lido depois de abrir a página (a URL só fica certa aí)
+  // e de novo quando os dados chegam; o ?escola= sai da URL quando o contrato abre.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('escola')
+    if (!id) return
+    const e = escolasComHistorico(s, mesAtual().slice(0, 4)).find((x) => x.id === id)
+    if (!e) return
+    const t = setTimeout(() => {
+      setForm({ ...VAZIO, ...dadosNovoContrato(e) })
+      setEditando(null)
+      setAberto(true)
+      window.history.replaceState(null, '', window.location.pathname)
+    }, 0)
+    return () => clearTimeout(t)
+  }, [s])
 
   const contratos = colecao(s, 'contratos_escola')
   const vendedores = colecao(s, 'pj_vendedores').filter((v) => v.status !== 'Inativo' && v.tipo !== 'Books')
@@ -434,7 +452,11 @@ export default function ContratosEscolaPage() {
       <Modal
         aberto={aberto}
         titulo={editando ? `Revisar contrato • ${editando.escola}` : 'Importar contrato'}
-        subtitulo="Confira os dados antes de concluir • PIX da escola pode ser completado depois"
+        subtitulo={
+          editando?.status === 'Na agenda'
+            ? 'Já está na agenda: o que mudar aqui vai também para a visita agendada'
+            : 'Confira os dados antes de concluir • PIX da escola pode ser completado depois'
+        }
         onFechar={() => setAberto(false)}
         largura="max-w-5xl"
         rodape={
@@ -453,7 +475,7 @@ export default function ContratosEscolaPage() {
             )}
             <button onClick={() => setAberto(false)} className={btnSecundario}>Fechar</button>
             <button onClick={() => salvar(false)} disabled={salvando || enviandoArquivo} className={btnSecundario}>
-              {salvando ? 'Salvando...' : 'Salvar em conferência'}
+              {salvando ? 'Salvando...' : editando && editando.status !== 'Em conferência' ? 'Salvar alterações' : 'Salvar em conferência'}
             </button>
             {editando && editando.status === 'Em conferência' && (
               <button onClick={() => salvar(true)} disabled={salvando || enviandoArquivo || faltando.length > 0} className={btnPrimario} title={faltando.length ? `Faltam: ${faltando.join(', ')}` : ''}>

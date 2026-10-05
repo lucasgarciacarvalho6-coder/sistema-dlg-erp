@@ -55,7 +55,10 @@ export function pode(usuario: Colaborador | null, matriz: MatrizPermissoes, modu
   if (usuario.perfil === 'ADM') return true
   if (usuario.perfil === 'GERENTE') return matriz.GERENTE[modulo]?.includes(acao) ?? false
   if (SETORES_IDS.includes(modulo as Setor)) {
-    return modulo === usuario.setor && matriz.COLABORADOR.setor_proprio.includes(acao)
+    if (modulo !== usuario.setor) return false
+    // Operações (onde toda informação chega): também exclui dentro do setor (SQL 028)
+    if (modulo === 'operacional' && acao === 'excluir') return true
+    return matriz.COLABORADOR.setor_proprio.includes(acao)
   }
   return false
 }

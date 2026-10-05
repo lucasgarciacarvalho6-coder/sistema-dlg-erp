@@ -273,7 +273,7 @@ export function Modal({
           </button>
         </div>
         <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar">{children}</div>
-        {rodape && <div className="px-8 py-5 border-t border-white/[0.05] bg-black/40 flex justify-end gap-3">{rodape}</div>}
+        {rodape && <div className="px-8 py-5 border-t border-white/[0.05] bg-black/40 flex flex-wrap justify-end gap-3">{rodape}</div>}
       </div>
     </div>
   )

@@ -76,6 +76,7 @@ export default function PermissoesPage() {
                   <td className="px-6 py-4">
                     <p className="text-white font-bold">Módulo do próprio setor</p>
                     <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">Vendas só vê Vendas, Produção só vê Produção...</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">As Operações também excluem dentro do próprio setor</p>
                   </td>
                   {ACOES.map((a: Acao) => (
                     <td key={a} className="px-4 py-4">

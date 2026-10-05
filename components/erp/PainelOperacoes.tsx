@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Colaborador, ErpState } from '@/lib/erp/types'
 import { colecao, diasDeMeta, resumo } from '@/lib/erp/metrics'
 import { brl, hoje, iniciais, mesAtual, nomeMes, num } from '@/lib/erp/format'
-import { agendaFutura, custoPorAluno, custoVariavelFicha, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, nomeCarro, type SituacaoDia } from '@/lib/erp/operacoes-financeiro'
+import { agendaFutura, custoPorAluno, custoVariavelFicha, financeiroOperacoes, gastoFixoCarro, historicoOperacoes, mediaFichasPorDia, nivelFichas, nomeCarro, type NivelFichas } from '@/lib/erp/operacoes-financeiro'
 import { salvarCustoVariavel, salvarGastoFixoCarros, useUsuario } from '@/lib/erp/store'
 import Icon from './Icon'
 import { Avatar, btnPrimario } from './ui'
@@ -22,6 +22,10 @@ const reaisCurto = (v: number) => reais(v).replace(/,00$/, '') // sem os centavo
 
 // 'grade' = página de Operações • 'coluna' = tela cheia (cabe na altura da tela) • 'mini' = aba Operacional da Visão TV
 type Modo = 'grade' | 'coluna' | 'mini'
+
+// cor das barras da agenda (a projeção): agendamento alto (verde) • médio (amarelo) • baixo (vermelho),
+// pela média de fichas por dia dos 3 meses anteriores
+export const COR_NIVEL: Record<NivelFichas, string> = { alto: STATUS.bom.cor, medio: STATUS.atencao.cor, baixo: STATUS.critico.cor }
 
 // ---------------- Dados (calculados uma vez e usados por todos os cards) ----------------
 
@@ -36,19 +40,29 @@ export function useDados(s: ErpState, colaborador: Colaborador | undefined, mes:
     // gráficos: só dias úteis (segunda a sexta, sem feriados)
     const uteis = d?.uteis ?? []
     const passou = (dia: string) => dia <= hojeISO
-    // alunos por dia útil (lançamentos da coordenação, os mesmos da meta)
-    const serieAlunos = uteis.map((dia) => (passou(dia) ? (d?.serie[Number(dia.slice(8)) - 1] ?? 0) : null))
+    // alunos por dia útil (lançamentos da coordenação, os mesmos da meta): os dias que já passaram
+    // e os que já têm fichas (visita encerrada antes da data marcada)
+    const serieAlunos = uteis.map((dia) => {
+      const v = d?.serie[Number(dia.slice(8)) - 1] ?? 0
+      return passou(dia) || v > 0 ? v : null
+    })
     const idxRef = atual ? uteis.indexOf(hojeISO) : uteis.filter(passou).length - 1
     const alunosHoje = idxRef >= 0 ? (serieAlunos[idxRef] ?? 0) : 0
     const alunosAntes = idxRef > 0 ? (serieAlunos[idxRef - 1] ?? 0) : 0
     // custo por aluno por dia (agenda: carro + vendedor + escola)
     const diaMap = new Map(f.dias.map((x) => [x.data, x]))
-    const serieCusto = uteis.map((dia) => (passou(dia) && diaMap.get(dia)?.alunos ? custoPorAluno(diaMap.get(dia)!) : null))
+    const serieCusto = uteis.map((dia) => (diaMap.get(dia)?.alunos ? custoPorAluno(diaMap.get(dia)!) : null))
     const ultimoDia = [...f.dias].reverse().find((x) => x.alunos > 0 && x.data <= hojeISO)
     const custoHoje = diaMap.get(hojeISO)?.alunos ? custoPorAluno(diaMap.get(hojeISO)!) : null
     const custoRef = custoHoje ?? (ultimoDia ? custoPorAluno(ultimoDia) : 0)
     const custoMes = custoPorAluno(f.realizado)
     const restantes = atual ? Math.max(1, (d?.restantes ?? 0) + (uteis.includes(hojeISO) ? 1 : 0)) : 1
+    // agenda (a projeção): cor de cada dia pela média de fichas por dia dos 3 meses anteriores; sem histórico, a meta do dia
+    const mediaDia = mediaFichasPorDia(s)
+    const corAgendamento = (v: number) => {
+      const nivel = nivelFichas(v, mediaDia)
+      return nivel ? COR_NIVEL[nivel] : r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : '#a1a1aa'
+    }
     return {
       f,
       hist,
@@ -72,6 +86,8 @@ export function useDados(s: ErpState, colaborador: Colaborador | undefined, mes:
       restantes,
       contratosConf: colecao(s, 'contratos_escola').filter((c) => c.status === 'Em conferência').length,
       agenda: agendaFutura(s, r?.meta.diaria ?? 0, 20),
+      mediaDia,
+      corAgendamento,
     }
   }, [s, colaborador, mes])
 }
@@ -355,19 +371,51 @@ function CardResumo({ x, modo }: { x: Dados; modo: Modo }) {
 
 // Espaço da coordenação para o gasto fixo por dia de cada carro (vale a partir do mês escolhido)
 // ---------------- Agenda futura (próximos 20 dias úteis) ----------------
-const COR_SITUACAO: Record<SituacaoDia, string> = { OK: '#10b981', Pendente: '#f59e0b', Vazio: '#ef4444' }
+// Legenda das barras da agenda: cheia = confirmadas pela escola, clara = ainda a confirmar (previstas no contrato);
+// a cor compara o agendamento do dia com a média de fichas por dia dos 3 meses anteriores
+export function LegendaAgendamento({ x, tv = false }: { x: Dados; tv?: boolean }) {
+  const media = Math.round(x.mediaDia)
+  const ponto = (cor: string, texto: string) => (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      <span className="inline-block w-[0.8em] h-[0.8em] rounded-sm" style={{ backgroundColor: cor }}></span>
+      {texto}
+    </span>
+  )
+  return (
+    <p className={`flex flex-wrap items-center gap-x-[0.8em] gap-y-0.5 font-bold text-zinc-500 leading-tight ${tv ? 'text-[clamp(7px,2.6cqmin,12px)]' : 'text-[10px]'}`}>
+      <span className="inline-flex items-center gap-1 whitespace-nowrap">
+        <span className="inline-block w-[0.8em] h-[0.8em] rounded-sm bg-zinc-300"></span>confirmadas
+      </span>
+      <span className="inline-flex items-center gap-1 whitespace-nowrap">
+        <span className="inline-block w-[0.8em] h-[0.8em] rounded-sm border border-dashed border-zinc-300 bg-zinc-300/25"></span>a confirmar
+      </span>
+      {media > 0 ? (
+        <>
+          <span className="whitespace-nowrap" title="Média de fichas por dia nos 3 meses anteriores • médio = de 60% até a média">• média 3 meses: {num(media)}/dia</span>
+          {ponto(COR_NIVEL.alto, 'alto')}
+          {ponto(COR_NIVEL.medio, 'médio')}
+          {ponto(COR_NIVEL.baixo, 'baixo')}
+        </>
+      ) : (
+        <span className="whitespace-nowrap">• cor pela meta do dia (ainda sem histórico)</span>
+      )}
+    </p>
+  )
+}
 
+// A PROJEÇÃO: as fichas agendadas nos próximos 20 dias úteis (só neste card)
 function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
   const a = x.agenda
-  const max = Math.max(1, ...a.dias.map((d) => d.alunos)) * 1.18
+  const max = Math.max(1, ...a.dias.map((d) => d.agendadas)) * 1.18
   const chip = modo === 'mini' ? 'px-2 py-1 rounded-lg text-[11px] font-black border' : 'px-3 py-1.5 rounded-xl text-sm font-black border'
   return (
     <Cartao titulo="Agenda futura • 20 dias" modo={modo}>
       <div className="flex flex-wrap gap-2">
-        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Fichas confirmadas: {num(a.total)}</span>
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Fichas agendadas: {num(a.agendadas)}</span>
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Confirmadas: {num(a.total)}</span>
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Dias: {a.comAgenda}/{a.dias.length}</span>
         {a.capacidade !== null && (
-          <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`} title="Fichas confirmadas ÷ o que a meta pede nesses dias">
+          <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`} title="Fichas agendadas ÷ o que a meta pede nesses dias">
             Capacidade: {Math.round(a.capacidade)}%
           </span>
         )}
@@ -388,16 +436,24 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
       </div>
       <div className={`flex flex-col @container ${modo === 'coluna' ? 'flex-1 min-h-[120px]' : modo === 'mini' ? 'h-24' : 'h-64'}`}>
         <div className="flex-1 min-h-0 flex items-end gap-[3px]">
-          {a.dias.map((d) => (
-            <div
-              key={d.data}
-              className="flex-1 h-full flex flex-col justify-end items-center min-w-0"
-              title={`${d.data.slice(8)}/${d.data.slice(5, 7)}: ${d.situacao}${d.visitas ? ` • ${d.visitas} visita(s) • ${d.alunos} alunos` : ' • sem visita'}`}
-            >
-              {d.alunos > 0 && <span className="hidden @2xs:block text-[8px] @xs:text-[9px] font-bold text-zinc-300 mb-0.5 whitespace-nowrap">{num(d.alunos)}</span>}
-              <div className="w-full max-w-[26px] rounded-t-md" style={{ height: d.alunos > 0 ? `${Math.max(3, (d.alunos / max) * 100)}%` : '6px', backgroundColor: COR_SITUACAO[d.situacao] }}></div>
-            </div>
-          ))}
+          {a.dias.map((d) => {
+            const cor = x.corAgendamento(d.agendadas)
+            const aConfirmar = Math.max(0, d.agendadas - d.alunos)
+            return (
+              <div
+                key={d.data}
+                className="flex-1 h-full flex flex-col justify-end items-center min-w-0"
+                title={`${d.data.slice(8)}/${d.data.slice(5, 7)}: ${d.situacao}${d.visitas ? ` • ${d.visitas} visita(s) • ${d.agendadas} fichas agendadas (${d.alunos} confirmadas)` : ' • sem visita'}`}
+              >
+                {d.agendadas > 0 && <span className={`hidden @2xs:block text-[8px] @xs:text-[9px] font-bold mb-0.5 whitespace-nowrap ${d.alunos > 0 ? 'text-zinc-300' : 'text-zinc-500'}`}>{num(d.agendadas)}</span>}
+                {aConfirmar > 0 && <div className={`w-full max-w-[26px] border border-dashed border-b-0 ${d.alunos > 0 ? '' : 'rounded-t-md'}`} style={{ height: `${(aConfirmar / max) * 100}%`, backgroundColor: `${cor}40`, borderColor: cor }}></div>}
+                <div
+                  className={`w-full max-w-[26px] ${aConfirmar > 0 ? '' : 'rounded-t-md'}`}
+                  style={{ height: d.alunos > 0 ? `${Math.max(3, (d.alunos / max) * 100)}%` : aConfirmar > 0 ? '0px' : '6px', backgroundColor: cor }}
+                ></div>
+              </div>
+            )
+          })}
         </div>
         <div className="flex gap-[3px] mt-1.5 border-t border-white/[0.06] pt-1">
           {a.dias.map((d, i) => (
@@ -407,9 +463,10 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
           ))}
         </div>
       </div>
+      <LegendaAgendamento x={x} />
       {modo !== 'mini' && (
         <p className="text-[11px] text-zinc-500">
-          Verde: fichas confirmadas e equipe montada • Amarelo: falta confirmar fichas ou montar a equipe • Vermelho: dia útil sem visita
+          OK: fichas confirmadas e equipe montada • Pend.: falta confirmar fichas ou montar a equipe • Vazio: dia útil sem visita
         </p>
       )}
     </Cartao>

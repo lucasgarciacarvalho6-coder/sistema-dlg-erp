@@ -202,18 +202,24 @@ export function historicoOperacoes(s: ErpState, mes: string, quantos = 4) {
 
 export const nomeCarro = (v: Registro | undefined) => (v ? `${t(v.modelo)}${v.placa ? ` • ${t(v.placa)}` : ''}` : 'Sem carro')
 
-// ---- Agenda futura: próximos N dias úteis a partir de hoje ----
+// ---- Agenda futura: próximos N dias úteis a partir de hoje (a PROJEÇÃO fica só aqui) ----
 //  OK = dia com visita, fichas confirmadas pela escola e equipe completa (carro, motorista, fotógrafos)
 //  Pendente = tem visita, mas falta confirmar fichas ou montar a equipe • Vazio = dia útil sem visita
-//  Alunos = só as fichas CONFIRMADAS pela escola (as previstas do contrato não contam: sem confirmação, fica 0)
-//  Capacidade = alunos confirmados ÷ o que a meta pede nesses dias (meta diária × dias)
+//  Alunos = só as fichas CONFIRMADAS pela escola
+//  Agendadas = a projeção: visitas e retornos agendados, pelas confirmadas ou, enquanto a escola não confirma,
+//  pelas previstas no contrato. Encerrou a visita, ela sai daqui e entra nos fotografados.
+//  Capacidade = fichas agendadas ÷ o que a meta pede nesses dias (meta diária × dias)
 export type SituacaoDia = 'OK' | 'Pendente' | 'Vazio'
 export interface DiaAgenda {
   data: string
   alunos: number
+  agendadas: number
   visitas: number
   situacao: SituacaoDia
 }
+
+// fichas de uma visita agendada na projeção: as confirmadas pela escola ou, sem confirmação, as previstas no contrato
+export const fichasAgendadas = (v: Registro) => (n(v.fichasConfirmadas) > 0 ? n(v.fichasConfirmadas) : n(v.fichasPrevistas))
 
 export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
   const agendadas = colecao(s, 'agenda_visitas').filter((v) => t(v.status) === 'Agendada')
@@ -222,18 +228,40 @@ export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
     if (!ehDiaUtil(d)) continue
     const doDia = agendadas.filter((v) => t(v.data) === d)
     const alunos = doDia.reduce((a, v) => a + n(v.fichasConfirmadas), 0)
+    const agendadasDia = doDia.reduce((a, v) => a + fichasAgendadas(v), 0)
     const tudoOk = doDia.every((v) => n(v.fichasConfirmadas) > 0 && equipeDaVisita(s, v).completa)
-    dias.push({ data: d, alunos, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente' })
+    dias.push({ data: d, alunos, agendadas: agendadasDia, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente' })
   }
   const total = dias.reduce((a, d) => a + d.alunos, 0)
+  const totalAgendadas = dias.reduce((a, d) => a + d.agendadas, 0)
   const esperado = metaDiaria * quantos
   return {
     dias,
     total,
+    agendadas: totalAgendadas,
     comAgenda: dias.filter((d) => d.visitas > 0).length,
     ok: dias.filter((d) => d.situacao === 'OK').length,
     pendentes: dias.filter((d) => d.situacao === 'Pendente').length,
     vazios: dias.filter((d) => d.situacao === 'Vazio').length,
-    capacidade: esperado > 0 ? (total / esperado) * 100 : null,
+    capacidade: esperado > 0 ? (totalAgendadas / esperado) * 100 : null,
   }
 }
+
+// ---- Régua das cores da agenda (pedido do ADM): o agendamento de cada dia comparado com os meses anteriores ----
+// média = fichas fotografadas ÷ dias com visita realizada, nos 3 meses antes do mês atual (mês parado não pesa).
+// alto (verde) = na média ou acima • médio (amarelo) = de 60% até a média • baixo (vermelho) = abaixo de 60% da média
+export const PISO_REGUA = 0.6
+export type NivelFichas = 'alto' | 'medio' | 'baixo'
+
+export function mediaFichasPorDia(s: ErpState, mes: string = mesAtual(), quantos = 3): number {
+  const meses = Array.from({ length: quantos }, (_, i) => somarMes(mes, i - quantos))
+  const porDia = new Map<string, number>()
+  for (const v of colecao(s, 'agenda_visitas')) {
+    if (!REALIZADA.includes(t(v.status)) || !meses.includes(t(v.data).slice(0, 7))) continue
+    porDia.set(t(v.data), (porDia.get(t(v.data)) ?? 0) + n(v.fichasFotografadas))
+  }
+  const dias = [...porDia.values()].filter((x) => x > 0)
+  return dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : 0
+}
+
+export const nivelFichas = (v: number, media: number): NivelFichas | null => (media <= 0 ? null : v >= media ? 'alto' : v >= media * PISO_REGUA ? 'medio' : 'baixo')

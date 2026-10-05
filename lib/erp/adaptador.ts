@@ -5,7 +5,7 @@ import type { Colaborador, LogAuditoria, Lancamento, Meta, MatrizPermissoes, Not
 
 // Colunas graváveis pelo front em cada tabela (as demais são geradas pelo banco)
 export const COLUNAS: Record<string, string[]> = {
-  escolas: ['nome', 'cidade', 'uf', 'inep', 'responsavel', 'telefone', 'status'],
+  escolas: ['nome', 'cidade', 'uf', 'inep', 'responsavel', 'telefone', 'status', 'endereco', 'observacao'],
   filiais: ['nome', 'tipo', 'cnpj', 'cidade', 'uf', 'status'],
   produtos: ['nome', 'categoria', 'preco', 'status'],
   fornecedores: ['nome', 'categoria', 'telefone', 'status'],

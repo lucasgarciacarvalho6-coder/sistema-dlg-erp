@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { Setor } from '@/lib/erp/types'
 import { SETORES } from '@/lib/erp/config'
-import { excluirLancamento, useErp, usePode } from '@/lib/erp/store'
+import { excluirLancamento, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { mesesDisponiveis, equipe } from '@/lib/erp/metrics'
 import { dataBR, formatar, mesAtual, nomeMes } from '@/lib/erp/format'
 import { exportarCSV } from '@/lib/erp/export'
@@ -16,6 +16,9 @@ const selectCls = 'bg-black/50 border border-white/[0.05] text-white text-[10px]
 export default function HistoricoLancamentos({ setor }: { setor: Setor }) {
   const s = useErp()
   const podeFazer = usePode()
+  const usuario = useUsuario()
+  // lançamento automático (ex.: o da visita encerrada) o colaborador não apaga: corrige-se na origem (SQL 028)
+  const podeExcluir = (origem: string) => podeFazer(setor, 'excluir') && (origem !== 'automatico' || usuario?.perfil !== 'COLABORADOR')
   const cfg = SETORES[setor]
   const [mes, setMes] = useState(mesAtual())
   const [indicadorId, setIndicadorId] = useState('')
@@ -104,7 +107,7 @@ export default function HistoricoLancamentos({ setor }: { setor: Setor }) {
                     <td className="px-6 py-3.5 text-zinc-500 text-xs">{l.descricao || '—'}</td>
                     <td className="px-6 py-3.5"><Badge texto={l.origem === 'manual' ? 'Manual' : 'Automático'} tom={l.origem === 'manual' ? 'zinc' : 'blue'} /></td>
                     <td className="px-6 py-3.5 text-right">
-                      {podeFazer(setor, 'excluir') && (
+                      {podeExcluir(l.origem) && (
                         <button onClick={() => excluirLancamento(l.id)} title="Excluir lançamento" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
                           <Icon nome="trash" className="w-4 h-4" />
                         </button>

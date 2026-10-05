@@ -4,9 +4,9 @@
 //  • Card da pessoa: card NEUTRO (regra do ADM: cor só para alerta). A cor da situação
 //    (verde no ritmo • amarelo acima do piso • vermelho abaixo do piso) fica só no selo, no número do mês,
 //    na barra da meta e nas barrinhas de cada dia útil; Hoje / Faltam ficam neutros.
-//  • Card de Operações: maior, com 4 mini-cards do mesmo tamanho: custo por ficha do mês (por dia útil) e do ano
-//    (por mês) — a barra é a quantidade de crianças fotografadas e o valor colorido é o R$ de cada ficha —,
-//    alunos fotografados e agenda dos próximos 20 dias.
+//  • Card de Operações: maior, com 3 mini-cards: custo por ficha do mês (por dia útil, com a barra da meta do mês)
+//    e do ano (por mês) — a barra é a quantidade de crianças fotografadas e o valor colorido é o R$ de cada ficha —
+//    e a agenda dos próximos 20 dias (a projeção fica só nela).
 //    Cards NEUTROS (regra do ADM: cor só para alerta). A cor fica nas barras dos gráficos (verde bom, amarelo
 //    alerta, vermelho ruim) e no R$ (vermelho = o custo subiu / acima da média, verde = caiu / abaixo).
 //  • Card da Produção (CardProducaoTV): as etapas das escolas como na planilha, do tamanho de 2×2 cards.
@@ -23,7 +23,7 @@ import { META_BONUS, bonusAlbuns, lotesProducao, proximoBonus } from '@/lib/erp/
 import { Avatar } from './ui'
 import { STATUS } from './status'
 import { corDoDia } from './PainelMeta'
-import { useDados } from './PainelOperacoes'
+import { LegendaAgendamento, useDados } from './PainelOperacoes'
 import { CardProducaoTV } from './CardProducaoTV'
 
 const VERDE = STATUS.bom.cor
@@ -39,21 +39,34 @@ const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: 
 
 // Barrinhas por dia (cor de cada dia vem de quem chama); futuro = trilho vazio; hoje com contorno
 // diasGrandes: todos os dias com o número maior (a letra acompanha a largura do card)
-function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
-  const max = Math.max(1, ...valores.map((v) => v ?? 0)) * 1.2
+// extra (só na agenda): a parte "a confirmar" vai em cima, numa barra clara tracejada; a cor e o número são do total do dia
+function BarrasTV({ dias, valores, extra, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; extra?: number[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
+  const mais = (i: number) => extra?.[i] ?? 0
+  const max = Math.max(1, ...valores.map((v, i) => (v ?? 0) + mais(i))) * 1.2
   const fonteDias = diasGrandes ? { fontSize: `clamp(8px, ${(88 / Math.max(1, dias.length) / 1.35).toFixed(2)}cqw, 16px)` } : undefined
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-1 min-h-0 flex items-end gap-[2px]">
-        {valores.map((v, i) => (
-          <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null ? '' : `: ${rotulo ? rotulo(v) : num(v)}`}`}>
-            {rotulo && v !== null && v > 0 && <span className="hidden @sm:block font-bold text-zinc-300 leading-none mb-[1px] whitespace-nowrap text-[clamp(7px,2.4cqmin,11px)]">{rotulo(v)}</span>}
-            <div
-              className={`w-full rounded-t-[3px] ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
-              style={{ height: v === null ? '2px' : `${Math.max(v > 0 ? 4 : 2, (v / max) * 100)}%`, backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : cor(v, i) }}
-            ></div>
-          </div>
-        ))}
+        {valores.map((v, i) => {
+          const p = mais(i)
+          const total = (v ?? 0) + p
+          const c = cor(total, i)
+          return (
+            <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null && !p ? '' : `: ${rotulo ? rotulo(total) : num(total)}`}`}>
+              {rotulo && total > 0 && (
+                <span className={`hidden @sm:block font-bold leading-none mb-[1px] whitespace-nowrap text-[clamp(7px,2.4cqmin,11px)] ${v ? 'text-zinc-300' : 'text-zinc-500'}`}>{rotulo(total)}</span>
+              )}
+              {p > 0 && <div className={`w-full border border-dashed border-b-0 ${v ? '' : 'rounded-t-[3px]'}`} style={{ height: `${(p / max) * 100}%`, backgroundColor: `${c}40`, borderColor: c }}></div>}
+              <div
+                className={`w-full ${p > 0 ? '' : 'rounded-t-[3px]'} ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
+                style={{
+                  height: v === null ? '2px' : p > 0 && !v ? '0px' : `${Math.max(v > 0 ? 4 : 2, (v / max) * 100)}%`,
+                  backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : c,
+                }}
+              ></div>
+            </div>
+          )
+        })}
       </div>
       <div className={`flex gap-[2px] ${diasGrandes ? 'mt-[2px] pt-[2px] border-t border-white/[0.08]' : 'mt-[1px]'}`} style={fonteDias}>
         {dias.map((d, i) => (
@@ -179,9 +192,9 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
 }
 
 // ---------------- Card de Operações (maior, com 3 mini-cards) ----------------
-function MiniTV({ titulo, children }: { titulo: ReactNode; children: ReactNode }) {
+function MiniTV({ titulo, children, estilo }: { titulo: ReactNode; children: ReactNode; estilo?: CSSProperties }) {
   return (
-    <div style={tamanho} className="h-full min-h-0 min-w-0">
+    <div style={{ ...tamanho, ...estilo }} className="h-full min-h-0 min-w-0">
       <div className="h-full rounded-2xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
         <p className="font-black uppercase tracking-[0.15em] text-zinc-300 text-[clamp(8px,3.4cqmin,14px)] truncate">{titulo}</p>
         {children}
@@ -275,7 +288,8 @@ function LegendaCusto() {
 }
 
 // compacto = card pequeno na TV (muita gente na tela): some o que é detalhe, ficam os números e as barras
-// faixa = modo TV: Operações na largura toda, com os 4 mini-cards lado a lado numa linha só; senão 2×2
+// faixa = modo TV: Operações na largura toda, com os 3 mini-cards lado a lado numa linha só;
+// senão os 2 de custo em cima e a agenda embaixo, na largura toda
 export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: { s: ErpState; c: Colaborador; mes: string; compacto?: boolean; faixa?: boolean }) {
   const x = useDados(s, c, mes)
   const r = x.r
@@ -287,7 +301,10 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
     const doDia = new Map(f.dias.map((d) => [d.data, d]))
     const mesHoje = x.hojeISO.slice(0, 7)
     const mensal = {
-      qtd: x.uteis.map((d) => (d <= x.hojeISO ? (doDia.get(d)?.alunos ?? 0) : null)),
+      qtd: x.uteis.map((d) => {
+        const a = doDia.get(d)?.alunos ?? 0
+        return d <= x.hojeISO || a > 0 ? a : null
+      }),
       custos: x.uteis.map((d) => {
         const o = doDia.get(d)
         return o && o.alunos > 0 ? custoPorAluno(o) : null
@@ -319,8 +336,6 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
   }, [s, c.id, mes, x])
   const corAno = custo.mensal.fichas > 0 && custo.anual.fichas > 0 ? (custo.mensal.media > custo.anual.media * 1.03 ? VERMELHO : custo.mensal.media < custo.anual.media * 0.97 ? VERDE : AZUL) : AZUL
   const a = x.agenda
-  const COR_DIA = { OK: VERDE, Pendente: AMARELO, Vazio: VERMELHO }
-  const subiu = x.alunosHoje >= x.alunosAntes
   return (
     <div style={tamanho} className="h-full w-full min-h-0">
       <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
@@ -347,7 +362,7 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
           className="flex-1 min-h-0 grid gap-[1.4cqmin]"
           style={
             faixa
-              ? { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gridTemplateRows: 'minmax(0, 1fr)' }
+              ? { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gridTemplateRows: 'minmax(0, 1fr)' }
               : { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gridTemplateRows: 'repeat(2, minmax(0, 1fr))' }
           }
         >
@@ -362,6 +377,16 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
               corCusto={(v) => (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE)}
               destaque={custo.mensal.destaque}
             />
+            {/* meta do mês: fichas fotografadas / meta (o traço branco é o piso) */}
+            {r && r.meta.mensal > 0 && (
+              <div className="relative shrink-0 h-[clamp(14px,7cqmin,30px)] rounded-xl bg-white/[0.08] overflow-hidden" title={`Meta do mês: ${num(r.mes)} de ${num(r.meta.mensal)} fichas${r.piso > 0 ? ` • piso ${num(r.piso)}` : ''}`}>
+                <div className="h-full rounded-xl bg-zinc-400/60" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
+                {r.piso > 0 && <div className="absolute inset-y-0 w-[3px] bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }}></div>}
+                <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow text-[clamp(9px,4cqmin,18px)]">
+                  {num(r.mes)} / {num(r.meta.mensal)}
+                </span>
+              </div>
+            )}
             {!compacto && <LegendaCusto />}
           </MiniTV>
 
@@ -380,34 +405,17 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
             {!compacto && <LegendaCusto />}
           </MiniTV>
 
-          {/* alunos fotografados */}
-          <MiniTV titulo="Alunos fotografados">
-            <div className="flex items-end gap-[2cqmin]">
-              <span className="font-black leading-none tracking-tighter text-white text-[clamp(20px,16cqmin,80px)]">{num(x.alunosHoje)}</span>
-              <span className="font-black pb-[1cqmin] text-zinc-400 text-[clamp(12px,7cqmin,34px)]">{subiu ? '↗' : '↘'}</span>
-            </div>
-            <p className="font-bold text-zinc-300 -mt-[1cqmin] text-[clamp(8px,3.4cqmin,15px)]">{x.atual ? 'hoje' : 'último dia útil'}</p>
-            <BarrasTV dias={x.uteis} valores={x.serieAlunos} rotulo={(v) => num(v)} cor={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : AZUL)} destaque={x.atual ? x.hojeISO : undefined} diasGrandes />
-            {r && (
-              <div className="relative h-[clamp(14px,8cqmin,34px)] rounded-xl bg-white/[0.08] overflow-hidden">
-                <div className="h-full rounded-xl bg-zinc-400/60" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
-                {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute inset-y-0 w-[3px] bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }}></div>}
-                <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow text-[clamp(9px,4.4cqmin,20px)]">
-                  {num(r.mes)} / {num(r.meta.mensal)}
-                </span>
-              </div>
-            )}
-          </MiniTV>
-
-          {/* agenda futura */}
-          <MiniTV titulo="Agenda • próximos 20 dias">
+          {/* agenda futura: a PROJEÇÃO (visitas e retornos agendados) fica só aqui */}
+          <MiniTV titulo="Agenda • próximos 20 dias" estilo={faixa ? undefined : { gridColumn: 'span 2' }}>
             <div className="flex items-end justify-between gap-2">
               <div>
-                <span className="font-black leading-none tracking-tighter text-white text-[clamp(18px,13cqmin,68px)]">{num(a.total)}</span>
-                <p className="font-bold text-zinc-300 text-[clamp(8px,3.4cqmin,15px)]">fichas confirmadas</p>
+                <span className="font-black leading-none tracking-tighter text-white text-[clamp(18px,13cqmin,68px)]">{num(a.agendadas)}</span>
+                <p className="font-bold text-zinc-300 text-[clamp(8px,3.4cqmin,15px)]">
+                  fichas agendadas • <span className="text-white">{num(a.total)}</span> confirmadas
+                </p>
               </div>
               {a.capacidade !== null && (
-                <span className="font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas confirmadas ÷ o que a meta pede nesses dias">
+                <span className="font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas agendadas ÷ o que a meta pede nesses dias">
                   {Math.round(a.capacidade)}%
                 </span>
               )}
@@ -417,7 +425,15 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
               <ChipLegenda cor={AMARELO}>{a.pendentes} Pend.</ChipLegenda>
               <ChipLegenda cor={VERMELHO}>{a.vazios} Vazio</ChipLegenda>
             </div>
-            <BarrasTV dias={a.dias.map((d) => d.data)} valores={a.dias.map((d) => d.alunos)} rotulo={(v) => num(v)} cor={(_, i) => COR_DIA[a.dias[i].situacao]} diasGrandes />
+            <BarrasTV
+              dias={a.dias.map((d) => d.data)}
+              valores={a.dias.map((d) => d.alunos)}
+              extra={a.dias.map((d) => Math.max(0, d.agendadas - d.alunos))}
+              rotulo={(v) => num(v)}
+              cor={(v) => x.corAgendamento(v)}
+              diasGrandes
+            />
+            {!compacto && <LegendaAgendamento x={x} tv />}
           </MiniTV>
 
         </div>

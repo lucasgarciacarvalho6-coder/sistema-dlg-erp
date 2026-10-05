@@ -3,9 +3,9 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
-import { agendarRetorno, atualizarRegistro, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
+import { agendarRetorno, atualizarRegistro, cancelarAgendamento, corrigirFichasVisita, desfazerEncerramento, editarAgendamento, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { MAX_FOTOGRAFOS, conflitosEquipe, contratoDaVisita, corEquipe, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
+import { MAX_FOTOGRAFOS, bloqueioVisitaEncerrada, conflitosEquipe, contratoDaVisita, corEquipe, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
 import { addDias, dataBR, diasNoMes, hoje, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
@@ -335,9 +335,11 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
   const retorno = retornoDaVisita(s, visita)
   const origem = visita.retornoDe ? colecao(s, 'agenda_visitas').find((v) => v.id === visita.retornoDe) : undefined
   const [caixaRetorno, setCaixaRetorno] = useState<'encerrar' | 'agendar' | null>(null)
+  // editar / cancelar o agendamento (visita ou retorno agendado) • corrigir fichas / desfazer o encerramento (visita encerrada)
+  const [janela, setJanela] = useState<'editar' | 'cancelar' | 'corrigir' | 'desfazer' | null>(null)
+  const dataFutura = String(visita.data) > hoje()
 
   const [equipe, setEquipe] = useState({
-    data: String(visita.data),
     equipe: String(visita.equipe || ''),
     veiculoId: String(visita.veiculoId || ''),
     fotografoIds: fotografosDa(visita),
@@ -345,7 +347,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
   })
   const veiculoEscolhido = veiculos.find((v) => v.id === equipe.veiculoId)
   const pessoas = equipe.fotografoIds.length + (equipe.motoristaId ? 1 : 0)
-  const conflitos = conflitosEquipe(s, visita, equipe)
+  const conflitos = conflitosEquipe(s, visita, { ...equipe, data: String(visita.data) })
   const repetir = ultimaComposicao(s, equipe.equipe, visita.id)
   const alternarFotografo = (id: string) => {
     const on = equipe.fotografoIds.includes(id)
@@ -355,7 +357,7 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
   const [fichas, setFichas] = useState('')
   const [descricao, setDescricao] = useState('')
   const [fotografadas, setFotografadas] = useState(String(visita.fichasConfirmadas || ''))
-  const [msg, setMsg] = useState<{ ok: boolean; texto: string } | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; texto: string; aviso?: boolean } | null>(null)
 
   const salvarEquipe = async () => {
     if (equipe.fotografoIds.length > MAX_FOTOGRAFOS) return setMsg({ ok: false, texto: `A equipe pode ter no máximo ${MAX_FOTOGRAFOS} fotógrafos.` })
@@ -363,7 +365,6 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
       'agenda_visitas',
       visita.id,
       {
-        data: equipe.data,
         equipe: equipe.equipe.trim(),
         veiculoId: equipe.veiculoId,
         carro: veiculoEscolhido ? nomeVeiculo(veiculoEscolhido) : String(visita.carro || ''),
@@ -399,9 +400,24 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
       rodape={
         <>
           {agendada && podeEditar && (
-            <button onClick={() => atualizarRegistro('agenda_visitas', visita.id, { status: 'Cancelada' }, 'operacional').then((e) => !e && onFechar())} className="mr-auto px-5 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl">
-              Cancelar visita
-            </button>
+            <>
+              <button onClick={() => setJanela('cancelar')} className="mr-auto px-5 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl">
+                Cancelar {visita.retornoDe ? 'retorno' : 'agendamento'}
+              </button>
+              <button onClick={() => setJanela('editar')} className={btnSecundario}>
+                <Icon nome="edit" className="w-4 h-4" /> Editar agendamento
+              </button>
+            </>
+          )}
+          {encerrada && podeEditar && (
+            <>
+              <button onClick={() => setJanela('desfazer')} className="mr-auto px-5 py-3 text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10 rounded-xl">
+                Desfazer encerramento
+              </button>
+              <button onClick={() => setJanela('corrigir')} className={btnSecundario}>
+                <Icon nome="edit" className="w-4 h-4" /> Corrigir fichas
+              </button>
+            </>
           )}
           {visita.status === 'Fotografada' && (
             <Link href={`/operacional/fechamento?visita=${visita.id}`} className={btnPrimario}>
@@ -481,18 +497,14 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
           {/* Equipe da viagem: veículo + motorista + 1 a 4 fotógrafos */}
           <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-bold text-white uppercase tracking-wider">Equipe da viagem e data</p>
+              <p className="text-xs font-bold text-white uppercase tracking-wider">Equipe da viagem</p>
               {atual.completa ? (
                 <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">✓ Equipe completa</span>
               ) : (
                 <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-400">Falta: {atual.faltando.join(', ')}</span>
               )}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <label className={labelCls}>Data da visita</label>
-                <input type="date" value={equipe.data} onChange={(e) => setEquipe({ ...equipe, data: e.target.value })} className={inputCls} />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className={labelCls}>Nome da equipe</label>
                 <input list="nomes-equipes" value={equipe.equipe} onChange={(e) => setEquipe({ ...equipe, equipe: e.target.value })} placeholder="Ex.: Equipe 1, Equipe SP" className={inputCls} />
@@ -609,12 +621,19 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
                   setMsg(null)
                   setCaixaRetorno('encerrar') // pergunta se haverá retorno antes de encerrar
                 }}
-                className="px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
+                disabled={dataFutura}
+                className="px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all disabled:opacity-40 disabled:hover:bg-blue-600"
               >
                 Encerrar visita
               </button>
             </div>
-            <p className="text-[10px] text-zinc-500">As fichas entram na meta do Operacional e as fotos seguem para tratamento na Produção.</p>
+            {dataFutura ? (
+              <p className="text-[11px] font-bold text-yellow-400">
+                Esta visita é de {dataBR(String(visita.data))} (data futura). Se ela já foi feita, corrija a data em “Editar agendamento” antes de encerrar.
+              </p>
+            ) : (
+              <p className="text-[10px] text-zinc-500">As fichas entram na meta do Operacional e as fotos seguem para tratamento na Produção.</p>
+            )}
           </div>
         </>
       )}
@@ -658,7 +677,13 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
         </div>
       )}
 
-      {msg && <p className={`text-xs font-bold ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.texto}</p>}
+      {msg && <p className={`text-xs font-bold ${msg.aviso ? 'text-yellow-400' : msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.texto}</p>}
+
+      {janela === 'editar' && <EditarAgendamento visita={visita} onFechar={() => setJanela(null)} onFeito={(texto) => setMsg({ ok: true, texto })} />}
+      {janela === 'cancelar' && <CancelarAgendamento visita={visita} onFechar={() => setJanela(null)} onFeito={(texto) => setMsg({ ok: true, texto })} />}
+      {(janela === 'corrigir' || janela === 'desfazer') && (
+        <AcaoVisitaEncerrada visita={visita} tipo={janela} onFechar={() => setJanela(null)} onFeito={(texto, aviso) => setMsg({ ok: true, texto, aviso })} />
+      )}
 
       {caixaRetorno && (
         <CaixaRetorno
@@ -787,6 +812,241 @@ function CaixaRetorno({ visita, modo, fotografadas, onFechar, onAviso }: { visit
           </div>
           <p className="md:col-span-2 text-[11px] text-zinc-500">O retorno entra direto na Agenda Fotográfica como uma nova visita da mesma escola. Depois é só montar a equipe e confirmar as fichas.</p>
         </div>
+      )}
+      {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
+    </Modal>
+  )
+}
+
+// ---------------- Editar e cancelar agendamento • corrigir fichas e desfazer encerramento (mesmas regras do SQL 028) ----------------
+
+// Editar agendamento (visita ou retorno agendado): data, fichas e dados da escola.
+// A visita leva as mudanças para o contrato; o retorno tem data e fichas próprias e não mexe nele.
+function EditarAgendamento({ visita, onFechar, onFeito }: { visita: Registro; onFechar: () => void; onFeito: (texto: string) => void }) {
+  const s = useErp()
+  const [f, setF] = useState({
+    data: String(visita.data || ''),
+    fichasPrevistas: String(visita.fichasPrevistas ?? ''),
+    fichasConfirmadas: String(visita.fichasConfirmadas ?? 0),
+    escola: String(visita.escola || ''),
+    cidade: String(visita.cidade || ''),
+    uf: String(visita.uf || ''),
+    endereco: String(visita.endereco || ''),
+    telefone: String(visita.telefone || ''),
+    responsavel: String(visita.responsavel || ''),
+  })
+  const [motivo, setMotivo] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const origem = visita.retornoDe ? colecao(s, 'agenda_visitas').find((v) => v.id === visita.retornoDe) : undefined
+  const contrato = visita.retornoDe ? undefined : contratoDaVisita(s, visita)
+  // a equipe já montada continua: avisa se alguém (ou o veículo) já está em outra cidade na nova data
+  const conflitos =
+    f.data && f.data !== String(visita.data)
+      ? conflitosEquipe(s, visita, { data: f.data, veiculoId: String(visita.veiculoId || ''), motoristaId: String(visita.motoristaId || ''), fotografoIds: fotografosDa(visita) })
+      : []
+  const campo = (k: keyof typeof f, rotulo: string, extra: Partial<React.InputHTMLAttributes<HTMLInputElement>> = {}) => (
+    <div className="space-y-2">
+      <label className={labelCls}>{rotulo}</label>
+      <input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} className={inputCls} {...extra} />
+    </div>
+  )
+  const salvar = async () => {
+    setErro('')
+    setSalvando(true)
+    const e = await editarAgendamento(visita.id, { ...f, fichasPrevistas: Number(f.fichasPrevistas) || 0, fichasConfirmadas: Number(f.fichasConfirmadas) || 0 }, motivo)
+    setSalvando(false)
+    if (e) return setErro(e)
+    onFeito(contrato ? 'Agendamento atualizado (o contrato também).' : 'Agendamento atualizado.')
+    onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo={visita.retornoDe ? 'Editar retorno' : 'Editar agendamento'}
+      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))}`}
+      onFechar={onFechar}
+      largura="max-w-2xl"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Voltar</button>
+          <button onClick={salvar} disabled={salvando} className={`${btnPrimario} disabled:opacity-50`}>
+            {salvando ? 'Salvando…' : 'Salvar alterações'}
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {campo('data', 'Data da visita', { type: 'date', min: origem ? addDias(String(origem.data), 1) : undefined })}
+        {campo('fichasPrevistas', 'Fichas previstas', { type: 'number', min: 1 })}
+        {campo('fichasConfirmadas', 'Fichas confirmadas', { type: 'number', min: 0 })}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-white/[0.05]">
+        <div className="md:col-span-4">{campo('escola', 'Escola')}</div>
+        <div className="md:col-span-3">{campo('cidade', 'Cidade')}</div>
+        {campo('uf', 'UF', { maxLength: 2 })}
+        <div className="md:col-span-4">{campo('endereco', 'Endereço')}</div>
+        <div className="md:col-span-2">{campo('telefone', 'Telefone')}</div>
+        <div className="md:col-span-2">{campo('responsavel', 'Responsável (diretora)')}</div>
+      </div>
+      <div className="space-y-2">
+        <label className={labelCls}>Motivo da alteração (opcional)</label>
+        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: a diretora pediu para trocar o dia" className={inputCls} />
+      </div>
+      {conflitos.map((c) => (
+        <p key={c} className="text-[11px] font-bold text-yellow-400">⚠ {c}</p>
+      ))}
+      <p className="text-[11px] text-zinc-500">
+        {visita.retornoDe
+          ? `Retorno da visita de ${origem ? dataBR(String(origem.data)) : '—'}: a data e as fichas são só do retorno (o contrato não muda).`
+          : contrato
+            ? 'A data, as fichas previstas e os dados da escola vão também para o contrato. Tudo fica no histórico da visita.'
+            : 'Tudo fica no histórico da visita.'}
+      </p>
+      {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
+    </Modal>
+  )
+}
+
+// Cancelar agendamento com motivo. Visita: o contrato volta para a conferência. Retorno: o contrato não muda.
+function CancelarAgendamento({ visita, onFechar, onFeito }: { visita: Registro; onFechar: () => void; onFeito: (texto: string) => void }) {
+  const s = useErp()
+  const [motivo, setMotivo] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const retorno = !!visita.retornoDe
+  const contrato = retorno ? undefined : contratoDaVisita(s, visita)
+  const confirmar = async () => {
+    if (!motivo.trim()) return setErro('Informe o motivo do cancelamento.')
+    setSalvando(true)
+    const e = await cancelarAgendamento(visita.id, motivo)
+    setSalvando(false)
+    if (e) return setErro(e)
+    onFeito(retorno ? 'Retorno cancelado.' : contrato ? 'Agendamento cancelado. O contrato voltou para Contratos de Escola › Em conferência.' : 'Agendamento cancelado.')
+    onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo={retorno ? 'Cancelar retorno?' : 'Cancelar agendamento?'}
+      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))}`}
+      onFechar={onFechar}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Voltar</button>
+          <button onClick={confirmar} disabled={salvando} className="px-6 py-3 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-60 bg-red-600 hover:bg-red-500">
+            {salvando ? 'Aguarde...' : retorno ? 'Cancelar retorno' : 'Cancelar agendamento'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3 text-sm text-zinc-300">
+        <p>A visita sai da agenda e fica no histórico com o motivo.</p>
+        {retorno ? (
+          <p>O contrato não muda. A visita de origem pode agendar outro retorno depois.</p>
+        ) : contrato ? (
+          <p>
+            O contrato volta para <strong className="text-white">Contratos de Escola › Em conferência</strong>: lá você reagenda com a nova data, edita ou exclui.
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-2">
+        <label className={labelCls}>
+          Motivo <span className="text-blue-500">*</span>
+        </label>
+        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: a escola pediu para remarcar" className={inputCls} autoFocus />
+      </div>
+      {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
+    </Modal>
+  )
+}
+
+// Visita encerrada (ou retorno encerrado): corrigir as fichas fotografadas ou desfazer o encerramento (encerrou por engano).
+// Bloqueado quando o fechamento já foi para o Financeiro (o Financeiro devolve antes).
+function AcaoVisitaEncerrada({ visita, tipo, onFechar, onFeito }: { visita: Registro; tipo: 'corrigir' | 'desfazer'; onFechar: () => void; onFeito: (texto: string, aviso: boolean) => void }) {
+  const s = useErp()
+  const corrigir = tipo === 'corrigir'
+  const atual = Number(visita.fichasFotografadas) || 0
+  const [fichas, setFichas] = useState(String(atual || ''))
+  const [motivo, setMotivo] = useState('')
+  const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const retorno = retornoDaVisita(s, visita)
+  const bloqueio =
+    bloqueioVisitaEncerrada(s, visita) ?? (!corrigir && retorno ? `Esta visita tem retorno em ${dataBR(String(retorno.data))}: cancele ou desfaça o retorno antes.` : null)
+  const confirmar = async () => {
+    if (corrigir && !(Number(fichas) > 0)) return setErro('Informe quantas fichas foram fotografadas.')
+    if (!motivo.trim()) return setErro(corrigir ? 'Informe o motivo da correção.' : 'Informe o motivo.')
+    setErro('')
+    setSalvando(true)
+    const r = corrigir ? await corrigirFichasVisita(visita.id, Number(fichas), motivo) : await desfazerEncerramento(visita.id, motivo)
+    setSalvando(false)
+    if (r.erro) return setErro(r.erro)
+    const feito = corrigir ? `Fichas corrigidas: ${num(atual)} → ${num(Number(fichas))}.` : 'Encerramento desfeito: a visita voltou para agendada.'
+    onFeito(r.aviso ? `${feito} ${r.aviso}` : feito, !!r.aviso)
+    onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo={corrigir ? 'Corrigir fichas fotografadas' : 'Desfazer encerramento?'}
+      subtitulo={`${visita.escola} • ${dataBR(String(visita.data))} • ${num(atual)} fichas fotografadas`}
+      onFechar={onFechar}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Voltar</button>
+          {!bloqueio && (
+            <button
+              onClick={confirmar}
+              disabled={salvando}
+              className={corrigir ? `${btnPrimario} disabled:opacity-50` : 'px-6 py-3 text-white text-xs font-bold uppercase tracking-widest rounded-xl disabled:opacity-60 bg-red-600 hover:bg-red-500'}
+            >
+              {salvando ? 'Aguarde...' : corrigir ? 'Corrigir fichas' : 'Desfazer encerramento'}
+            </button>
+          )}
+        </>
+      }
+    >
+      {bloqueio ? (
+        <p className="text-sm text-yellow-400 font-bold">{bloqueio}</p>
+      ) : (
+        <>
+          {corrigir ? (
+            <>
+              <div className="space-y-2">
+                <label className={labelCls}>Fichas fotografadas (o número certo)</label>
+                <input type="number" min={1} value={fichas} onChange={(e) => setFichas(e.target.value)} className={inputCls} autoFocus />
+              </div>
+              <p className="text-[11px] text-zinc-500">
+                A meta das Operações e a escola na Produção (alunos e álbuns) são corrigidas juntas. Depois que a Produção conta os álbuns na conferência final, a quantidade não muda mais.
+              </p>
+            </>
+          ) : (
+            <div className="space-y-3 text-sm text-zinc-300">
+              <p>Use quando a visita foi encerrada por engano. Vai acontecer:</p>
+              <ul className="list-disc pl-5 space-y-1 text-zinc-400">
+                <li>a visita volta para agendada (dá para encerrar de novo com o número certo);</li>
+                <li>as {num(atual)} fichas saem da meta das Operações;</li>
+                <li>a escola sai da Produção, se ainda estiver aguardando o envio ao editor;</li>
+                <li>o rascunho do fechamento desta escola é apagado.</li>
+              </ul>
+            </div>
+          )}
+          <div className="space-y-2">
+            <label className={labelCls}>
+              Motivo <span className="text-blue-500">*</span>
+            </label>
+            <input
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder={corrigir ? 'Ex.: contei errado, eram 48' : 'Ex.: encerrei a escola errada'}
+              className={inputCls}
+              autoFocus={!corrigir}
+            />
+          </div>
+        </>
       )}
       {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
     </Modal>

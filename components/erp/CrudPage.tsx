@@ -60,6 +60,9 @@ export interface CrudProps {
   rotuloNovo?: string
   embutido?: boolean // sem cabeçalho de página (usado dentro de abas)
   topo?: ReactNode
+  // cadastro com histórico não é excluído: devolve onde ele aparece (ex.: "visitas na agenda") e a tela sugere inativar
+  historico?: (r: Registro, s: ErpState) => string | null
+  inativar?: { campo: string; valor: string }
 }
 
 function opcoesDe(c: Campo, s: ErpState): Opcao[] {
@@ -104,6 +107,7 @@ export default function CrudPage(p: CrudProps) {
   const pExportar = podeFazer(p.modulo, 'exportar')
 
   const statusDe = (r: Registro) => (p.status ? (p.status.valor ? p.status.valor(r) : String(r[p.status.campo] ?? '')) : '')
+  const usoDoExcluido = confirmarExclusao && p.historico ? p.historico(confirmarExclusao, s) : null
 
   const todos = useMemo(() => colecao(s, p.colecao).filter((r) => !p.filtro || p.filtro(r, s)), [s, p])
   const registros = useMemo(() => {
@@ -326,26 +330,53 @@ export default function CrudPage(p: CrudProps) {
 
       <Modal
         aberto={!!confirmarExclusao}
-        titulo="Confirmar exclusão"
+        titulo={usoDoExcluido ? 'Não dá para excluir' : 'Confirmar exclusão'}
         subtitulo="Esta ação ficará registrada na auditoria"
         onFechar={() => setConfirmarExclusao(null)}
         largura="max-w-md"
         rodape={
           <>
-            <button onClick={() => setConfirmarExclusao(null)} className={btnSecundario}>Cancelar</button>
-            <button
-              onClick={() => {
-                if (confirmarExclusao) excluirRegistro(p.colecao, confirmarExclusao.id, p.setor)
-                setConfirmarExclusao(null)
-              }}
-              className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
-            >
-              Excluir
-            </button>
+            <button onClick={() => setConfirmarExclusao(null)} className={btnSecundario}>{usoDoExcluido ? 'Voltar' : 'Cancelar'}</button>
+            {usoDoExcluido ? (
+              p.inativar &&
+              confirmarExclusao &&
+              String(confirmarExclusao[p.inativar.campo] ?? '') !== p.inativar.valor && (
+                <button
+                  onClick={() => {
+                    if (confirmarExclusao && p.inativar) atualizarRegistro(p.colecao, confirmarExclusao.id, { [p.inativar.campo]: p.inativar.valor }, p.setor)
+                    setConfirmarExclusao(null)
+                  }}
+                  className={btnPrimario}
+                >
+                  Inativar
+                </button>
+              )
+            ) : (
+              <button
+                onClick={() => {
+                  if (confirmarExclusao) excluirRegistro(p.colecao, confirmarExclusao.id, p.setor)
+                  setConfirmarExclusao(null)
+                }}
+                className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
+              >
+                Excluir
+              </button>
+            )}
           </>
         }
       >
-        <p className="text-sm text-zinc-300">Tem certeza que deseja excluir este registro? Não é possível desfazer.</p>
+        {usoDoExcluido ? (
+          <p className="text-sm text-zinc-300">
+            Este cadastro já tem histórico (<strong className="text-white">{usoDoExcluido}</strong>): excluir apagaria o que aconteceu.{' '}
+            {p.inativar
+              ? String(confirmarExclusao?.[p.inativar.campo] ?? '') === p.inativar.valor
+                ? 'Ele já está inativo.'
+                : 'Inative: ele sai das listas de escolha e o histórico continua.'
+              : ''}
+          </p>
+        ) : (
+          <p className="text-sm text-zinc-300">Tem certeza que deseja excluir este registro? Não é possível desfazer.</p>
+        )}
       </Modal>
     </div>
   )

@@ -194,6 +194,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Dashboard & Metas', href: '/operacional/metas', icone: 'dashboard' },
         { label: 'Controle Operacional', href: '/operacional/controle', icone: 'cog' },
         { label: 'Contratos de Escola', href: '/operacional/contratos', icone: 'doc' },
+        { label: 'Escolas', href: '/operacional/escolas', icone: 'escola' },
         { label: 'Agenda Fotográfica', href: '/operacional/agenda', icone: 'calendar' },
         { label: 'Fechamento Operacional', href: '/operacional/fechamento', icone: 'wallet' },
         { label: 'App dos Vendedores', href: '/operacional/app-vendedores', icone: 'upload' },

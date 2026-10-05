@@ -5,10 +5,11 @@
 
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
-import { camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
+import { avisosRascunhoVisita, bloqueioVisitaEncerrada, camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
 import { addDias, addMeses, dataBR, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
+import { chaveEscola } from './escolas'
 
 export interface Contexto {
   autorId: string
@@ -80,7 +81,26 @@ export function lancar(
 
 type PosCriar = (d: ErpState, r: Registro, ctx: Contexto) => void
 
+// Cadastro de escolas (demo): registra a escola do contrato se ainda não existir (pelo INEP ou por nome + cidade + UF)
+export function registrarEscolaDemo(d: ErpState, c: Registro) {
+  const nome = String(c.escola ?? '').trim()
+  if (!nome) return
+  const inep = String(c.inep ?? '').replace(/\D/g, '')
+  const chave = chaveEscola(nome, c.cidade, c.uf)
+  const ja = col(d, 'escolas').find((e) => (inep && String(e.inep ?? '').replace(/\D/g, '') === inep) || chaveEscola(e.nome, e.cidade, e.uf) === chave)
+  if (ja) {
+    for (const k of ['endereco', 'telefone', 'responsavel'] as const) if (!ja[k] && c[k]) ja[k] = c[k]
+    if (!ja.inep && inep) ja.inep = inep
+    return
+  }
+  inserir(d, 'escolas', { nome, cidade: String(c.cidade ?? ''), uf: String(c.uf || 'PR').toUpperCase(), inep, endereco: String(c.endereco ?? ''), telefone: String(c.telefone ?? ''), responsavel: String(c.responsavel ?? ''), status: 'Ativa', observacao: '' })
+}
+
 export const APOS_CRIAR: Record<string, PosCriar> = {
+  // Contrato de escola → a escola entra no cadastro de escolas (se ainda não estiver) — mesma regra do SQL 027
+  contratos_escola(d, r) {
+    registrarEscolaDemo(d, r)
+  },
   // VENDA (contrato com a escola) → Operacional, Produção e ADM
   contratos(d, r, ctx) {
     const data = String(r.data || hoje())
@@ -161,7 +181,9 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
   },
 }
 
-export function aposAtualizar(d: ErpState, nome: string, r: Registro, ctx: Contexto) {
+export function aposAtualizar(d: ErpState, nome: string, r: Registro, ctx: Contexto, antes?: Registro) {
+  // contrato que já está na agenda: o que mudou vai para a visita agendada (SQL 028)
+  if (nome === 'contratos_escola' && antes) contratoAtualizaVisita(d, r, antes, ctx)
   if (nome === 'estoque' && Number(r.quantidade) < Number(r.minimo)) {
     notificar(d, ctx, {
       setores: ['producao', 'adm'],
@@ -477,9 +499,11 @@ export function registrarHistoricoVisita(d: ErpState, visitaId: string, h: { tip
 }
 
 // Visita realizada: fichas fotografadas entram na meta do Operacional e a Produção é liberada
-export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ctx: Contexto) {
+// (visita com data futura não é encerrada: corrige-se a data antes — mesma regra do SQL 028)
+export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ctx: Contexto): string | null {
   const v = col(d, 'agenda_visitas').find((x) => x.id === visitaId)
-  if (!v || v.status !== 'Agendada') return
+  if (!v || v.status !== 'Agendada') return 'Esta visita não está agendada.'
+  if (String(v.data) > hoje()) return `Esta visita está marcada para ${dataBR(String(v.data))} (data futura). Se ela já foi feita, corrija a data em "Editar agendamento" antes de encerrar.`
   v.status = 'Fotografada'
   v.fichasFotografadas = fichas
   // As fichas contam na meta da RMC (dona dos contratos do Operacional)
@@ -496,6 +520,224 @@ export function encerrarVisita(d: ErpState, visitaId: string, fichas: number, ct
   // A escola entra na PRODUÇÃO (aguardando as fotos) — mesma regra do SQL 020
   if (criarLoteProducao(d, v, ctx, 'Chegou das Operações'))
     notificar(d, ctx, { setores: ['edicao'], tipo: 'info', titulo: 'Escola chegou na Produção', descricao: `${v.escola}: ${fichas} alunos fotografados. Aguardando as fotos.`, link: '/edicao' })
+  return null
+}
+
+// =====================================================================
+// EDITAR E CANCELAR NAS OPERAÇÕES (mesmas regras do SQL 028)
+// =====================================================================
+
+const motivoTxt = (m: string) => m.trim()
+
+// Contrato que já está na agenda: o que mudou no contrato vai para a visita agendada
+// (dados da escola e vendedor também no retorno agendado; data e fichas previstas só na visita)
+export function contratoAtualizaVisita(d: ErpState, novo: Registro, antes: Registro, ctx: Contexto) {
+  if (novo.status !== 'Na agenda' || antes.status !== 'Na agenda') return
+  const mudou = (k: string) => String(novo[k] ?? '') !== String(antes[k] ?? '')
+  const difere = (v: Registro, k: string, vk = k) => String(v[vk] ?? '') !== String(novo[k] ?? '')
+  for (const v of col(d, 'agenda_visitas').filter((x) => x.contratoId === novo.id && x.status === 'Agendada')) {
+    const mud: string[] = []
+    if (!v.retornoDe && mudou('dataPrevista') && novo.dataPrevista && difere(v, 'dataPrevista', 'data')) {
+      mud.push(`data ${dataBR(String(v.data))} → ${dataBR(String(novo.dataPrevista))}`)
+      v.data = novo.dataPrevista
+    }
+    if (!v.retornoDe && mudou('fichasPrevistas') && Number(v.fichasPrevistas) !== Number(novo.fichasPrevistas)) {
+      mud.push(`fichas previstas ${Number(v.fichasPrevistas) || 0} → ${Number(novo.fichasPrevistas) || 0}`)
+      v.fichasPrevistas = Number(novo.fichasPrevistas) || 0
+    }
+    if (mudou('escola') && difere(v, 'escola')) {
+      mud.push(`escola: ${novo.escola}`)
+      v.escola = novo.escola
+    }
+    if ((mudou('cidade') && difere(v, 'cidade')) || (mudou('uf') && difere(v, 'uf'))) {
+      mud.push(`cidade: ${novo.cidade}-${novo.uf}`)
+      if (mudou('cidade')) v.cidade = novo.cidade
+      if (mudou('uf')) v.uf = novo.uf
+    }
+    for (const [k, rot] of [['endereco', 'endereço'], ['telefone', 'telefone'], ['responsavel', 'responsável']] as const) {
+      if (mudou(k) && difere(v, k)) {
+        mud.push(`${rot}: ${String(novo[k] || '—')}`)
+        v[k] = novo[k]
+      }
+    }
+    if (mudou('vendedorId') && difere(v, 'vendedorId')) {
+      mud.push(`vendedor: ${String(col(d, 'pj_vendedores').find((p) => p.id === novo.vendedorId)?.nome ?? '—')}`)
+      v.vendedorId = novo.vendedorId
+    }
+    if (mud.length) inserir(d, 'agenda_historico', { visitaId: v.id, data: hoje(), tipo: 'Atualizado pelo contrato', fichasAntes: null, fichasDepois: null, descricao: `${mud.join(' • ')}.`, autor: ctx.autorNome })
+  }
+}
+
+export interface DadosAgendamento {
+  data: string
+  fichasPrevistas: number
+  fichasConfirmadas: number
+  escola: string
+  cidade: string
+  uf: string
+  endereco: string
+  telefone: string
+  responsavel: string
+}
+
+// Editar agendamento (visita ou retorno ainda agendado). A visita leva a data, as fichas previstas e os dados da escola
+// para o contrato; o retorno tem data e fichas próprias e não mexe no contrato.
+export function editarAgendamento(d: ErpState, visitaId: string, x: DadosAgendamento, motivo: string, ctx: Contexto): string | null {
+  const v = col(d, 'agenda_visitas').find((r) => r.id === visitaId)
+  if (!v) return 'Visita não encontrada.'
+  if (v.status !== 'Agendada') return `Só dá para editar uma visita agendada (esta está "${v.status}").`
+  const novo = {
+    data: x.data,
+    fichasPrevistas: Number(x.fichasPrevistas) || 0,
+    fichasConfirmadas: Number(x.fichasConfirmadas) || 0,
+    escola: x.escola.trim(),
+    cidade: x.cidade.trim(),
+    uf: x.uf.trim().toUpperCase() || String(v.uf ?? ''),
+    endereco: x.endereco.trim(),
+    telefone: x.telefone.trim(),
+    responsavel: x.responsavel.trim(),
+  }
+  if (!novo.data) return 'Informe a data da visita.'
+  if (!novo.escola) return 'Informe o nome da escola.'
+  if (!novo.cidade) return 'Informe a cidade.'
+  if (novo.fichasPrevistas <= 0) return 'Informe as fichas previstas.'
+  if (novo.fichasConfirmadas < 0) return 'Fichas confirmadas inválidas.'
+  const origem = v.retornoDe ? col(d, 'agenda_visitas').find((r) => r.id === v.retornoDe) : undefined
+  if (origem && novo.data <= String(origem.data)) return `O retorno tem que ser depois da visita de ${dataBR(String(origem.data))}.`
+  const txt = (k: string) => String(v[k] ?? '').trim()
+  const mud: string[] = []
+  if (novo.data !== String(v.data)) mud.push(`data ${dataBR(String(v.data))} → ${dataBR(novo.data)}`)
+  if (novo.fichasPrevistas !== (Number(v.fichasPrevistas) || 0)) mud.push(`fichas previstas ${Number(v.fichasPrevistas) || 0} → ${novo.fichasPrevistas}`)
+  const confirmadasAntes = Number(v.fichasConfirmadas) || 0
+  if (novo.fichasConfirmadas !== confirmadasAntes) mud.push(`fichas confirmadas ${confirmadasAntes} → ${novo.fichasConfirmadas}`)
+  if (novo.escola !== txt('escola')) mud.push(`escola: ${txt('escola')} → ${novo.escola}`)
+  if (novo.cidade !== txt('cidade') || novo.uf !== txt('uf')) mud.push(`cidade: ${txt('cidade')}-${txt('uf')} → ${novo.cidade}-${novo.uf}`)
+  if (novo.endereco !== txt('endereco')) mud.push(`endereço: ${novo.endereco || '—'}`)
+  if (novo.telefone !== txt('telefone')) mud.push(`telefone: ${novo.telefone || '—'}`)
+  if (novo.responsavel !== txt('responsavel')) mud.push(`responsável: ${novo.responsavel || '—'}`)
+  if (!mud.length) return 'Nada mudou.'
+  Object.assign(v, novo)
+  inserir(d, 'agenda_historico', {
+    visitaId: v.id,
+    data: hoje(),
+    tipo: 'Agendamento editado',
+    fichasAntes: novo.fichasConfirmadas !== confirmadasAntes ? confirmadasAntes : null,
+    fichasDepois: novo.fichasConfirmadas !== confirmadasAntes ? novo.fichasConfirmadas : null,
+    descricao: `${mud.join(' • ')}.${motivoTxt(motivo) ? ` Motivo: ${motivoTxt(motivo)}.` : ''}`,
+    autor: ctx.autorNome,
+  })
+  const c = !v.retornoDe && v.contratoId ? col(d, 'contratos_escola').find((r) => r.id === v.contratoId) : undefined
+  if (c) {
+    const antes = { ...c }
+    Object.assign(c, { dataPrevista: novo.data, fichasPrevistas: novo.fichasPrevistas, escola: novo.escola, cidade: novo.cidade, uf: novo.uf, endereco: novo.endereco, telefone: novo.telefone, responsavel: novo.responsavel })
+    contratoAtualizaVisita(d, c, antes, ctx)
+  }
+  auditar(d, ctx, 'EDITAR', `Agendamento editado: ${v.escola} (${mud.join(' • ')})`, 'operacional')
+  return null
+}
+
+// Cancelar agendamento (com motivo). Visita: o contrato volta para a conferência (reagendar, editar ou excluir).
+// Retorno: só o retorno é cancelado (a visita de origem pode agendar outro).
+export function cancelarAgendamento(d: ErpState, visitaId: string, motivo: string, ctx: Contexto): string | null {
+  if (!motivoTxt(motivo)) return 'Informe o motivo do cancelamento.'
+  const v = col(d, 'agenda_visitas').find((r) => r.id === visitaId)
+  if (!v) return 'Visita não encontrada.'
+  if (v.status !== 'Agendada') return `Só dá para cancelar uma visita agendada (esta está "${v.status}").`
+  const tipo = v.retornoDe ? 'Retorno cancelado' : 'Visita cancelada'
+  v.status = 'Cancelada'
+  inserir(d, 'agenda_historico', { visitaId: v.id, data: hoje(), tipo, fichasAntes: null, fichasDepois: null, descricao: `Motivo: ${motivoTxt(motivo)}.`, autor: ctx.autorNome })
+  if (v.retornoDe) {
+    inserir(d, 'agenda_historico', { visitaId: String(v.retornoDe), data: hoje(), tipo: 'Retorno cancelado', fichasAntes: null, fichasDepois: null, descricao: `O retorno de ${dataBR(String(v.data))} (${Number(v.fichasPrevistas) || 0} fichas) foi cancelado. Motivo: ${motivoTxt(motivo)}.`, autor: ctx.autorNome })
+  } else if (v.contratoId) {
+    const c = col(d, 'contratos_escola').find((r) => r.id === v.contratoId)
+    const outras = col(d, 'agenda_visitas').some((o) => o.contratoId === v.contratoId && o.id !== v.id && o.status !== 'Cancelada')
+    if (c && c.status === 'Na agenda' && !outras) {
+      c.status = 'Em conferência'
+      c.observacao = [String(c.observacao || '').trim(), `Agendamento de ${dataBR(String(v.data))} cancelado: ${motivoTxt(motivo)}`].filter(Boolean).join(' • ')
+    }
+  }
+  notificar(d, ctx, { setores: ['adm', 'gerencia'], tipo: 'alerta', titulo: tipo, descricao: `${v.escola} (${dataBR(String(v.data))}): ${motivoTxt(motivo)}`, link: '/operacional/agenda' })
+  auditar(d, ctx, 'EDITAR', `${tipo}: ${v.escola} — ${motivoTxt(motivo)}`, 'operacional')
+  return null
+}
+
+// O lançamento automático da meta que a visita gerou ao ser encerrada
+function lancamentoDaVisita(d: ErpState, v: Registro) {
+  return d.lancamentos
+    .filter((l) => l.setor === 'operacional' && l.indicador === 'fichas' && l.origem === 'automatico' && l.data === String(v.data) && l.descricao === `Visita fotografada: ${v.escola}` && l.quantidade === (Number(v.fichasFotografadas) || 0))
+    .sort((a, b) => a.criadoEm.localeCompare(b.criadoEm))[0]
+}
+
+// Corrigir as fichas fotografadas: a meta das Operações e a escola na Produção acompanham
+// (enquanto os álbuns não entraram na meta da Produção). Devolve o erro, ou o aviso de rascunho de fechamento a conferir.
+export function corrigirFichasVisita(d: ErpState, visitaId: string, fichas: number, motivo: string, ctx: Contexto): { erro: string } | { aviso: string | null } {
+  if (!motivoTxt(motivo)) return { erro: 'Informe o motivo da correção.' }
+  if (!(fichas > 0)) return { erro: 'Informe quantas fichas foram fotografadas.' }
+  const v = col(d, 'agenda_visitas').find((r) => r.id === visitaId)
+  if (!v) return { erro: 'Visita não encontrada.' }
+  if (v.status !== 'Fotografada' && v.status !== 'Fechamento enviado') return { erro: 'Só dá para corrigir as fichas de uma visita encerrada.' }
+  const bloqueio = bloqueioVisitaEncerrada(d, v)
+  if (bloqueio) return { erro: bloqueio }
+  const antes = Number(v.fichasFotografadas) || 0
+  if (fichas === antes) return { erro: `Nada mudou: a visita já está com ${fichas} fichas.` }
+  const lote = col(d, 'producao_lotes').find((l) => l.visitaId === v.id)
+  if (lote && Number(lote.albunsContados) > 0) return { erro: 'A Produção já contou os álbuns desta escola na meta (conferência final): as fichas não mudam mais.' }
+  const aviso = avisosRascunhoVisita(d, v)
+  const l = lancamentoDaVisita(d, v)
+  if (l) l.quantidade = fichas
+  if (lote) {
+    const albuns = Math.max(0, (Number(lote.albuns) || 0) + (fichas - antes))
+    inserir(d, 'producao_historico', {
+      loteId: lote.id,
+      data: new Date().toISOString(),
+      etapa: lote.etapa,
+      acao: 'Fichas corrigidas',
+      quantidade: fichas,
+      descricao: `As Operações corrigiram as fichas fotografadas: ${antes} → ${fichas} (álbuns ${Number(lote.albuns) || 0} → ${albuns}). Motivo: ${motivoTxt(motivo)}.`,
+      autor: ctx.autorNome,
+    })
+    lote.alunos = fichas
+    lote.albuns = albuns
+    notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Fichas corrigidas pelas Operações', descricao: `${v.escola}: ${antes} → ${fichas} alunos fotografados (${motivoTxt(motivo)}).`, link: '/edicao' })
+  }
+  v.fichasFotografadas = fichas
+  inserir(d, 'agenda_historico', { visitaId: v.id, data: hoje(), tipo: 'Fichas corrigidas', fichasAntes: null, fichasDepois: null, descricao: `Fichas fotografadas: ${antes} → ${fichas}. Motivo: ${motivoTxt(motivo)}.`, autor: ctx.autorNome })
+  notificar(d, ctx, { setores: ['adm', 'gerencia'], tipo: 'info', titulo: 'Fichas corrigidas', descricao: `${v.escola} (${dataBR(String(v.data))}): ${antes} → ${fichas} fichas fotografadas. Motivo: ${motivoTxt(motivo)}`, link: '/operacional/agenda' })
+  auditar(d, ctx, 'EDITAR', `Fichas corrigidas: ${v.escola} (${antes} → ${fichas})`, 'operacional')
+  return { aviso }
+}
+
+// Desfazer encerramento (encerrou por engano): a visita volta para agendada, as fichas saem da meta, a escola sai da
+// Produção (se ainda aguardava o envio ao editor) e o rascunho do fechamento da escola é apagado.
+export function desfazerEncerramento(d: ErpState, visitaId: string, motivo: string, ctx: Contexto): { erro: string } | { aviso: string | null } {
+  if (!motivoTxt(motivo)) return { erro: 'Informe o motivo.' }
+  const v = col(d, 'agenda_visitas').find((r) => r.id === visitaId)
+  if (!v) return { erro: 'Visita não encontrada.' }
+  if (v.status !== 'Fotografada' && v.status !== 'Fechamento enviado') return { erro: 'Esta visita não está encerrada.' }
+  const bloqueio = bloqueioVisitaEncerrada(d, v)
+  if (bloqueio) return { erro: bloqueio }
+  const ret = col(d, 'agenda_visitas')
+    .filter((r) => r.retornoDe === v.id && r.status !== 'Cancelada')
+    .sort((a, b) => String(a.data).localeCompare(String(b.data)))[0]
+  if (ret) return { erro: `Esta visita tem retorno em ${dataBR(String(ret.data))} (${String(ret.status).toLowerCase()}): cancele ou desfaça o retorno antes.` }
+  const lote = col(d, 'producao_lotes').find((l) => l.visitaId === v.id)
+  if (lote && lote.etapa !== 'Aguardando fotos') return { erro: `A Produção já está com esta escola em "${lote.etapa}": não dá para desfazer o encerramento. Se o número de fichas está errado, use "Corrigir fichas".` }
+  const aviso = avisosRascunhoVisita(d, v, false) // o rascunho da escola é apagado aqui: fica só o aviso do vendedor
+  const l = lancamentoDaVisita(d, v)
+  if (l) d.lancamentos = d.lancamentos.filter((x) => x.id !== l.id)
+  if (lote) {
+    for (const nome of ['producao_lotes', 'producao_historico', 'producao_fotos', 'producao_fichas', 'producao_caixas'])
+      d.colecoes[nome] = col(d, nome).filter((x) => (nome === 'producao_lotes' ? x.id !== lote.id : x.loteId !== lote.id))
+    notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Escola saiu da Produção', descricao: `${v.escola}: as Operações desfizeram o encerramento da visita de ${dataBR(String(v.data))} (${motivoTxt(motivo)}).`, link: '/edicao' })
+  }
+  d.colecoes.fechamentos = col(d, 'fechamentos').filter((f) => !(f.tipo === 'escola' && f.refId === v.id && f.status === 'Rascunho'))
+  const antes = Number(v.fichasFotografadas) || 0
+  v.status = 'Agendada'
+  v.fichasFotografadas = 0
+  inserir(d, 'agenda_historico', { visitaId: v.id, data: hoje(), tipo: 'Encerramento desfeito', fichasAntes: null, fichasDepois: null, descricao: `A visita voltou para agendada (estava com ${antes} fichas fotografadas). Motivo: ${motivoTxt(motivo)}.`, autor: ctx.autorNome })
+  notificar(d, ctx, { setores: ['adm', 'gerencia'], tipo: 'alerta', titulo: 'Encerramento desfeito', descricao: `${v.escola} (${dataBR(String(v.data))}): a visita voltou para agendada. Motivo: ${motivoTxt(motivo)}`, link: '/operacional/agenda' })
+  auditar(d, ctx, 'EDITAR', `Encerramento desfeito: ${v.escola} — ${motivoTxt(motivo)}`, 'operacional')
+  return { aviso }
 }
 
 // ---------------- PRODUÇÃO (setor 'edicao') ----------------

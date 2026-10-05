@@ -7,7 +7,7 @@ import { STATUS_VENDEDOR_PJ } from '@/lib/erp/config'
 import { parametros } from '@/lib/erp/parametros'
 import { atualizarRegistro, criarRegistro, resolverPendencia, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao, diaReferencia, esperadoAteHoje, resumo, serieMes, somar } from '@/lib/erp/metrics'
-import { STATUS_VEICULO, nomePJ, pendenciasDoDia, resolucoesDoDia, responsavelOperacional, type AcaoPendencia, type Pendencia } from '@/lib/erp/operacional'
+import { STATUS_VEICULO, historicoDoCadastro, nomePJ, pendenciasDoDia, resolucoesDoDia, responsavelOperacional, type AcaoPendencia, type Pendencia } from '@/lib/erp/operacional'
 import { ehDiaUtil } from '@/lib/erp/calendario'
 import PainelMeta from '@/components/erp/PainelMeta'
 import { addDias, dataBR, hoje, inicioSemana, mesAtual, nomeMes, num, pct, rotuloSemana } from '@/lib/erp/format'
@@ -468,6 +468,8 @@ function VendedoresContrato() {
           { label: 'Inativos', valor: rs.filter((r) => r.status === 'Inativo').length, tom: 'red' },
         ]}
         acoes={[{ label: 'Contatos', tom: 'blue', executar: (r) => setContatoDe(r) }]}
+        historico={(r, s) => historicoDoCadastro(s, 'pj_vendedores', r)}
+        inativar={{ campo: 'status', valor: 'Inativo' }}
       />
       {contatoDe && <HistoricoContatos pessoa={contatoDe} onFechar={() => setContatoDe(null)} />}
     </div>
@@ -569,6 +571,8 @@ function Freelancers({ tipo }: { tipo: 'Fotógrafo' | 'Motorista' }) {
           { label: fotografo ? 'Ativos' : 'Ativos • prontos para viagem', valor: rs.filter((r) => r.status === 'Ativo').length, tom: 'emerald' },
           { label: 'Inativos', valor: rs.filter((r) => r.status !== 'Ativo').length, tom: 'red' },
         ]}
+        historico={(r, s) => historicoDoCadastro(s, 'freelancers', r)}
+        inativar={{ campo: 'status', valor: 'Inativo' }}
       />
     </div>
   )
@@ -634,6 +638,8 @@ function Veiculos() {
           { label: 'Na estrada hoje', valor: rs.filter((r) => naEstradaHoje.has(r.id)).length, tom: 'blue' },
           { label: 'Em manutenção', valor: rs.filter((r) => r.status === 'Em manutenção').length, tom: 'yellow' },
         ]}
+        historico={(r, s) => historicoDoCadastro(s, 'veiculos', r)}
+        inativar={{ campo: 'status', valor: 'Inativo' }}
       />
     </div>
   )
