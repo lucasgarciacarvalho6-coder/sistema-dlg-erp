@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { parametros } from '@/lib/erp/parametros'
 import { abrirArquivoContrato, anexarArquivoContrato, atualizarRegistro, baixarArquivoContrato, cancelarContratoEscola, confirmarContratoEscola, criarRegistro, excluirContratoEscola, urlArquivoContrato, useErp, usePode } from '@/lib/erp/store'
 import { lerContratoLocal } from '@/lib/erp/leitura-contrato'
 import { colecao } from '@/lib/erp/metrics'
 import { CAMPOS_OBRIGATORIOS_CONTRATO, camposFaltando, corEquipe, equipeDaVisita, lerJSON, nomePJ, nomeVeiculo, pixCompleto } from '@/lib/erp/operacional'
-import { brl, dataBR, mesAtual, num } from '@/lib/erp/format'
+import { brl, dataBR, mesAtual, num, uid } from '@/lib/erp/format'
 import { dadosNovoContrato, escolasComHistorico } from '@/lib/erp/escolas'
 import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, Tabs, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
@@ -38,6 +38,20 @@ const NUMERICOS = ['fichasPrevistas', 'bonificacaoPorFicha']
 // Campos que a leitura automática pode preencher (vendedor vem por nome e é casado com o cadastro)
 const CAMPOS_IA = ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'fichasPrevistas', 'dataPrevista', 'bonificacaoPorFicha', 'pixNome', 'pixChave', 'pixBanco']
 const normalizar = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+// O que a leitura achou; juntar no formulário preenche o que está vazio (ou o que a própria IA tinha preenchido antes)
+type Leitura = { novos: Record<string, string>; observacao: string; daIA: Set<string> }
+function juntarLeitura(f: Record<string, string>, l: Leitura): Record<string, string> {
+  const n = { ...f }
+  for (const [k, v] of Object.entries(l.novos)) if (!String(f[k] ?? '').trim() || (NUMERICOS.includes(k) && !Number(f[k])) || l.daIA.has(k)) n[k] = v
+  if (l.observacao && (!String(f.observacao ?? '').trim() || l.daIA.has('observacao'))) n.observacao = l.observacao
+  return n
+}
+const dadosDe = (f: Record<string, string>) => {
+  const d: Record<string, string | number> = {}
+  for (const [k, v] of Object.entries(f)) d[k] = NUMERICOS.includes(k) ? Number(v.replace(',', '.')) || 0 : v.trim()
+  return d
+}
 
 type EstadoIA =
   | { estado: 'parado' }
@@ -75,6 +89,14 @@ export default function ContratosEscolaPage() {
   // páginas já guardadas do contrato (fotos enviadas pelo app do vendedor ou arquivo anexado antes)
   const [paginasSalvas, setPaginasSalvas] = useState<{ caminho: string; url: string }[]>([])
   const [verTexto, setVerTexto] = useState(false)
+  // Contrato novo: anexou o arquivo → fica salvo na hora em "Em conferência" (pedido de 05/10/2026)
+  const [naHora, setNaHora] = useState<{ tom: 'ok' | 'falta' | 'erro'; msg: string } | null>(null)
+  const [salvandoNaHora, setSalvandoNaHora] = useState(false)
+  const formRef = useRef(form)
+  const janelaRef = useRef(0) // muda a cada janela aberta: o salvamento de uma janela fechada não mexe na próxima
+  useEffect(() => {
+    formRef.current = form
+  }, [form])
 
   // Novo contrato de uma escola que volta (vindo de Operações › Escolas, ?escola=ID): abre já preenchido com os dados
   // da escola e o PIX, a bonificação e o vendedor do último contrato. Lido depois de abrir a página (a URL só fica certa aí)
@@ -155,6 +177,9 @@ export default function ContratosEscolaPage() {
     setDuvidas(new Set())
     setUltimoArquivo(null)
     setPaginasSalvas([])
+    setNaHora(null)
+    setSalvandoNaHora(false)
+    janelaRef.current += 1
     setAberto(true)
     if (c) void carregarPaginas(c)
   }
@@ -183,7 +208,7 @@ export default function ContratosEscolaPage() {
     await lerComIA(arquivos)
   }
 
-  const lerComIA = async (arquivo: File | File[]) => {
+  const lerComIA = async (arquivo: File | File[]): Promise<Leitura | null> => {
     setIa({ estado: 'lendo', progresso: 0, etapa: 'Preparando' })
     setVerTexto(false)
     const r = await lerContratoLocal(
@@ -191,7 +216,10 @@ export default function ContratosEscolaPage() {
       vendedores.map((v) => String(v.nome)),
       (p, etapa) => setIa({ estado: 'lendo', progresso: p, etapa }),
     )
-    if ('erro' in r) return setIa({ estado: 'erro', msg: r.erro })
+    if ('erro' in r) {
+      setIa({ estado: 'erro', msg: r.erro })
+      return null
+    }
     const c = r.campos
     const novos: Record<string, string> = {}
     for (const k of CAMPOS_IA) {
@@ -207,40 +235,73 @@ export default function ContratosEscolaPage() {
         vendedores.find((x) => normalizar(String(x.nome)).includes(alvo) || alvo.includes(normalizar(String(x.nome))))
       if (v) novos.vendedorId = v.id
     }
-    // Preenche o que está vazio (ou que a própria IA tinha preenchido antes); o que a pessoa digitou fica
-    setForm((f) => {
-      const n = { ...f }
-      for (const [k, v] of Object.entries(novos)) if (!String(f[k] ?? '').trim() || (NUMERICOS.includes(k) && !Number(f[k])) || iaCampos.has(k)) n[k] = v
-      return n
-    })
-    // turmas, CNPJ da escola, assinatura... (o que não tem campo próprio) vão para a observação
-    if (r.observacao) setForm((f) => (!f.observacao.trim() || iaCampos.has('observacao') ? { ...f, observacao: r.observacao } : f))
+    // Preenche o que está vazio (ou que a própria IA tinha preenchido antes); o que a pessoa digitou fica.
+    // Turmas, CNPJ da escola, assinatura... (o que não tem campo próprio) vão para a observação
+    const leitura: Leitura = { novos, observacao: r.observacao ?? '', daIA: iaCampos }
+    setForm((f) => juntarLeitura(f, leitura))
     const lidos = r.observacao ? [...Object.keys(novos), 'observacao'] : Object.keys(novos)
     setIaCampos(new Set(lidos))
     setDuvidas(new Set(r.duvidas.map((d) => (d === 'vendedorNome' ? 'vendedorId' : d)).filter((d) => lidos.includes(d))))
     setIa({ estado: 'ok', lidos: lidos.length, texto: r.texto, fonte: r.fonte, aviso: r.aviso })
+    return leitura
   }
 
+  // Envio do arquivo e leitura automática acontecem ao mesmo tempo. Terminando, o contrato já fica SALVO com o arquivo:
+  //  • contrato que já existe: grava o arquivo novo na hora;
+  //  • contrato novo: grava em "Em conferência" com o que a IA leu, se tiver o nome da escola e a cidade
+  //    (o contrato novo cadastra a escola, então sem nome e cidade ele espera a pessoa digitar e salvar).
   const escolherArquivo = async (arquivo: File | undefined) => {
     if (!arquivo) return
     if (arquivo.type.startsWith('image/')) setPreview(URL.createObjectURL(arquivo))
     else setPreview(null)
     setUltimoArquivo(arquivo)
-    // envio do arquivo e leitura automática acontecem ao mesmo tempo
+    setNaHora(null)
+    const janela = janelaRef.current
+    const mesmaJanela = () => janelaRef.current === janela
+    const formNaEscolha = form
+    const contratoAberto = editando
     const leitura = lerComIA(arquivo)
     setEnviandoArquivo(true)
+    setSalvandoNaHora(true)
     const r = await anexarArquivoContrato(arquivo)
     setEnviandoArquivo(false)
-    if ('erro' in r) setErro(r.erro)
-    else setForm((f) => ({ ...f, arquivo: r.caminho }))
-    await leitura
+    if ('erro' in r) {
+      await leitura
+      if (!mesmaJanela()) return
+      setSalvandoNaHora(false)
+      setNaHora({ tom: 'erro', msg: `O arquivo não foi anexado: ${r.erro} Escolha o arquivo de novo.` })
+      return
+    }
+    setForm((f) => ({ ...f, arquivo: r.caminho }))
+    if (contratoAberto) {
+      const falha = await atualizarRegistro('contratos_escola', contratoAberto.id, { arquivo: r.caminho }, 'operacional')
+      if (mesmaJanela()) {
+        setSalvandoNaHora(false)
+        setNaHora(falha ? { tom: 'erro', msg: `O arquivo subiu, mas não consegui gravar no contrato: ${falha}` } : { tom: 'ok', msg: 'Arquivo anexado e salvo no contrato.' })
+      }
+      await leitura
+      return
+    }
+    const lido = await leitura
+    const base = mesmaJanela() ? formRef.current : formNaEscolha
+    const final: Record<string, string> = { ...(lido ? juntarLeitura(base, lido) : base), arquivo: r.caminho }
+    if (!final.escola.trim() || !final.cidade.trim()) {
+      if (!mesmaJanela()) return
+      setSalvandoNaHora(false)
+      setNaHora({ tom: 'falta', msg: 'Arquivo anexado. Para o contrato ficar salvo, digite o nome da escola e a cidade e clique em "Salvar em conferência".' })
+      return
+    }
+    const id = uid()
+    const registro = { ...dadosDe(final), id, status: 'Em conferência' }
+    const falha = await criarRegistro('contratos_escola', registro, 'operacional')
+    if (!mesmaJanela()) return
+    setSalvandoNaHora(false)
+    if (falha) return setNaHora({ tom: 'erro', msg: `O arquivo subiu, mas não consegui salvar o contrato: ${falha} Clique em "Salvar em conferência".` })
+    setEditando({ ...registro, criadoEm: new Date().toISOString() } as Registro)
+    setNaHora({ tom: 'ok', msg: 'Contrato salvo em Conferência com o arquivo anexado. Confira os dados e salve o que mudar.' })
   }
 
-  const dados = () => {
-    const d: Record<string, string | number> = {}
-    for (const [k, v] of Object.entries(form)) d[k] = NUMERICOS.includes(k) ? Number(v.replace(',', '.')) || 0 : v.trim()
-    return d
-  }
+  const dados = () => dadosDe(form)
   const faltando = camposFaltando(dados() as Registro)
 
   const salvar = async (enviarAgenda: boolean) => {
@@ -474,11 +535,11 @@ export default function ContratosEscolaPage() {
               </div>
             )}
             <button onClick={() => setAberto(false)} className={btnSecundario}>Fechar</button>
-            <button onClick={() => salvar(false)} disabled={salvando || enviandoArquivo} className={btnSecundario}>
-              {salvando ? 'Salvando...' : editando && editando.status !== 'Em conferência' ? 'Salvar alterações' : 'Salvar em conferência'}
+            <button onClick={() => salvar(false)} disabled={salvando || enviandoArquivo || salvandoNaHora} className={btnSecundario}>
+              {salvando ? 'Salvando...' : editando ? 'Salvar alterações' : 'Salvar em conferência'}
             </button>
             {editando && editando.status === 'Em conferência' && (
-              <button onClick={() => salvar(true)} disabled={salvando || enviandoArquivo || faltando.length > 0} className={btnPrimario} title={faltando.length ? `Faltam: ${faltando.join(', ')}` : ''}>
+              <button onClick={() => salvar(true)} disabled={salvando || enviandoArquivo || salvandoNaHora || faltando.length > 0} className={btnPrimario} title={faltando.length ? `Faltam: ${faltando.join(', ')}` : ''}>
                 Diretora confirmou • enviar para agenda
               </button>
             )}
@@ -489,7 +550,7 @@ export default function ContratosEscolaPage() {
           {/* Documento */}
           <div className="lg:col-span-2 space-y-4">
             <label className="block border border-dashed border-white/[0.1] hover:border-blue-500/50 bg-white/[0.02] rounded-3xl p-6 text-center cursor-pointer transition-all group">
-              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
+              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={salvandoNaHora} onChange={(e) => escolherArquivo(e.target.files?.[0])} />
               {preview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={preview} alt="Contrato" className="w-full max-h-80 object-contain rounded-xl" />
@@ -515,6 +576,17 @@ export default function ContratosEscolaPage() {
               )}
               {form.arquivo && !enviandoArquivo && <p className="text-[10px] text-zinc-500 mt-3 truncate">📎 {form.arquivo.replace(/^[0-9a-f-]{36}-/, '')}</p>}
             </label>
+            {salvandoNaHora && !enviandoArquivo && <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 -mt-2">Salvando o contrato...</p>}
+            {naHora && (
+              <p
+                className={`-mt-2 rounded-xl border px-3 py-2 text-[11px] font-bold leading-snug ${
+                  naHora.tom === 'ok' ? 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10' : naHora.tom === 'falta' ? 'text-yellow-400 border-yellow-500/20 bg-yellow-500/10' : 'text-red-400 border-red-500/20 bg-red-500/10'
+                }`}
+              >
+                {naHora.tom === 'ok' ? '✓ ' : '⚠ '}
+                {naHora.msg}
+              </p>
+            )}
             <div
               className={`rounded-2xl p-4 text-[11px] text-zinc-300 leading-relaxed border ${
                 ia.estado === 'erro' ? 'bg-red-500/10 border-red-500/20' : ia.estado === 'ok' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/[0.03] border-white/[0.08]'

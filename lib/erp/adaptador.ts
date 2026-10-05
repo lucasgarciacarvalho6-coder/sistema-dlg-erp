@@ -31,7 +31,7 @@ export const COLUNAS: Record<string, string[]> = {
   freelancers: ['tipo', 'nome', 'cidade', 'uf', 'telefone', 'status', 'nivel', 'diaria', 'pix_nome', 'pix_chave', 'pix_banco'],
   historico_contatos: ['pessoa_id', 'data', 'assunto', 'autor'],
   pendencias_resolucoes: ['pendencia_id', 'area', 'titulo', 'acao', 'observacao', 'data', 'volta_em', 'autor'],
-  contratos_escola: ['escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'vendedor_id', 'fichas_previstas', 'data_prevista', 'bonificacao_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'arquivo', 'observacao', 'status', 'paginas', 'origem'],
+  contratos_escola: ['id', 'escola', 'inep', 'cidade', 'uf', 'endereco', 'telefone', 'responsavel', 'vendedor_id', 'fichas_previstas', 'data_prevista', 'bonificacao_por_ficha', 'pix_nome', 'pix_chave', 'pix_banco', 'arquivo', 'observacao', 'status', 'paginas', 'origem'],
   agenda_visitas: ['data', 'fichas_previstas', 'equipe', 'carro', 'veiculo_id', 'fotografo_ids', 'motorista_id', 'telefone', 'responsavel', 'endereco', 'status'],
   veiculos: ['modelo', 'placa', 'ano', 'cor', 'lugares', 'status', 'observacao', 'gasto_fixo_mes'],
   agenda_historico: [],
