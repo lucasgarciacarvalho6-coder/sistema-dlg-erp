@@ -8,7 +8,7 @@
 
 import { useMemo, type CSSProperties } from 'react'
 import type { ErpState } from '@/lib/erp/types'
-import { hoje, nomeMes, num } from '@/lib/erp/format'
+import { hoje, num } from '@/lib/erp/format'
 import { painelEtapas, type LinhaPainel } from '@/lib/erp/producao'
 import { STATUS } from './status'
 
@@ -185,7 +185,7 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
         {!compacto && (
           <p className="font-bold text-zinc-500 truncate text-[clamp(7px,1.8cqmin,12px)]">
             <span style={{ color: VERMELHO }}>Vermelho</span> = editor atrasado • <span style={{ color: AMARELO }}>Amarelo</span> = parada além do prazo (2, 3 ou 5 dias úteis) • Hoje:{' '}
-            <span style={{ color: VERDE }}>chegou</span> / <span style={{ color: VERMELHO }}>saiu</span> desde ontem • Na caixa = {nomeMes(mes).split(' / ')[0]}
+            <span style={{ color: VERDE }}>chegou</span> / <span style={{ color: VERMELHO }}>saiu</span> desde ontem • Na caixa = o estoque de agora
           </p>
         )}
       </div>

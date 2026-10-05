@@ -8,6 +8,7 @@ import type { ErpState, Registro, Tom } from './types'
 import { colecao } from './metrics'
 import { diaLocal } from './format'
 import { diasUteisDepois } from './calendario'
+import { estoqueAgora, variacaoEstoqueHoje } from './estoque'
 
 export const ETAPAS_LOTE = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'] as const
 export type EtapaLote = (typeof ETAPAS_LOTE)[number]
@@ -129,6 +130,7 @@ export const ETAPAS_PAINEL: { nome: string; descricao: string; etapas: EtapaLote
   { nome: 'Aguardando aprovação (pagamento)', descricao: 'análise de qualidade e conferência final', etapas: ['Análise de qualidade', 'Conferência final'], prazo: 3 },
   { nome: 'Aguardando revelação', descricao: 'fotos que estão no HD', etapas: ['Aguardando revelação'], prazo: 5 },
   { nome: 'Revelando', descricao: 'fotos que estão em revelação', etapas: ['Revelando'], prazo: null },
+  // o estoque de agora (os mesmos números do Financeiro › Estoque e Cargas): caixas conferidas que não saíram com vendedor
   { nome: 'Na caixa', descricao: 'prontas na caixa, no estoque', etapas: ['Na caixa'], prazo: null },
 ]
 const grupoDaEtapa = (e: EtapaLote) => ETAPAS_PAINEL.findIndex((p) => p.etapas.includes(e))
@@ -218,28 +220,24 @@ export function painelEtapas(
     const antes = h.filter((x) => diaLocal(String(x.data)) < hojeISO)
     return antes.length ? (valida(antes[antes.length - 1].etapa) ?? etapaDoLote(l)) : null
   }
-  // dia em que a escola chegou na caixa (a data da escola ou, se faltar, o histórico)
-  const diaNaCaixa = (l: Registro) => {
-    if (l.naCaixaEm) return String(l.naCaixaEm).slice(0, 10)
-    const h = (historico.get(l.id) ?? []).filter((x) => x.etapa === 'Na caixa')
-    return h.length ? diaLocal(String(h[h.length - 1].data)) : ''
-  }
   const atual = mes === hojeISO.slice(0, 7)
   const linhas = ETAPAS_PAINEL.map((p): LinhaPainel => {
-    const caixa = p.etapas.includes('Na caixa')
-    const agora = lotes.filter((l) => p.etapas.includes(etapaDoLote(l)) && (!caixa || diaNaCaixa(l).slice(0, 7) === mes))
+    // na caixa = o estoque de agora (o mesmo do Estoque e Cargas: sai quando vai na carga do vendedor);
+    // o "Hoje" é o que entrou no estoque menos o que saiu
+    if (p.etapas.includes('Na caixa')) {
+      const e = estoqueAgora(s)
+      return { nome: p.nome, descricao: p.descricao, albuns: e.albuns, escolas: e.escolas, variacao: atual ? variacaoEstoqueHoje(s, hojeISO) : null, atrasadas: 0, paradas: 0, prazo: p.prazo }
+    }
+    const agora = lotes.filter((l) => p.etapas.includes(etapaDoLote(l)))
     const albuns = agora.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
     let variacao: number | null = null
     if (atual) {
-      // na caixa: o que chegou hoje • as outras: agora − fim de ontem
-      if (caixa) variacao = agora.filter((l) => diaNaCaixa(l) === hojeISO).reduce((a, l) => a + (Number(l.albuns) || 0), 0)
-      else {
-        const ontem = lotes.filter((l) => {
-          const e = etapaOntem(l)
-          return e !== null && p.etapas.includes(e)
-        })
-        variacao = albuns - ontem.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
-      }
+      // agora − fim de ontem
+      const ontem = lotes.filter((l) => {
+        const e = etapaOntem(l)
+        return e !== null && p.etapas.includes(e)
+      })
+      variacao = albuns - ontem.reduce((a, l) => a + (Number(l.albuns) || 0), 0)
     }
     return {
       nome: p.nome,

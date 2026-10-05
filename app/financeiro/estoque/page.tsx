@@ -10,7 +10,7 @@
 import { useMemo, useState } from 'react'
 import type { ErpState } from '@/lib/erp/types'
 import { acertarCarga, cancelarCarga, criarCarga, desfazerAcerto, editarCarga, useErp, usePode } from '@/lib/erp/store'
-import { caixasDisponiveis, estoquePorEscola, resumoCargas, vendedoresDeBooks, albunsDaCaixa, posteresDaCaixa, type CargaResumo } from '@/lib/erp/estoque'
+import { caixasDisponiveis, estoquePorEscola, resumoCargas, rotuloLote, vendedoresDeBooks, albunsDaCaixa, posteresDaCaixa, type CargaResumo } from '@/lib/erp/estoque'
 import { addDias, dataBR, hoje, num } from '@/lib/erp/format'
 import { imprimirCarga } from '@/components/financeiro/romaneio'
 import { FichaEstoqueEscola, TabelaEstoqueEscolas } from '@/components/erp/EstoqueAlbuns'
@@ -153,8 +153,8 @@ function ListaCargas({
                 <strong className="text-white">{num(r.albuns)} álbuns</strong>
                 {pst(r.posteres)}
               </p>
-              <p className="text-[11px] text-zinc-500 truncate" title={r.escolas.map((e) => `${e.escola} (${e.cidade})`).join(' • ')}>
-                {r.escolas.map((e) => `${e.escola} (${e.cidade})`).join(' • ')}
+              <p className="text-[11px] text-zinc-500 truncate" title={r.escolas.map((e) => `${e.escola} (${[e.cidade, rotuloLote(e)].filter(Boolean).join(' • ')})`).join(' • ')}>
+                {r.escolas.map((e) => `${e.escola} (${[e.cidade, rotuloLote(e)].filter(Boolean).join(' • ')})`).join(' • ')}
               </p>
               {c.status === 'Encerrada' && (
                 <p className="text-xs text-zinc-300">
@@ -352,7 +352,8 @@ function FormCarga({ s, editando, empresa, onFechar }: { s: ErpState; editando: 
                     <span className="text-xs text-zinc-500">
                       {' '}
                       • {g.cidade}
-                      {g.uf ? `-${g.uf}` : ''} • {num(g.caixas.length)} caixa(s) • {num(g.caixas.reduce((a, c) => a + albunsDaCaixa(c), 0))} álbuns
+                      {g.uf ? `-${g.uf}` : ''}
+                      {rotuloLote(g) ? ` • ${rotuloLote(g)}` : ''} • {num(g.caixas.length)} caixa(s) • {num(g.caixas.reduce((a, c) => a + albunsDaCaixa(c), 0))} álbuns
                     </span>
                   </span>
                 </label>
@@ -462,7 +463,8 @@ function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) 
                 <span className="text-zinc-500">
                   {' '}
                   • {e.cidade}
-                  {e.uf ? `-${e.uf}` : ''} • caixa(s) {e.caixas.map((c) => String(c.numero)).join(', ')} • levou <strong className="text-white">{num(e.albuns)} álbuns</strong>
+                  {e.uf ? `-${e.uf}` : ''}
+                  {rotuloLote(e) ? ` • ${rotuloLote(e)}` : ''} • caixa(s) {e.caixas.map((c) => String(c.numero)).join(', ')} • levou <strong className="text-white">{num(e.albuns)} álbuns</strong>
                   {pst(e.posteres)}
                 </span>
               </p>

@@ -3,7 +3,7 @@
 //    para anotar na volta, e as assinaturas do vendedor e do Financeiro;
 //  • ACERTO: o mesmo, já com os vendidos, os que voltaram e a diferença de cada escola.
 import { dataBR, num } from '@/lib/erp/format'
-import type { CargaResumo } from '@/lib/erp/estoque'
+import { rotuloLote, type CargaResumo } from '@/lib/erp/estoque'
 
 const esc = (t: unknown) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 const n = (v: unknown) => Number(v) || 0
@@ -17,7 +17,7 @@ function documento(r: CargaResumo, acerto: boolean, empresa: string) {
       const caixas = e.caixas.map((x) => String(x.numero)).join(', ')
       const celula = (v: unknown) => (acerto ? `<td class="num">${a ? num(n(v)) : '—'}</td>` : '<td class="num branco"></td>')
       return `<tr>
-  <td><b>${esc(e.escola)}</b><br><span class="sub">${esc(e.cidade)}${e.uf ? `-${esc(e.uf)}` : ''} • caixa(s) ${esc(caixas)}</span></td>
+  <td><b>${esc(e.escola)}</b><br><span class="sub">${esc(e.cidade)}${e.uf ? `-${esc(e.uf)}` : ''}${rotuloLote(e) ? ` • ${esc(rotuloLote(e))}` : ''} • caixa(s) ${esc(caixas)}</span></td>
   <td class="num">${num(e.albuns)}</td>
   ${celula(a?.albunsVendidos)}
   ${celula(a?.albunsVoltaram)}

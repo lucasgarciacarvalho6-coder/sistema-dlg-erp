@@ -6,6 +6,7 @@
 
 import type { ErpState, Registro } from './types'
 import { colecao } from './metrics'
+import { dataBR, diaLocal } from './format'
 
 const n = (v: unknown) => Number(v) || 0
 const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
@@ -27,11 +28,28 @@ export const posteresDaCaixa = (c: Registro) => n(vazio(c.conferidoPosteres) ? c
 
 export type StatusCarga = 'Em venda' | 'Encerrada' | 'Cancelada'
 
-export interface EscolaDaCarga extends Quantidade {
+// A mesma escola pode ter mais de um lote na Produção (cada visita ou retorno é uma linha, como na planilha):
+// a data da foto (e o "retorno") diferencia um do outro no estoque, na carga, no acerto e no romaneio.
+export interface DadosLote {
   loteId: string
   escola: string
   cidade: string
   uf: string
+  dataFoto: string
+  retorno: boolean
+}
+export const dadosLote = (loteId: string, l?: Registro): DadosLote => ({
+  loteId,
+  escola: t(l?.escola),
+  cidade: t(l?.cidade),
+  uf: t(l?.uf),
+  dataFoto: t(l?.dataFoto).slice(0, 10),
+  retorno: l?.retorno === true || l?.retorno === 'true',
+})
+export const rotuloLote = (x: { dataFoto: string; retorno: boolean }) => [x.dataFoto ? `foto ${dataBR(x.dataFoto)}` : '', x.retorno ? 'retorno' : ''].filter(Boolean).join(' • ')
+const ordemLote = (a: DadosLote, b: DadosLote) => a.escola.localeCompare(b.escola, 'pt-BR') || a.dataFoto.localeCompare(b.dataFoto)
+
+export interface EscolaDaCarga extends Quantidade, DadosLote {
   caixas: Registro[] // caixas da Produção nesta carga
   acerto?: Registro // acerto desta escola (carga encerrada)
 }
@@ -56,13 +74,13 @@ export function resumoCargas(s: ErpState): CargaResumo[] {
       const porLote = new Map<string, EscolaDaCarga>()
       for (const k of itens.filter((x) => x.cargaId === carga.id)) {
         const l = lotes.get(t(k.loteId))
-        const e = porLote.get(t(k.loteId)) ?? { loteId: t(k.loteId), escola: t(l?.escola), cidade: t(l?.cidade), uf: t(l?.uf), caixas: [], ...zero() }
+        const e = porLote.get(t(k.loteId)) ?? { ...dadosLote(t(k.loteId), l), caixas: [], ...zero() }
         const cx = caixas.get(t(k.caixaId))
         if (cx) e.caixas.push(cx)
         somar(e, k.albuns, k.posteres)
         porLote.set(e.loteId, e)
       }
-      const escolas = [...porLote.values()].sort((a, b) => a.escola.localeCompare(b.escola, 'pt-BR'))
+      const escolas = [...porLote.values()].sort(ordemLote)
       const total = zero()
       const vendidos = zero()
       const voltaram = zero()
@@ -82,11 +100,8 @@ export function resumoCargas(s: ErpState): CargaResumo[] {
     .sort((a, b) => n(b.carga.numero) - n(a.carga.numero))
 }
 
-export interface EstoqueEscola {
+export interface EstoqueEscola extends DadosLote {
   lote: Registro
-  escola: string
-  cidade: string
-  uf: string
   caixas: Registro[] // caixas conferidas (em estoque, em carga e acertadas)
   emEstoque: Quantidade & { caixas: Registro[] }
   emVenda: Quantidade & { caixas: Registro[]; cargas: Registro[] }
@@ -112,12 +127,10 @@ export function estoquePorEscola(s: ErpState): EstoqueEscola[] {
     const conferidas = todas.filter((c) => c.status !== 'Aguardando conferência')
     const acs = acertos.filter((a) => a.loteId === lote.id)
     const evs = envios.filter((e) => e.loteId === lote.id)
-    if (!conferidas.length && !acs.length && !evs.length) continue
+    if (!todas.length && !acs.length && !evs.length) continue // entra também a escola que só tem caixa a conferir
     const e: EstoqueEscola = {
       lote,
-      escola: t(lote.escola),
-      cidade: t(lote.cidade),
-      uf: t(lote.uf),
+      ...dadosLote(lote.id, lote),
       caixas: conferidas,
       emEstoque: { ...zero(), caixas: [] },
       emVenda: { ...zero(), caixas: [], cargas: [] },
@@ -151,7 +164,34 @@ export function estoquePorEscola(s: ErpState): EstoqueEscola[] {
     e.aguardandoRebolo = { albuns: e.voltaram.albuns - e.rebolo.albuns, posteres: e.voltaram.posteres - e.rebolo.posteres }
     lista.push(e)
   }
-  return lista.sort((a, b) => a.escola.localeCompare(b.escola, 'pt-BR'))
+  return lista.sort(ordemLote)
+}
+
+// O estoque de agora: as caixas conferidas que estão na empresa (não saíram com vendedor).
+// A etapa 6 "Na caixa" da Visão TV usa estes mesmos números — uma coisa acompanha a outra.
+export function estoqueAgora(s: ErpState): Quantidade & { escolas: number; caixas: number } {
+  const lotes = new Set<string>()
+  const q = { ...zero(), escolas: 0, caixas: 0 }
+  for (const c of colecao(s, 'producao_caixas')) {
+    if (c.status !== 'Em estoque') continue
+    somar(q, albunsDaCaixa(c), posteresDaCaixa(c))
+    q.caixas++
+    lotes.add(t(c.loteId))
+  }
+  q.escolas = lotes.size
+  return q
+}
+
+// Quanto o estoque mudou hoje (álbuns): caixas conferidas hoje e as que voltaram para o estoque − as que saíram na carga
+export function variacaoEstoqueHoje(s: ErpState, hojeISO: string): number {
+  let v = 0
+  for (const c of colecao(s, 'producao_caixas')) if (c.status !== 'Aguardando conferência' && t(c.conferidoEm).slice(0, 10) === hojeISO) v += albunsDaCaixa(c)
+  for (const m of colecao(s, 'estoque_movimentos')) {
+    if (!t(m.criadoEm) || diaLocal(t(m.criadoEm)) !== hojeISO) continue
+    if (m.tipo === 'Saiu na carga') v -= n(m.albuns)
+    else if (m.tipo === 'Voltou ao estoque' || m.tipo === 'Carga cancelada') v += n(m.albuns)
+  }
+  return v
 }
 
 // Situação de cada caixa conferida (para a lista de caixas da escola)
@@ -200,17 +240,17 @@ export function extratoDaEscola(s: ErpState, loteId: string): LinhaExtrato[] {
 // Caixas que podem entrar numa carga: em estoque, agrupadas por escola (cidade e escola em ordem)
 export function caixasDisponiveis(s: ErpState, alemDestas: string[] = []) {
   const lotes = new Map(colecao(s, 'producao_lotes').map((l) => [l.id, l]))
-  const grupos = new Map<string, { loteId: string; escola: string; cidade: string; uf: string; caixas: Registro[] }>()
+  const grupos = new Map<string, DadosLote & { caixas: Registro[] }>()
   for (const c of colecao(s, 'producao_caixas')) {
     if (c.status !== 'Em estoque' && !alemDestas.includes(c.id)) continue
     const l = lotes.get(t(c.loteId))
-    const g = grupos.get(t(c.loteId)) ?? { loteId: t(c.loteId), escola: t(l?.escola), cidade: t(l?.cidade), uf: t(l?.uf), caixas: [] }
+    const g = grupos.get(t(c.loteId)) ?? { ...dadosLote(t(c.loteId), l), caixas: [] }
     g.caixas.push(c)
     grupos.set(g.loteId, g)
   }
   return [...grupos.values()]
     .map((g) => ({ ...g, caixas: g.caixas.sort((a, b) => n(a.numero) - n(b.numero)) }))
-    .sort((a, b) => `${a.cidade} ${a.escola}`.localeCompare(`${b.cidade} ${b.escola}`, 'pt-BR'))
+    .sort((a, b) => a.cidade.localeCompare(b.cidade, 'pt-BR') || ordemLote(a, b))
 }
 
 // Vendedores que levam carga: os vendedores de books (cadastro em ADM › Vendedores externos)

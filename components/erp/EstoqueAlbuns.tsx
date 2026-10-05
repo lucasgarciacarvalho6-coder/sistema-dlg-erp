@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import type { ErpState } from '@/lib/erp/types'
 import { dataBR, num } from '@/lib/erp/format'
-import { extratoDaEscola, situacaoDaCaixa, albunsDaCaixa, posteresDaCaixa, type EstoqueEscola, type Quantidade } from '@/lib/erp/estoque'
+import { extratoDaEscola, situacaoDaCaixa, albunsDaCaixa, posteresDaCaixa, rotuloLote, type EstoqueEscola, type Quantidade } from '@/lib/erp/estoque'
 import { colecao } from '@/lib/erp/metrics'
 import { desfazerEnvioRebolo, enviarRebolo } from '@/lib/erp/store'
 import { EmptyState, Modal, Panel, btnPrimario, btnSecundario, inputCls, labelCls } from './ui'
@@ -82,7 +82,8 @@ export function TabelaEstoqueEscolas({ escolas, onAbrir }: { escolas: EstoqueEsc
                     <p className="text-white font-bold">{e.escola}</p>
                     <p className="text-[11px] text-zinc-500">
                       {e.cidade}
-                      {e.uf ? `-${e.uf}` : ''} • {num(e.caixas.length)} caixa(s) conferida(s)
+                      {e.uf ? `-${e.uf}` : ''}
+                      {rotuloLote(e) ? ` • ${rotuloLote(e)}` : ''} • {num(e.caixas.length)} caixa(s) conferida(s)
                       {e.aguardandoConferencia ? ` • ${e.aguardandoConferencia} a conferir na Produção` : ''}
                     </p>
                   </td>
@@ -147,7 +148,7 @@ export function FichaEstoqueEscola({ s, e, podeMexer, onFechar }: { s: ErpState;
     </div>
   )
   return (
-    <Modal aberto titulo={e.escola} subtitulo={`${e.cidade}${e.uf ? `-${e.uf}` : ''} • estoque de álbuns`} onFechar={onFechar} largura="max-w-4xl" rodape={<button onClick={onFechar} className={btnSecundario}>Fechar</button>}>
+    <Modal aberto titulo={e.escola} subtitulo={`${e.cidade}${e.uf ? `-${e.uf}` : ''}${rotuloLote(e) ? ` • ${rotuloLote(e)}` : ''} • estoque de álbuns`} onFechar={onFechar} largura="max-w-4xl" rodape={<button onClick={onFechar} className={btnSecundario}>Fechar</button>}>
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {numero('Em estoque', e.emEstoque)}
         {numero('Em venda', e.emVenda)}
