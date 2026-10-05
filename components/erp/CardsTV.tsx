@@ -30,6 +30,7 @@ const VERDE = STATUS.bom.cor
 const AMARELO = STATUS.atencao.cor
 const VERMELHO = STATUS.critico.cor
 const AZUL = '#3b82f6'
+const UMA_CASA = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }) // 12,5
 const reais = (v: number) => brl(v).replace(/\s/g, ' ').replace(/,00$/, '') // TV: sem os centavos redondos
 
 // o card inteiro vira um "container" de tamanho: fontes e gráficos em cqmin acompanham o espaço
@@ -37,20 +38,30 @@ const tamanho: CSSProperties = { containerType: 'size' }
 
 const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: '✕ Abaixo' } as const
 
-// Barrinhas por dia (cor de cada dia vem de quem chama); futuro = trilho vazio; hoje com contorno
+// Barrinhas por dia (cor de cada dia vem de quem chama); futuro = trilho vazio; hoje com contorno.
+// rotulo: o número de cada dia em cima da barra (pedido de 05/10/2026, para acompanhar a meta do dia);
+// a letra acompanha a largura do card e a quantidade de dias, para os números caberem sem encavalar.
 // diasGrandes: todos os dias com o número maior (a letra acompanha a largura do card)
 function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
-  const max = Math.max(1, ...valores.map((v) => v ?? 0)) * 1.2
-  const fonteDias = diasGrandes ? { fontSize: `clamp(8px, ${(88 / Math.max(1, dias.length) / 1.35).toFixed(2)}cqw, 16px)` } : undefined
+  const max = Math.max(1, ...valores.map((v) => v ?? 0))
+  const n = Math.max(1, dias.length)
+  const fonteDias = diasGrandes ? { fontSize: `clamp(8px, ${(88 / n / 1.35).toFixed(2)}cqw, 16px)` } : undefined
+  // largura do maior número em "em" (vírgula e ponto são estreitos), para a letra ficar o maior possível sem encavalar
+  const largura = (t: string) => [...t].reduce((a, ch) => a + (ch === ',' || ch === '.' ? 0.3 : 0.62), 0.1)
+  const maior = Math.max(1.3, ...valores.map((v) => (rotulo && v !== null ? largura(rotulo(v)) : 0)))
+  const fonteNumeros = { fontSize: `clamp(7px, ${(84 / n / maior).toFixed(2)}cqw, 14px)` }
+  const espaco = rotulo ? '1.3em' : '0px' // lugar do número em cima da barra mais alta
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 flex items-end gap-[2px]">
+      <div className="flex-1 min-h-0 flex items-end gap-[2px]" style={rotulo ? fonteNumeros : undefined}>
         {valores.map((v, i) => (
           <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null ? '' : `: ${rotulo ? rotulo(v) : num(v)}`}`}>
-            {rotulo && v !== null && v > 0 && <span className="hidden @sm:block font-bold text-zinc-300 leading-none mb-[1px] whitespace-nowrap text-[clamp(7px,2.4cqmin,11px)]">{rotulo(v)}</span>}
+            {rotulo && v !== null && (
+              <span className={`font-black leading-none mb-[0.2em] whitespace-nowrap ${v > 0 ? 'text-zinc-100' : 'text-zinc-600'}`}>{rotulo(v)}</span>
+            )}
             <div
               className={`w-full rounded-t-[3px] ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
-              style={{ height: v === null ? '2px' : `${Math.max(v > 0 ? 4 : 2, (v / max) * 100)}%`, backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : cor(v, i) }}
+              style={{ height: v === null ? '2px' : `max(${v > 0 ? 4 : 2}px, calc((100% - ${espaco}) * ${(v / max).toFixed(3)}))`, backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : cor(v, i) }}
             ></div>
           </div>
         ))}
@@ -114,6 +125,8 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
   const f = (v: number) => formatar(v, ind.unidade).replace(/,00$/, '')
   const hj = hoje()
   const valores = d.uteis.map((dia) => (dia <= hj ? (d.serie[Number(dia.slice(8)) - 1] ?? 0) : null))
+  // número em cima da barra de cada dia: quantidade inteira; R$ curto (850 • 12,5k) para caber na barrinha
+  const doDia = (v: number) => (ind.unidade === 'brl' && v >= 1000 ? `${UMA_CASA.format(v / 1000)}k` : num(v))
   return (
     <div style={tamanho} className="h-full w-full min-h-0">
       <div
@@ -172,7 +185,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
         </div>
 
         {/* dias úteis */}
-        <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+        <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
       </div>
     </div>
   )
