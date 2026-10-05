@@ -1,7 +1,7 @@
 'use client'
 
 // Card da Produção na Visão TV: as etapas das escolas como na planilha da empresa —
-// etapa • barra com os álbuns na frente • escolas • variação de hoje (verde = chegou, vermelho = saiu).
+// etapa • barra com os álbuns na frente • escolas (a coluna "Hoje" saiu em 05/10/2026: embolava o card).
 // Etapas neutras (regra do ADM: cor só para alerta). A linha fica VERMELHA com entrega do editor atrasada
 // e AMARELA com escola parada na etapa além do prazo (2, 3 ou 5 dias úteis). No fim, a linha "Atrasadas".
 // O card é um "container" de tamanho: letras e barras acompanham o espaço que a tela dá para ele.
@@ -16,8 +16,8 @@ const tamanho: CSSProperties = { containerType: 'size' }
 const VERDE = STATUS.bom.cor
 const AMARELO = STATUS.atencao.cor
 const VERMELHO = STATUS.critico.cor
-// etapa • álbuns • escolas • hoje
-const COLUNAS = 'minmax(0, 44fr) minmax(0, 36fr) minmax(0, 9fr) minmax(0, 11fr)'
+// etapa • álbuns • escolas
+const COLUNAS = 'minmax(0, 44fr) minmax(0, 46fr) minmax(0, 10fr)'
 
 // cor da linha: só quando há alerta
 const corDaLinha = (l: LinhaPainel) => (l.atrasadas > 0 ? VERMELHO : l.paradas > 0 ? AMARELO : null)
@@ -30,18 +30,6 @@ function NomeEtapa({ nome }: { nome: string }) {
     <>
       {m[1]} <span className="text-[0.68em] whitespace-nowrap">{m[2]}</span>
     </>
-  )
-}
-
-// variação de hoje (pedido do usuário): verde = álbuns que chegaram na etapa, vermelho = que saíram
-function Variacao({ v }: { v: number | null }) {
-  if (v === null) return <span className="text-zinc-600">—</span>
-  if (v === 0) return <span className="font-black text-zinc-500">0</span>
-  return (
-    <span className="font-black whitespace-nowrap" style={{ color: v > 0 ? VERDE : VERMELHO }}>
-      {v > 0 ? '+' : '−'}
-      {num(Math.abs(v))}
-    </span>
   )
 }
 
@@ -74,11 +62,6 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
             <p className="font-black text-white whitespace-nowrap text-[clamp(12px,4.4cqmin,32px)]">
               {num(total.albuns)}
               <span className="text-zinc-400 text-[0.55em]"> álbuns • {num(total.escolas)} escolas</span>
-              {total.variacao !== null && (
-                <span className="text-[0.6em] ml-[1cqmin]">
-                  <Variacao v={total.variacao} />
-                </span>
-              )}
             </p>
           </div>
         </div>
@@ -88,7 +71,6 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
           <span>Etapa</span>
           <span>Álbuns</span>
           <span className="text-center">Escolas</span>
-          <span className="text-right">Hoje</span>
         </div>
 
         {/* uma linha por etapa: a barra é do tamanho dos álbuns e o número vem na frente */}
@@ -132,9 +114,6 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
                   )}
                 </div>
                 <span className="text-center font-black text-zinc-200 text-[clamp(10px,3.2cqmin,24px)]">{num(l.escolas)}</span>
-                <span className="text-right text-[clamp(10px,3.2cqmin,24px)]">
-                  <Variacao v={l.variacao} />
-                </span>
               </div>
             )
           })}
@@ -178,14 +157,12 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
             <span className="text-center font-black text-[clamp(10px,3.2cqmin,24px)] text-zinc-200" style={corFora ? { color: corFora } : undefined}>
               {num(fora.escolas)}
             </span>
-            <span className="text-right text-[clamp(10px,3.2cqmin,24px)] text-zinc-600">—</span>
           </div>
         </div>
 
         {!compacto && (
           <p className="font-bold text-zinc-500 truncate text-[clamp(7px,1.8cqmin,12px)]">
-            <span style={{ color: VERMELHO }}>Vermelho</span> = editor atrasado • <span style={{ color: AMARELO }}>Amarelo</span> = parada além do prazo (2, 3 ou 5 dias úteis) • Hoje:{' '}
-            <span style={{ color: VERDE }}>chegou</span> / <span style={{ color: VERMELHO }}>saiu</span> desde ontem • Na caixa = o estoque de agora
+            <span style={{ color: VERMELHO }}>Vermelho</span> = editor atrasado • <span style={{ color: AMARELO }}>Amarelo</span> = parada além do prazo (2, 3 ou 5 dias úteis) • Na caixa = o estoque de agora
           </p>
         )}
       </div>
