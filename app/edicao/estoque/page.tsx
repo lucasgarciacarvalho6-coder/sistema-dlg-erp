@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { atualizarRegistro, conferirCaixa, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
@@ -10,13 +10,17 @@ import { PALETA_CIDADES, corDaCidade, lotesProducao, nomeDaCor } from '@/lib/erp
 import { EmptyState, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import Icon from '@/components/erp/Icon'
 import { imprimirComprovantes, type Comprovante } from '@/components/edicao/comprovante'
+import { FichaEstoqueEscola, TabelaEstoqueEscolas } from '@/components/erp/EstoqueAlbuns'
+import { estoquePorEscola } from '@/lib/erp/estoque'
 
 // PRODUÇÃO › Estoque: a Revelação solta as caixas (app dela) → a Produção confere cada caixa →
 // confirmou: imprime o comprovante (etiqueta na COR DA CIDADE: cidade, escola, álbuns e pôster/brindes),
 // lacra e a caixa entra no ESTOQUE. Cada cidade tem a sua cor (dá para trocar em "Cores das cidades").
 // Dá para marcar vários comprovantes e imprimir juntos: 2 por folha A4 (economiza a folha).
+// Situação por escola (SÓ PARA CONFERIR): as caixas que saíram com os vendedores, vendidos, o que voltou e o Rebolo.
+// Quem monta a carga, acerta e encaminha ao Rebolo é o Financeiro (Financeiro › Estoque e Cargas).
 
-type Aba = 'conferir' | 'estoque'
+type Aba = 'conferir' | 'estoque' | 'situacao'
 const cidadeDe = (l?: Registro) => (l ? `${String(l.cidade)}${l.uf ? `/${String(l.uf)}` : ''}` : '')
 
 // bolinha com a cor da cidade (a mesma do comprovante)
@@ -36,14 +40,17 @@ export default function EstoquePage() {
   const [cidade, setCidade] = useState('')
   const [conferidas, setConferidas] = useState<string[]>([]) // conferidas agora: botão do comprovante no topo
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set()) // comprovantes marcados para imprimir juntos
+  const [fichaEscola, setFichaEscola] = useState<string | null>(null) // situação por escola (só ver)
+  const situacao = useMemo(() => estoquePorEscola(s), [s])
 
   const lotes = new Map(lotesProducao(s).map((l) => [l.id, l]))
   const nome = (id: unknown) => s.colaboradores.find((c) => c.id === id)?.nome ?? ''
   const caixas = colecao(s, 'producao_caixas').filter((c) => lotes.has(String(c.loteId)))
-  const aguardando = caixas.filter((c) => c.status !== 'Em estoque')
+  const aguardando = caixas.filter((c) => c.status === 'Aguardando conferência')
   // amarelo só quando tem caixa esperando a conferência há mais de 1 dia útil (mesma regra do gerente virtual)
   const aguardandoMaisDeUmDia = aguardando.some((c) => diasUteisDepois(String(c.data).slice(0, 10), hoje()) > 1)
   const estoque = caixas.filter((c) => c.status === 'Em estoque')
+  const comVendedores = caixas.filter((c) => c.status === 'Em carga') // saíram na carga do Financeiro
   const cidades = [...new Set(caixas.map((c) => cidadeDe(lotes.get(String(c.loteId)))).filter(Boolean))].sort()
   const soma = (ls: Registro[], campo: string) => ls.reduce((a, c) => a + (Number(c[campo]) || 0), 0)
 
@@ -117,9 +124,10 @@ export default function EstoquePage() {
         descricao="As caixas que a Revelação solta chegam aqui. Confira os álbuns de cada caixa, confirme, imprima o comprovante, lacre e a caixa entra no estoque."
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <StatCard tom={aguardandoMaisDeUmDia ? 'yellow' : 'zinc'} label="Aguardando conferência" valor={num(aguardando.length)} detalhe={`caixa(s) • ${num(soma(aguardando, 'albuns'))} álbuns`} />
         <StatCard label="Em estoque" valor={num(estoque.length)} detalhe={`caixa(s) • ${num(estoque.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0))} álbuns`} />
+        <StatCard label="Com os vendedores" valor={num(comVendedores.length)} detalhe={`caixa(s) em venda • ${num(comVendedores.reduce((a, c) => a + (Number(c.conferidoAlbuns ?? c.albuns) || 0), 0))} álbuns`} />
       </div>
 
       {/* acabou de conferir: o comprovante para imprimir e lacrar */}
@@ -155,8 +163,9 @@ export default function EstoquePage() {
         <div className="flex gap-2 overflow-x-auto custom-scrollbar">
           {aba1('conferir', 'Aguardando conferência', aguardando.length)}
           {aba1('estoque', 'Em estoque', estoque.length)}
+          {aba1('situacao', 'Situação por escola', situacao.length)}
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className={`flex flex-col sm:flex-row gap-3 ${aba === 'situacao' ? 'hidden' : ''}`}>
           <div className="relative sm:w-80">
             <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, responsável ou cidade" className={`${inputCls} !py-2.5 pl-10`} />
@@ -186,8 +195,16 @@ export default function EstoquePage() {
               ))
           )}
         </div>
-      ) : (
+      ) : aba === 'estoque' ? (
         <EmEstoque caixas={filtrar(estoque)} lotes={lotes} nome={nome} corDe={corDe} onImprimir={comprovante} marcadas={marcadas} onAlternar={alternar} onMarcarTodas={marcarTodas} />
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-zinc-400">Só para conferir se bate com as caixas: quem monta a carga do vendedor, acerta na volta e encaminha ao Rebolo é o Financeiro.</p>
+          <TabelaEstoqueEscolas escolas={situacao} onAbrir={setFichaEscola} />
+        </div>
+      )}
+      {fichaEscola && situacao.find((e) => e.lote.id === fichaEscola) && (
+        <FichaEstoqueEscola s={s} e={situacao.find((e) => e.lote.id === fichaEscola)!} podeMexer={false} onFechar={() => setFichaEscola(null)} />
       )}
 
       <CoresDasCidades />

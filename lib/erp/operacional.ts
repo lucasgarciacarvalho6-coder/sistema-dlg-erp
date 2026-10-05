@@ -103,6 +103,7 @@ export function historicoDoCadastro(s: ErpState, colecaoNome: string, r: Registr
     if (colecao(s, 'contratos_escola').some((c) => c.vendedorId === r.id)) return 'contratos de escola'
     if (visitas.some((v) => v.vendedorId === r.id)) return 'visitas na agenda'
     if (fech.some((f) => f.tipo === 'vendedor' && f.refId === r.id)) return 'fechamentos'
+    if (colecao(s, 'estoque_cargas').some((c) => c.vendedorId === r.id)) return 'cargas de álbuns'
     if (colecao(s, 'rotas').some((x) => x.vendedorId === r.id)) return 'rotas'
     if (colecao(s, 'documentos_externos').some((x) => x.vendedorId === r.id)) return 'documentos enviados pelo app'
     if (colecao(s, 'vendas_ebooks').some((x) => x.vendedorExternoId === r.id)) return 'vendas de books'

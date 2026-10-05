@@ -1360,3 +1360,240 @@ export function registrarEnvioRebolo(d: ErpState, fichaId: string, rastreio: str
   auditar(d, ctx, 'EDITAR', `Álbum enviado (rastreio ${f.rastreio}): ficha ${f.numeroFicha}`, 'rebolo')
   return null
 }
+
+// =====================================================================
+// ESTOQUE DE ÁLBUNS E CARGAS DOS VENDEDORES DE BOOKS (mesmas regras do SQL 029)
+// Só o Financeiro mexe: carga (vendedor + caixas de várias escolas) → em venda → acerto na volta → Rebolo.
+// =====================================================================
+
+const vazioCx = (v: unknown) => v === '' || v === null || v === undefined
+const albunsCx = (c: Registro) => Number(vazioCx(c.conferidoAlbuns) ? c.albuns : c.conferidoAlbuns) || 0
+const posteresCx = (c: Registro) => Number(vazioCx(c.conferidoPosteres) ? c.posteres : c.conferidoPosteres) || 0
+const nomeEscola = (d: ErpState, loteId: unknown) => String(col(d, 'producao_lotes').find((l) => l.id === loteId)?.escola ?? '')
+
+// extrato: uma linha por escola com as caixas da carga
+function movCaixas(d: ErpState, carga: Registro, caixaIds: string[], tipo: string, ctx: Contexto, texto = '') {
+  const porLote = new Map<string, { albuns: number; posteres: number; numeros: number[] }>()
+  for (const k of col(d, 'estoque_carga_caixas').filter((x) => x.cargaId === carga.id && caixaIds.includes(String(x.caixaId)))) {
+    const g = porLote.get(String(k.loteId)) ?? { albuns: 0, posteres: 0, numeros: [] }
+    g.albuns += Number(k.albuns) || 0
+    g.posteres += Number(k.posteres) || 0
+    g.numeros.push(Number(col(d, 'producao_caixas').find((c) => c.id === k.caixaId)?.numero) || 0)
+    porLote.set(String(k.loteId), g)
+  }
+  for (const [loteId, g] of porLote)
+    inserir(d, 'estoque_movimentos', {
+      loteId,
+      cargaId: carga.id,
+      tipo,
+      albuns: g.albuns,
+      posteres: g.posteres,
+      descricao: `Carga ${carga.numero} • ${carga.vendedor} • caixa(s) ${g.numeros.sort((a, b) => a - b).join(', ')}${texto ? ` • ${texto}` : ''}`,
+      autor: ctx.autorNome,
+    })
+}
+
+function conferirCaixasDemo(d: ErpState, ids: string[]): string | null {
+  const cxs = col(d, 'producao_caixas').filter((c) => ids.includes(c.id))
+  if (cxs.length !== ids.length) return 'Alguma caixa não foi encontrada: atualize a tela.'
+  const fora = cxs.filter((c) => c.status !== 'Em estoque').map((c) => `${nomeEscola(d, c.loteId)} (caixa ${c.numero})`)
+  return fora.length ? `Estas caixas não estão no estoque: ${fora.join(', ')}.` : null
+}
+
+function colocarNaCarga(d: ErpState, carga: Registro, ids: string[]) {
+  for (const c of col(d, 'producao_caixas').filter((x) => ids.includes(x.id))) {
+    inserir(d, 'estoque_carga_caixas', { cargaId: carga.id, caixaId: c.id, loteId: c.loteId, albuns: albunsCx(c), posteres: posteresCx(c) })
+    c.status = 'Em carga'
+  }
+}
+
+const vendedorDeBooks = (d: ErpState, id: string) => col(d, 'pj_vendedores').find((v) => v.id === id && v.tipo === 'Books')
+
+export function criarCarga(d: ErpState, vendedorId: string, caixaIds: string[], rota: string, observacao: string, ctx: Contexto): { erro: string } | { id: string } {
+  const vd = vendedorDeBooks(d, vendedorId)
+  if (!vd) return { erro: 'Escolha o vendedor de books da carga.' }
+  const ids = [...new Set(caixaIds)]
+  if (!ids.length) return { erro: 'Escolha as caixas da carga.' }
+  const erro = conferirCaixasDemo(d, ids)
+  if (erro) return { erro }
+  const numero = Math.max(0, ...col(d, 'estoque_cargas').map((c) => Number(c.numero) || 0)) + 1
+  const carga = inserir(d, 'estoque_cargas', {
+    numero,
+    vendedorId: vd.id,
+    vendedor: vd.nome,
+    rota: rota.trim(),
+    observacao: observacao.trim(),
+    dataSaida: hoje(),
+    status: 'Em venda',
+    criadaPor: ctx.autorNome,
+    acertoEm: '',
+    acertoPor: '',
+    acertoObs: '',
+    canceladaEm: '',
+    canceladaPor: '',
+    motivoCancelamento: '',
+  })
+  colocarNaCarga(d, carga, ids)
+  movCaixas(d, carga, ids, 'Saiu na carga', ctx)
+  auditar(d, ctx, 'CRIAR', `Carga ${numero} montada: ${vd.nome} (${ids.length} caixa(s))`, 'financeiro')
+  return { id: carga.id }
+}
+
+export interface EdicaoCarga {
+  vendedorId: string
+  adicionar: string[]
+  remover: string[]
+  rota: string
+  observacao: string
+}
+
+export function editarCarga(d: ErpState, cargaId: string, x: EdicaoCarga, ctx: Contexto): string | null {
+  const c = col(d, 'estoque_cargas').find((r) => r.id === cargaId)
+  if (!c) return 'Carga não encontrada.'
+  if (c.status !== 'Em venda') return `Só dá para mudar uma carga em venda (esta está "${c.status}").`
+  const naCarga = () => col(d, 'estoque_carga_caixas').filter((k) => k.cargaId === c.id).map((k) => String(k.caixaId))
+  const remover = [...new Set(x.remover)].filter((id) => naCarga().includes(id))
+  const adicionar = [...new Set(x.adicionar)].filter((id) => !naCarga().includes(id))
+  if (naCarga().filter((id) => !remover.includes(id)).length + adicionar.length === 0) return 'A carga ficaria sem caixas: use "Cancelar carga".'
+  if (adicionar.length) {
+    const erro = conferirCaixasDemo(d, adicionar)
+    if (erro) return erro
+  }
+  if (x.vendedorId && x.vendedorId !== c.vendedorId) {
+    const vd = vendedorDeBooks(d, x.vendedorId)
+    if (!vd) return 'Escolha o vendedor de books da carga.'
+    for (const loteId of new Set(col(d, 'estoque_carga_caixas').filter((k) => k.cargaId === c.id).map((k) => String(k.loteId))))
+      inserir(d, 'estoque_movimentos', { loteId, cargaId: c.id, tipo: 'Vendedor trocado', albuns: 0, posteres: 0, descricao: `Carga ${c.numero}: ${c.vendedor} → ${vd.nome}`, autor: ctx.autorNome })
+    c.vendedorId = vd.id
+    c.vendedor = vd.nome
+  }
+  if (remover.length) {
+    movCaixas(d, c, remover, 'Voltou ao estoque', ctx, 'tirada(s) da carga')
+    d.colecoes.estoque_carga_caixas = col(d, 'estoque_carga_caixas').filter((k) => !(k.cargaId === c.id && remover.includes(String(k.caixaId))))
+    for (const cx of col(d, 'producao_caixas').filter((r) => remover.includes(r.id) && r.status === 'Em carga')) cx.status = 'Em estoque'
+  }
+  if (adicionar.length) {
+    colocarNaCarga(d, c, adicionar)
+    movCaixas(d, c, adicionar, 'Saiu na carga', ctx, 'colocada(s) na carga')
+  }
+  c.rota = x.rota.trim()
+  c.observacao = x.observacao.trim()
+  auditar(d, ctx, 'EDITAR', `Carga ${c.numero} alterada`, 'financeiro')
+  return null
+}
+
+export function cancelarCarga(d: ErpState, cargaId: string, motivo: string, ctx: Contexto): string | null {
+  if (!motivo.trim()) return 'Informe o motivo do cancelamento.'
+  const c = col(d, 'estoque_cargas').find((r) => r.id === cargaId)
+  if (!c) return 'Carga não encontrada.'
+  if (c.status !== 'Em venda') return `Só dá para cancelar uma carga em venda (esta está "${c.status}").`
+  const ids = col(d, 'estoque_carga_caixas').filter((k) => k.cargaId === c.id).map((k) => String(k.caixaId))
+  movCaixas(d, c, ids, 'Carga cancelada', ctx, `voltou para o estoque • motivo: ${motivo.trim()}`)
+  for (const cx of col(d, 'producao_caixas').filter((r) => ids.includes(r.id) && r.status === 'Em carga')) cx.status = 'Em estoque'
+  Object.assign(c, { status: 'Cancelada', canceladaEm: hoje(), canceladaPor: ctx.autorNome, motivoCancelamento: motivo.trim() })
+  auditar(d, ctx, 'EDITAR', `Carga ${c.numero} cancelada: ${motivo.trim()}`, 'financeiro')
+  return null
+}
+
+export interface AcertoDigitado {
+  loteId: string
+  albunsVendidos: number
+  albunsVoltaram: number
+  posteresVendidos: number
+  posteresVoltaram: number
+  observacao: string
+}
+
+export function acertarCarga(d: ErpState, cargaId: string, escolas: AcertoDigitado[], observacao: string, ctx: Contexto): string | null {
+  const c = col(d, 'estoque_cargas').find((r) => r.id === cargaId)
+  if (!c) return 'Carga não encontrada.'
+  if (c.status !== 'Em venda') return `Só dá para acertar uma carga em venda (esta está "${c.status}").`
+  const itens = col(d, 'estoque_carga_caixas').filter((k) => k.cargaId === c.id)
+  const lotes = [...new Set(itens.map((k) => String(k.loteId)))].sort((a, b) => nomeEscola(d, a).localeCompare(nomeEscola(d, b), 'pt-BR'))
+  if (escolas.some((e) => !lotes.includes(e.loteId))) return 'Tem escola no acerto que não está nesta carga: atualize a tela.'
+  const linhas: Omit<Registro, 'id' | 'criadoEm'>[] = []
+  for (const loteId of lotes) {
+    const escola = nomeEscola(d, loteId)
+    const e = escolas.find((x) => x.loteId === loteId)
+    if (!e) return `Informe o acerto de ${escola}.`
+    const daEscola = itens.filter((k) => k.loteId === loteId)
+    const levA = daEscola.reduce((a, k) => a + (Number(k.albuns) || 0), 0)
+    const levP = daEscola.reduce((a, k) => a + (Number(k.posteres) || 0), 0)
+    const [av, ar, pv, pr] = [e.albunsVendidos, e.albunsVoltaram, e.posteresVendidos, e.posteresVoltaram].map((v) => Number(v))
+    if ([av, ar, pv, pr].some((v) => !Number.isInteger(v) || v < 0)) return `${escola}: informe os álbuns vendidos e os que voltaram (0 ou mais).`
+    if (av + ar > levA) return `${escola}: vendidos + voltaram (${av + ar} álbuns) passa do que foi levado (${levA}).`
+    if (pv + pr > levP) return `${escola}: vendidos + voltaram (${pv + pr} pôsteres/brindes) passa do que foi levado (${levP}).`
+    linhas.push({ cargaId: c.id, loteId, albunsLevados: levA, posteresLevados: levP, albunsVendidos: av, albunsVoltaram: ar, posteresVendidos: pv, posteresVoltaram: pr, albunsDiferenca: levA - av - ar, posteresDiferenca: levP - pv - pr, observacao: e.observacao.trim() })
+  }
+  const texto = `Carga ${c.numero} • ${c.vendedor}`
+  for (const l of linhas) {
+    inserir(d, 'estoque_carga_acertos', l)
+    const mov = (tipo: string, albuns: number, posteres: number, descricao: string) => {
+      if (albuns + posteres > 0) inserir(d, 'estoque_movimentos', { loteId: l.loteId, cargaId: c.id, tipo, albuns, posteres, descricao, autor: ctx.autorNome })
+    }
+    mov('Vendidos', Number(l.albunsVendidos), Number(l.posteresVendidos), texto)
+    mov('Voltaram', Number(l.albunsVoltaram), Number(l.posteresVoltaram), `${texto} • aguardando o Rebolo`)
+    mov('Diferença', Math.max(0, Number(l.albunsDiferenca)), Math.max(0, Number(l.posteresDiferenca)), `${texto}${l.observacao ? ` • ${l.observacao}` : ''}`)
+  }
+  const ids = itens.map((k) => String(k.caixaId))
+  for (const cx of col(d, 'producao_caixas').filter((r) => ids.includes(r.id))) cx.status = 'Acertada'
+  Object.assign(c, { status: 'Encerrada', acertoEm: hoje(), acertoPor: ctx.autorNome, acertoObs: observacao.trim() })
+  auditar(d, ctx, 'EDITAR', `Carga ${c.numero} acertada`, 'financeiro')
+  return null
+}
+
+// o que voltou e ainda não foi encaminhado ao Rebolo (por escola); semCarga = sem o acerto desta carga
+function aguardandoRebolo(d: ErpState, loteId: string, semCarga = '') {
+  const voltou = col(d, 'estoque_carga_acertos').filter((a) => a.loteId === loteId && a.cargaId !== semCarga)
+  const foi = col(d, 'estoque_envios_rebolo').filter((r) => r.loteId === loteId)
+  const soma = (xs: Registro[], k: string) => xs.reduce((a, x) => a + (Number(x[k]) || 0), 0)
+  return { albuns: soma(voltou, 'albunsVoltaram') - soma(foi, 'albuns'), posteres: soma(voltou, 'posteresVoltaram') - soma(foi, 'posteres') }
+}
+
+export function desfazerAcerto(d: ErpState, cargaId: string, motivo: string, ctx: Contexto): string | null {
+  if (!motivo.trim()) return 'Informe o motivo.'
+  const c = col(d, 'estoque_cargas').find((r) => r.id === cargaId)
+  if (!c) return 'Carga não encontrada.'
+  if (c.status !== 'Encerrada') return 'Esta carga não foi acertada.'
+  const acs = col(d, 'estoque_carga_acertos').filter((a) => a.cargaId === c.id)
+  const bloq = acs.filter((a) => {
+    const r = aguardandoRebolo(d, String(a.loteId), c.id)
+    return r.albuns < 0 || r.posteres < 0
+  })
+  if (bloq.length) return `O que voltou desta carga já foi encaminhado ao Rebolo (${bloq.map((a) => nomeEscola(d, a.loteId)).join(', ')}): desfaça o envio ao Rebolo antes.`
+  for (const a of acs) inserir(d, 'estoque_movimentos', { loteId: a.loteId, cargaId: c.id, tipo: 'Acerto desfeito', albuns: 0, posteres: 0, descricao: `Carga ${c.numero} • ${c.vendedor} • motivo: ${motivo.trim()}`, autor: ctx.autorNome })
+  d.colecoes.estoque_carga_acertos = col(d, 'estoque_carga_acertos').filter((a) => a.cargaId !== c.id)
+  const ids = col(d, 'estoque_carga_caixas').filter((k) => k.cargaId === c.id).map((k) => String(k.caixaId))
+  for (const cx of col(d, 'producao_caixas').filter((r) => ids.includes(r.id))) cx.status = 'Em carga'
+  Object.assign(c, { status: 'Em venda', acertoEm: '', acertoPor: '', acertoObs: '' })
+  auditar(d, ctx, 'EDITAR', `Acerto da carga ${c.numero} desfeito: ${motivo.trim()}`, 'financeiro')
+  return null
+}
+
+export function enviarRebolo(d: ErpState, loteId: string, albuns: number, posteres: number, observacao: string, ctx: Contexto): string | null {
+  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
+  if (!l) return 'Escola não encontrada.'
+  if (!Number.isInteger(albuns) || !Number.isInteger(posteres) || albuns < 0 || posteres < 0 || albuns + posteres === 0) return 'Informe quantos álbuns (e pôsteres/brindes) vão para o Rebolo.'
+  const r = aguardandoRebolo(d, loteId)
+  if (albuns > r.albuns || posteres > r.posteres) return `Esta escola tem só ${r.albuns} álbuns e ${r.posteres} pôsteres/brindes aguardando o Rebolo.`
+  inserir(d, 'estoque_envios_rebolo', { loteId, albuns, posteres, data: hoje(), observacao: observacao.trim(), autor: ctx.autorNome })
+  inserir(d, 'estoque_movimentos', { loteId, cargaId: '', tipo: 'Enviado ao Rebolo', albuns, posteres, descricao: observacao.trim() || 'O Rebolo pega as caixas e tenta vender', autor: ctx.autorNome })
+  notificar(d, ctx, {
+    setores: ['rebolo'],
+    tipo: 'info',
+    titulo: 'Álbuns para o Rebolo',
+    descricao: `${l.escola} (${l.cidade}): ${albuns} álbuns${posteres ? ` e ${posteres} pôsteres/brindes` : ''} voltaram das cargas e foram encaminhados ao Rebolo.`,
+    link: '/rebolo',
+  })
+  auditar(d, ctx, 'CRIAR', `Encaminhado ao Rebolo: ${l.escola} (${albuns} álbuns)`, 'financeiro')
+  return null
+}
+
+export function desfazerEnvioRebolo(d: ErpState, envioId: string, ctx: Contexto): string | null {
+  const r = col(d, 'estoque_envios_rebolo').find((x) => x.id === envioId)
+  if (!r) return 'Envio não encontrado.'
+  d.colecoes.estoque_envios_rebolo = col(d, 'estoque_envios_rebolo').filter((x) => x.id !== envioId)
+  inserir(d, 'estoque_movimentos', { loteId: r.loteId, cargaId: '', tipo: 'Envio ao Rebolo desfeito', albuns: r.albuns, posteres: r.posteres, descricao: `Envio de ${dataBR(String(r.data))} desfeito: voltou a ficar aguardando o Rebolo`, autor: ctx.autorNome })
+  auditar(d, ctx, 'EXCLUIR', `Envio ao Rebolo desfeito: ${nomeEscola(d, r.loteId)}`, 'financeiro')
+  return null
+}

@@ -7,7 +7,10 @@ import { addDias, hoje, isoData, uid } from './format'
 import { MATRIZ_PADRAO } from './permissions'
 import {
   APOS_CRIAR,
+  acertarCarga,
   atualizarVendaRebolo,
+  criarCarga,
+  enviarRebolo,
   baixarTitulo,
   col,
   conferirVendaBook,
@@ -29,7 +32,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 15 // v15: escolas dos contratos e da agenda no cadastro de escolas (Operações › Escolas)
+export const VERSAO_DADOS = 16 // v16: estoque de álbuns e cargas dos vendedores de books (Financeiro › Estoque e Cargas)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -713,6 +716,45 @@ export function gerarSeed(): ErpState {
     tipo: 'Desconto rebolo', setorOrigem: 'rebolo', descricao: 'Exemplo de pedido de desconto (demonstração)', valor: 0, refColecao: 'rebolo_fichas', refId: '',
     solicitante: 'Tainá Moreira', status: 'Rejeitado', decididoPor: 'Mariana Duarte', decididoEm: addDias(hojeISO, -5),
   })
+
+  // Estoque e cargas (demo do SQL 029): uma carga já acertada (o que voltou foi em parte para o Rebolo) e uma em venda
+  const ctxFin: Contexto = { autorId: 'u-fi1', autorNome: 'Eduardo Nunes', autorSetor: 'financeiro', silencioso: true }
+  const livros = col(s, 'pj_vendedores').filter((v) => v.tipo === 'Books')
+  const noEstoque = (loteId: string) => col(s, 'producao_caixas').filter((c) => c.loteId === loteId && c.status === 'Em estoque').map((c) => c.id)
+  const lotesComCaixa = [...new Set(col(s, 'producao_caixas').filter((c) => c.status === 'Em estoque').map((c) => String(c.loteId)))]
+  // datas da demonstração: a carga sai no dia em que a Produção conferiu a última caixa dela (nunca antes)
+  const saidaDe = (ids: string[]) =>
+    col(s, 'producao_caixas')
+      .filter((c) => ids.includes(c.id))
+      .map((c) => String(c.conferidoEm || hojeISO))
+      .sort()
+      .at(-1) ?? hojeISO
+  const as = (dia: string, hora: number) => `${dia}T${String(hora).padStart(2, '0')}:00:00.000Z`
+  if (livros.length >= 2 && lotesComCaixa.length >= 3) {
+    const [la, lb, lc] = lotesComCaixa
+    const ids1 = noEstoque(la)
+    const c1 = criarCarga(s, livros[1].id, ids1, 'Oeste do Paraná', '', ctxFin)
+    if ('id' in c1) {
+      const carga = col(s, 'estoque_cargas').find((x) => x.id === c1.id)!
+      const levados = col(s, 'estoque_carga_caixas')
+        .filter((k) => k.cargaId === c1.id)
+        .reduce((a, k) => a + (Number(k.albuns) || 0), 0)
+      const vendidos = Math.round(levados * 0.7)
+      const voltaram = Math.max(0, levados - vendidos - 1)
+      acertarCarga(s, c1.id, [{ loteId: la, albunsVendidos: vendidos, albunsVoltaram: voltaram, posteresVendidos: 0, posteresVoltaram: 0, observacao: '1 álbum danificado na viagem' }], '', ctxFin)
+      enviarRebolo(s, la, Math.min(voltaram, 10), 0, '', ctxFin)
+      const saida = saidaDe(ids1)
+      carga.dataSaida = saida
+      for (const m of col(s, 'estoque_movimentos').filter((x) => x.loteId === la)) m.criadoEm = m.tipo === 'Saiu na carga' ? as(saida, 10) : as(hojeISO, m.tipo === 'Enviado ao Rebolo' ? 15 : 11)
+    }
+    const ids2 = [...noEstoque(lb), ...noEstoque(lc).slice(0, 1)]
+    const c2 = criarCarga(s, livros[0].id, ids2, 'Noroeste do PR e interior de SP', '', ctxFin)
+    if ('id' in c2) {
+      const saida = saidaDe(ids2)
+      col(s, 'estoque_cargas').find((x) => x.id === c2.id)!.dataSaida = saida
+      for (const m of col(s, 'estoque_movimentos').filter((x) => x.cargaId === c2.id)) m.criadoEm = as(saida, 10)
+    }
+  }
 
   // escolas dos contratos entram no cadastro de escolas (como o SQL 027 faz no banco)
   for (const c of col(s, 'contratos_escola')) registrarEscolaDemo(s, c)

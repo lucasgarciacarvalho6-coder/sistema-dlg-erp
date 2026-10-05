@@ -56,6 +56,12 @@ export const COLUNAS: Record<string, string[]> = {
   producao_caixas: [], // caixas da Revelação: mudam só pelas funções do banco (SQL 023)
   producao_cores_cidade: ['cor'], // cor de cada cidade no comprovante (a 1ª vem do banco; a Produção pode trocar)
   producao_fotos: [], // fotos de cada fotógrafo na escola: lança pela função do banco (SQL 025)
+  // ---- Estoque de álbuns e cargas dos vendedores de books: mudam só pelas funções do banco (SQL 029) ----
+  estoque_cargas: [],
+  estoque_carga_caixas: [],
+  estoque_carga_acertos: [],
+  estoque_envios_rebolo: [],
+  estoque_movimentos: [],
 }
 
 // Colunas jsonb: o front guarda como texto JSON; o banco recebe a lista de verdade

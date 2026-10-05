@@ -1,0 +1,230 @@
+// ESTOQUE DE ÁLBUNS — só o FINANCEIRO mexe; a PRODUÇÃO só vê, para conferir se bate (mesmas regras do SQL 029).
+// O estoque é por escola: as caixas que a Produção conferiu. A carga leva caixas de várias escolas com um vendedor de books
+// (fica "Em venda", sem prazo). Na volta, o acerto por escola diz quantos álbuns e pôsteres/brindes foram vendidos e quantos
+// voltaram; a diferença (levados − vendidos − voltaram) fica registrada. O que voltou fica "aguardando Rebolo" até o
+// Financeiro encaminhar (o Rebolo pega as caixas e tenta vender; não precisa confirmar).
+
+import type { ErpState, Registro } from './types'
+import { colecao } from './metrics'
+
+const n = (v: unknown) => Number(v) || 0
+const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
+
+export interface Quantidade {
+  albuns: number
+  posteres: number
+}
+const zero = (): Quantidade => ({ albuns: 0, posteres: 0 })
+const somar = (a: Quantidade, albuns: unknown, posteres: unknown) => {
+  a.albuns += n(albuns)
+  a.posteres += n(posteres)
+}
+
+// álbuns e pôsteres da caixa: o que a Produção conferiu (ou o que a Revelação informou, se ainda não conferiu)
+const vazio = (v: unknown) => v === null || v === undefined || v === ''
+export const albunsDaCaixa = (c: Registro) => n(vazio(c.conferidoAlbuns) ? c.albuns : c.conferidoAlbuns)
+export const posteresDaCaixa = (c: Registro) => n(vazio(c.conferidoPosteres) ? c.posteres : c.conferidoPosteres)
+
+export type StatusCarga = 'Em venda' | 'Encerrada' | 'Cancelada'
+
+export interface EscolaDaCarga extends Quantidade {
+  loteId: string
+  escola: string
+  cidade: string
+  uf: string
+  caixas: Registro[] // caixas da Produção nesta carga
+  acerto?: Registro // acerto desta escola (carga encerrada)
+}
+
+export interface CargaResumo extends Quantidade {
+  carga: Registro
+  escolas: EscolaDaCarga[]
+  caixas: number
+  vendidos: Quantidade
+  voltaram: Quantidade
+  diferenca: Quantidade
+}
+
+// Cargas com as escolas, as caixas e os totais (da mais nova para a mais antiga)
+export function resumoCargas(s: ErpState): CargaResumo[] {
+  const lotes = new Map(colecao(s, 'producao_lotes').map((l) => [l.id, l]))
+  const caixas = new Map(colecao(s, 'producao_caixas').map((c) => [c.id, c]))
+  const itens = colecao(s, 'estoque_carga_caixas')
+  const acertos = colecao(s, 'estoque_carga_acertos')
+  return colecao(s, 'estoque_cargas')
+    .map((carga) => {
+      const porLote = new Map<string, EscolaDaCarga>()
+      for (const k of itens.filter((x) => x.cargaId === carga.id)) {
+        const l = lotes.get(t(k.loteId))
+        const e = porLote.get(t(k.loteId)) ?? { loteId: t(k.loteId), escola: t(l?.escola), cidade: t(l?.cidade), uf: t(l?.uf), caixas: [], ...zero() }
+        const cx = caixas.get(t(k.caixaId))
+        if (cx) e.caixas.push(cx)
+        somar(e, k.albuns, k.posteres)
+        porLote.set(e.loteId, e)
+      }
+      const escolas = [...porLote.values()].sort((a, b) => a.escola.localeCompare(b.escola, 'pt-BR'))
+      const total = zero()
+      const vendidos = zero()
+      const voltaram = zero()
+      const diferenca = zero()
+      for (const e of escolas) {
+        e.caixas.sort((a, b) => n(a.numero) - n(b.numero))
+        e.acerto = acertos.find((a) => a.cargaId === carga.id && a.loteId === e.loteId)
+        somar(total, e.albuns, e.posteres)
+        if (e.acerto) {
+          somar(vendidos, e.acerto.albunsVendidos, e.acerto.posteresVendidos)
+          somar(voltaram, e.acerto.albunsVoltaram, e.acerto.posteresVoltaram)
+          somar(diferenca, e.acerto.albunsDiferenca, e.acerto.posteresDiferenca)
+        }
+      }
+      return { carga, escolas, caixas: escolas.reduce((a, e) => a + e.caixas.length, 0), ...total, vendidos, voltaram, diferenca }
+    })
+    .sort((a, b) => n(b.carga.numero) - n(a.carga.numero))
+}
+
+export interface EstoqueEscola {
+  lote: Registro
+  escola: string
+  cidade: string
+  uf: string
+  caixas: Registro[] // caixas conferidas (em estoque, em carga e acertadas)
+  emEstoque: Quantidade & { caixas: Registro[] }
+  emVenda: Quantidade & { caixas: Registro[]; cargas: Registro[] }
+  vendidos: Quantidade
+  voltaram: Quantidade
+  rebolo: Quantidade // encaminhados ao Rebolo
+  aguardandoRebolo: Quantidade // voltaram e ainda não foram para o Rebolo
+  diferenca: Quantidade
+  aguardandoConferencia: number // caixas que a Produção ainda não conferiu
+}
+
+// O estoque de cada escola que já tem caixa conferida (ou algum movimento)
+export function estoquePorEscola(s: ErpState): EstoqueEscola[] {
+  const cargas = new Map(colecao(s, 'estoque_cargas').map((c) => [c.id, c]))
+  const itens = colecao(s, 'estoque_carga_caixas')
+  const acertos = colecao(s, 'estoque_carga_acertos')
+  const envios = colecao(s, 'estoque_envios_rebolo')
+  const lista: EstoqueEscola[] = []
+  for (const lote of colecao(s, 'producao_lotes')) {
+    const todas = colecao(s, 'producao_caixas')
+      .filter((c) => c.loteId === lote.id)
+      .sort((a, b) => n(a.numero) - n(b.numero))
+    const conferidas = todas.filter((c) => c.status !== 'Aguardando conferência')
+    const acs = acertos.filter((a) => a.loteId === lote.id)
+    const evs = envios.filter((e) => e.loteId === lote.id)
+    if (!conferidas.length && !acs.length && !evs.length) continue
+    const e: EstoqueEscola = {
+      lote,
+      escola: t(lote.escola),
+      cidade: t(lote.cidade),
+      uf: t(lote.uf),
+      caixas: conferidas,
+      emEstoque: { ...zero(), caixas: [] },
+      emVenda: { ...zero(), caixas: [], cargas: [] },
+      vendidos: zero(),
+      voltaram: zero(),
+      rebolo: zero(),
+      aguardandoRebolo: zero(),
+      diferenca: zero(),
+      aguardandoConferencia: todas.length - conferidas.length,
+    }
+    for (const c of conferidas) {
+      if (c.status === 'Em estoque') {
+        e.emEstoque.caixas.push(c)
+        somar(e.emEstoque, albunsDaCaixa(c), posteresDaCaixa(c))
+      }
+    }
+    for (const k of itens.filter((x) => x.loteId === lote.id)) {
+      const carga = cargas.get(t(k.cargaId))
+      if (carga?.status !== 'Em venda') continue
+      const cx = conferidas.find((c) => c.id === k.caixaId)
+      if (cx) e.emVenda.caixas.push(cx)
+      somar(e.emVenda, k.albuns, k.posteres)
+      if (!e.emVenda.cargas.includes(carga)) e.emVenda.cargas.push(carga)
+    }
+    for (const a of acs) {
+      somar(e.vendidos, a.albunsVendidos, a.posteresVendidos)
+      somar(e.voltaram, a.albunsVoltaram, a.posteresVoltaram)
+      somar(e.diferenca, a.albunsDiferenca, a.posteresDiferenca)
+    }
+    for (const r of evs) somar(e.rebolo, r.albuns, r.posteres)
+    e.aguardandoRebolo = { albuns: e.voltaram.albuns - e.rebolo.albuns, posteres: e.voltaram.posteres - e.rebolo.posteres }
+    lista.push(e)
+  }
+  return lista.sort((a, b) => a.escola.localeCompare(b.escola, 'pt-BR'))
+}
+
+// Situação de cada caixa conferida (para a lista de caixas da escola)
+export function situacaoDaCaixa(s: ErpState, caixa: Registro): string {
+  if (caixa.status === 'Em estoque') return 'Em estoque'
+  if (caixa.status === 'Aguardando conferência') return 'Aguardando a conferência da Produção'
+  const itens = colecao(s, 'estoque_carga_caixas').filter((k) => k.caixaId === caixa.id)
+  const cargas = colecao(s, 'estoque_cargas')
+  const carga = itens
+    .map((k) => cargas.find((c) => c.id === k.cargaId))
+    .filter((c): c is Registro => !!c && c.status !== 'Cancelada')
+    .sort((a, b) => n(b.numero) - n(a.numero))[0]
+  if (!carga) return t(caixa.status)
+  return caixa.status === 'Em carga' ? `Em venda • carga ${t(carga.numero)} • ${t(carga.vendedor)}` : `Acertada • carga ${t(carga.numero)} • ${t(carga.vendedor)}`
+}
+
+export interface LinhaExtrato {
+  id: string
+  data: string // ISO (data e hora)
+  tipo: string
+  albuns: number
+  posteres: number
+  descricao: string
+  autor: string
+}
+
+// Extrato da escola: caixas que entraram (conferidas pela Produção) + os movimentos do Financeiro (do mais novo ao mais antigo)
+export function extratoDaEscola(s: ErpState, loteId: string): LinhaExtrato[] {
+  const entradas: LinhaExtrato[] = colecao(s, 'producao_caixas')
+    .filter((c) => c.loteId === loteId && c.status !== 'Aguardando conferência' && t(c.conferidoEm))
+    .map((c) => ({
+      id: `cx-${c.id}`,
+      data: `${t(c.conferidoEm).slice(0, 10)}T08:00:00`,
+      tipo: 'Entrou no estoque',
+      albuns: albunsDaCaixa(c),
+      posteres: posteresDaCaixa(c),
+      descricao: `Caixa ${t(c.numero)} conferida pela Produção`,
+      autor: '',
+    }))
+  const movs: LinhaExtrato[] = colecao(s, 'estoque_movimentos')
+    .filter((m) => m.loteId === loteId)
+    .map((m) => ({ id: m.id, data: t(m.criadoEm), tipo: t(m.tipo), albuns: n(m.albuns), posteres: n(m.posteres), descricao: t(m.descricao), autor: t(m.autor) }))
+  return [...entradas, ...movs].sort((a, b) => b.data.localeCompare(a.data))
+}
+
+// Caixas que podem entrar numa carga: em estoque, agrupadas por escola (cidade e escola em ordem)
+export function caixasDisponiveis(s: ErpState, alemDestas: string[] = []) {
+  const lotes = new Map(colecao(s, 'producao_lotes').map((l) => [l.id, l]))
+  const grupos = new Map<string, { loteId: string; escola: string; cidade: string; uf: string; caixas: Registro[] }>()
+  for (const c of colecao(s, 'producao_caixas')) {
+    if (c.status !== 'Em estoque' && !alemDestas.includes(c.id)) continue
+    const l = lotes.get(t(c.loteId))
+    const g = grupos.get(t(c.loteId)) ?? { loteId: t(c.loteId), escola: t(l?.escola), cidade: t(l?.cidade), uf: t(l?.uf), caixas: [] }
+    g.caixas.push(c)
+    grupos.set(g.loteId, g)
+  }
+  return [...grupos.values()]
+    .map((g) => ({ ...g, caixas: g.caixas.sort((a, b) => n(a.numero) - n(b.numero)) }))
+    .sort((a, b) => `${a.cidade} ${a.escola}`.localeCompare(`${b.cidade} ${b.escola}`, 'pt-BR'))
+}
+
+// Vendedores que levam carga: os vendedores de books (cadastro em ADM › Vendedores externos)
+export const vendedoresDeBooks = (s: ErpState, incluir = '') =>
+  colecao(s, 'pj_vendedores')
+    .filter((v) => v.tipo === 'Books' && (v.status !== 'Inativo' || v.id === incluir))
+    .sort((a, b) => t(a.nome).localeCompare(t(b.nome), 'pt-BR'))
+
+// Acerto de uma escola (o que o Financeiro digita na volta)
+export interface AcertoEscola {
+  loteId: string
+  albunsVendidos: number
+  albunsVoltaram: number
+  posteresVendidos: number
+  posteresVoltaram: number
+  observacao: string
+}

@@ -755,6 +755,65 @@ export async function agendarRetorno(visitaId: string, fichas: number, data: str
   return erro
 }
 
+// ---------------- ESTOQUE DE ÁLBUNS E CARGAS (só o Financeiro; SQL 029) ----------------
+// Montar a carga: vendedor de books + caixas de várias escolas → "Em venda". Devolve o id (para imprimir o romaneio).
+export async function criarCarga(vendedorId: string, caixaIds: string[], rota: string, observacao: string): Promise<{ erro: string | null; id: string | null }> {
+  const ok = 'Carga montada: em venda.'
+  if (MODO === 'supabase') {
+    const { data, error } = await sb().rpc('estoque_criar_carga', { p_vendedor: vendedorId, p_caixas: caixaIds, p_rota: rota.trim() || null, p_observacao: observacao.trim() || null })
+    if (error) {
+      const msg = traduzirErro(error)
+      avisar(msg)
+      return { erro: msg, id: null }
+    }
+    avisar(ok, 'ok')
+    agendarRecarga(150)
+    return { erro: null, id: typeof data === 'string' ? data : null }
+  }
+  let r = { erro: 'Não foi possível montar a carga.' } as { erro: string } | { id: string }
+  mutar((d, ctx) => {
+    r = F.criarCarga(d, vendedorId, caixaIds, rota, observacao, ctx)
+  })
+  const erro = 'erro' in r ? r.erro : null
+  avisar(erro ?? ok, erro ? 'erro' : 'ok')
+  return { erro, id: 'id' in r ? r.id : null }
+}
+
+// Carga em venda: trocar o vendedor, pôr/tirar caixas, rota e observação (mesmo caminho das ações da Produção: banco ou demo)
+export function editarCarga(cargaId: string, x: F.EdicaoCarga): Promise<string | null> {
+  const params = { p_carga: cargaId, p_vendedor: x.vendedorId || null, p_adicionar: x.adicionar, p_remover: x.remover, p_rota: x.rota, p_observacao: x.observacao }
+  return acaoProducao('estoque_editar_carga', params, (d, ctx) => F.editarCarga(d, cargaId, x, ctx), 'Carga atualizada.')
+}
+
+export function cancelarCarga(cargaId: string, motivo: string): Promise<string | null> {
+  return acaoProducao('estoque_cancelar_carga', { p_carga: cargaId, p_motivo: motivo.trim() }, (d, ctx) => F.cancelarCarga(d, cargaId, motivo, ctx), 'Carga cancelada: as caixas voltaram para o estoque.')
+}
+
+// Acerto na volta, por escola (vendidos e que voltaram); a diferença fica registrada
+export function acertarCarga(cargaId: string, escolas: F.AcertoDigitado[], observacao: string): Promise<string | null> {
+  const p_escolas = escolas.map((e) => ({
+    lote: e.loteId,
+    albuns_vendidos: e.albunsVendidos,
+    albuns_voltaram: e.albunsVoltaram,
+    posteres_vendidos: e.posteresVendidos,
+    posteres_voltaram: e.posteresVoltaram,
+    observacao: e.observacao.trim(),
+  }))
+  return acaoProducao('estoque_acertar_carga', { p_carga: cargaId, p_escolas, p_observacao: observacao.trim() || null }, (d, ctx) => F.acertarCarga(d, cargaId, escolas, observacao, ctx), 'Carga acertada e encerrada.')
+}
+
+export function desfazerAcerto(cargaId: string, motivo: string): Promise<string | null> {
+  return acaoProducao('estoque_desfazer_acerto', { p_carga: cargaId, p_motivo: motivo.trim() }, (d, ctx) => F.desfazerAcerto(d, cargaId, motivo, ctx), 'Acerto desfeito: a carga voltou para "Em venda".')
+}
+
+export function enviarRebolo(loteId: string, albuns: number, posteres: number, observacao: string): Promise<string | null> {
+  return acaoProducao('estoque_enviar_rebolo', { p_lote: loteId, p_albuns: albuns, p_posteres: posteres, p_observacao: observacao.trim() || null }, (d, ctx) => F.enviarRebolo(d, loteId, albuns, posteres, observacao, ctx), 'Encaminhado ao Rebolo.')
+}
+
+export function desfazerEnvioRebolo(envioId: string): Promise<string | null> {
+  return acaoProducao('estoque_desfazer_envio_rebolo', { p_envio: envioId }, (d, ctx) => F.desfazerEnvioRebolo(d, envioId, ctx), 'Envio ao Rebolo desfeito.')
+}
+
 // ---- Editar e cancelar nas Operações (SQL 028) ----
 
 // Editar agendamento (visita ou retorno agendado): data, fichas e dados da escola; a visita leva as mudanças para o contrato

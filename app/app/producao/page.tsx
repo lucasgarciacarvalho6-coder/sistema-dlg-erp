@@ -150,10 +150,10 @@ export default function AppProducaoPage() {
                     Caixa {String(c.numero)} • {num(Number(c.albuns))} álbuns
                   </strong>
                   <span className="block text-zinc-500 text-xs truncate">
-                    {String(lotesPorId.get(String(c.loteId))?.escola ?? '')} • {c.status === 'Em estoque' ? '✓ conferida (estoque)' : 'aguardando conferência'}
+                    {String(lotesPorId.get(String(c.loteId))?.escola ?? '')} • {c.status === 'Aguardando conferência' ? 'aguardando conferência' : c.status === 'Em estoque' ? '✓ conferida (estoque)' : '✓ conferida • saiu com o vendedor'}
                   </span>
                 </span>
-                {c.status !== 'Em estoque' && (
+                {c.status === 'Aguardando conferência' && (
                   <button onClick={() => tocarApagar(c.id)} className={`shrink-0 px-2 ${apagar === c.id ? 'text-red-400 text-xs font-black' : 'text-zinc-500 hover:text-red-400 text-lg'}`} aria-label="Apagar caixa">
                     {apagar === c.id ? 'Apagar?' : '✕'}
                   </button>

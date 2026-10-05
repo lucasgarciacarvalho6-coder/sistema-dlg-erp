@@ -12,6 +12,7 @@ import { Modal, btnPrimario, btnSecundario, inputCls, labelCls } from '@/compone
 import { criarAcessoVendedor, salvarColaborador, useErp } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { brl } from '@/lib/erp/format'
+import { historicoDoCadastro } from '@/lib/erp/operacional'
 
 type Acao = { tipo: 'criar' | 'senha'; pj: Registro } | null
 
@@ -118,6 +119,8 @@ export default function VendedoresExternosPage() {
           { label: 'Com acesso ao app', valor: rs.filter((r) => login(r)?.status === 'ATIVO').length, tom: 'emerald' },
           { label: 'Sem acesso', valor: rs.filter((r) => !login(r)).length, tom: 'yellow' },
         ]}
+        historico={(r, st) => historicoDoCadastro(st, 'pj_vendedores', r)}
+        inativar={{ campo: 'status', valor: 'Inativo' }}
       />
 
       <Modal
