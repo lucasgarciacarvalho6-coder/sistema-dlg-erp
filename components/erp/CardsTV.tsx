@@ -39,34 +39,21 @@ const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: 
 
 // Barrinhas por dia (cor de cada dia vem de quem chama); futuro = trilho vazio; hoje com contorno
 // diasGrandes: todos os dias com o número maior (a letra acompanha a largura do card)
-// extra (só na agenda): a parte "a confirmar" vai em cima, numa barra clara tracejada; a cor e o número são do total do dia
-function BarrasTV({ dias, valores, extra, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; extra?: number[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
-  const mais = (i: number) => extra?.[i] ?? 0
-  const max = Math.max(1, ...valores.map((v, i) => (v ?? 0) + mais(i))) * 1.2
+function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
+  const max = Math.max(1, ...valores.map((v) => v ?? 0)) * 1.2
   const fonteDias = diasGrandes ? { fontSize: `clamp(8px, ${(88 / Math.max(1, dias.length) / 1.35).toFixed(2)}cqw, 16px)` } : undefined
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex-1 min-h-0 flex items-end gap-[2px]">
-        {valores.map((v, i) => {
-          const p = mais(i)
-          const total = (v ?? 0) + p
-          const c = cor(total, i)
-          return (
-            <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null && !p ? '' : `: ${rotulo ? rotulo(total) : num(total)}`}`}>
-              {rotulo && total > 0 && (
-                <span className={`hidden @sm:block font-bold leading-none mb-[1px] whitespace-nowrap text-[clamp(7px,2.4cqmin,11px)] ${v ? 'text-zinc-300' : 'text-zinc-500'}`}>{rotulo(total)}</span>
-              )}
-              {p > 0 && <div className={`w-full border border-dashed border-b-0 ${v ? '' : 'rounded-t-[3px]'}`} style={{ height: `${(p / max) * 100}%`, backgroundColor: `${c}40`, borderColor: c }}></div>}
-              <div
-                className={`w-full ${p > 0 ? '' : 'rounded-t-[3px]'} ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
-                style={{
-                  height: v === null ? '2px' : p > 0 && !v ? '0px' : `${Math.max(v > 0 ? 4 : 2, (v / max) * 100)}%`,
-                  backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : c,
-                }}
-              ></div>
-            </div>
-          )
-        })}
+        {valores.map((v, i) => (
+          <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null ? '' : `: ${rotulo ? rotulo(v) : num(v)}`}`}>
+            {rotulo && v !== null && v > 0 && <span className="hidden @sm:block font-bold text-zinc-300 leading-none mb-[1px] whitespace-nowrap text-[clamp(7px,2.4cqmin,11px)]">{rotulo(v)}</span>}
+            <div
+              className={`w-full rounded-t-[3px] ${dias[i] === destaque ? 'ring-2 ring-white/80' : ''}`}
+              style={{ height: v === null ? '2px' : `${Math.max(v > 0 ? 4 : 2, (v / max) * 100)}%`, backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : cor(v, i) }}
+            ></div>
+          </div>
+        ))}
       </div>
       <div className={`flex gap-[2px] ${diasGrandes ? 'mt-[2px] pt-[2px] border-t border-white/[0.08]' : 'mt-[1px]'}`} style={fonteDias}>
         {dias.map((d, i) => (
@@ -210,37 +197,50 @@ const corMeta = (valor: number, meta: number, piso: number) => (meta <= 0 ? AZUL
 
 // Barras do custo: altura = crianças fotografadas; em cima, o valor de cada ficha (colorido) e a quantidade (branco).
 // A letra acompanha a largura do card e o número de barras, para os números caberem sem encavalar.
-function BarrasCusto({ rotulos, qtd, custos, corBarra, corCusto, abaixo, destaque }: {
+// extra (só na agenda): a parte "a confirmar" vai em cima, numa barra clara tracejada; a cor e o número são do total do dia.
+function BarrasCusto({ rotulos, qtd, extra, custos, corBarra, corCusto, abaixo, destaque, fonteMax = 16 }: {
   rotulos: string[]
   qtd: (number | null)[]
+  extra?: number[]
   custos: (number | null)[]
   corBarra: (v: number, i: number) => string
   corCusto: (v: number) => string
   abaixo?: string[]
   destaque?: number
+  fonteMax?: number
 }) {
   const n = Math.max(1, rotulos.length)
-  const max = Math.max(1, ...qtd.map((v) => v ?? 0))
-  const maior = Math.max(2, ...qtd.map((v) => (v ? num(v).length : 0)), ...custos.map((v) => (v ? String(Math.round(v)).length : 0)))
-  const fonte = `clamp(7px, ${(88 / n / (maior * 0.62)).toFixed(2)}cqw, 16px)`
+  const mais = (i: number) => extra?.[i] ?? 0
+  const max = Math.max(1, ...qtd.map((v, i) => (v ?? 0) + mais(i)))
+  const maior = Math.max(2, ...qtd.map((v, i) => ((v ?? 0) + mais(i) ? num((v ?? 0) + mais(i)).length : 0)), ...custos.map((v) => (v ? String(Math.round(v)).length : 0)))
+  const fonte = `clamp(7px, ${(88 / n / (maior * 0.62)).toFixed(2)}cqw, ${fonteMax}px)`
   return (
     <div className="flex-1 min-h-0 flex flex-col" style={{ fontSize: fonte }}>
       <div className="flex-1 min-h-0 flex items-end gap-[3px]">
-        {qtd.map((v, i) => (
-          <div key={i} className="flex-1 h-full flex flex-col justify-end items-center min-w-0 leading-none">
-            {custos[i] !== null && (
-              <span className="font-black whitespace-nowrap text-center" style={{ color: corCusto(custos[i]!) }}>
-                <span className="block text-[0.65em] leading-none">R$</span>
-                {Math.round(custos[i]!)}
-              </span>
-            )}
-            {v !== null && v > 0 && <span className="font-bold text-white whitespace-nowrap mt-[0.2em] mb-[0.25em]">{num(v)}</span>}
-            <div
-              className={`w-full rounded-t-[3px] ${destaque === i ? 'ring-2 ring-white/80' : ''}`}
-              style={{ height: v === null ? 2 : `calc((100% - 3.5em) * ${Math.max(0.02, v / max).toFixed(3)})`, backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : corBarra(v, i) }}
-            ></div>
-          </div>
-        ))}
+        {qtd.map((v, i) => {
+          const p = mais(i)
+          const total = (v ?? 0) + p
+          const c = corBarra(total, i)
+          return (
+            <div key={i} className="flex-1 h-full flex flex-col justify-end items-center min-w-0 leading-none">
+              {custos[i] !== null && (
+                <span className="font-black whitespace-nowrap text-center" style={{ color: corCusto(custos[i]!) }}>
+                  <span className="block text-[0.65em] leading-none">R$</span>
+                  {Math.round(custos[i]!)}
+                </span>
+              )}
+              {v !== null && total > 0 && <span className="font-bold text-white whitespace-nowrap mt-[0.2em] mb-[0.25em]">{num(total)}</span>}
+              {p > 0 && <div className={`w-full border border-dashed border-b-0 ${v ? '' : 'rounded-t-[3px]'}`} style={{ height: `calc((100% - 3.5em) * ${(p / max).toFixed(3)})`, backgroundColor: `${c}40`, borderColor: c }}></div>}
+              <div
+                className={`w-full ${p > 0 ? '' : 'rounded-t-[3px]'} ${destaque === i ? 'ring-2 ring-white/80' : ''}`}
+                style={{
+                  height: v === null ? 2 : p > 0 && !v ? 0 : `calc((100% - 3.5em) * ${Math.max(0.02, v / max).toFixed(3)})`,
+                  backgroundColor: v === null ? 'rgba(127,127,127,0.15)' : c,
+                }}
+              ></div>
+            </div>
+          )
+        })}
       </div>
       <div className="flex gap-[3px] mt-[2px] pt-[2px] border-t border-white/[0.08]">
         {rotulos.map((rot, i) => (
@@ -414,26 +414,37 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
                   fichas agendadas • <span className="text-white">{num(a.total)}</span> confirmadas
                 </p>
               </div>
-              {a.capacidade !== null && (
-                <span className="font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas agendadas ÷ o que a meta pede nesses dias">
-                  {Math.round(a.capacidade)}%
-                </span>
-              )}
+              <div className="text-right leading-tight">
+                {a.capacidade !== null && (
+                  <span className="block font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas agendadas ÷ o que a meta pede nesses dias">
+                    {Math.round(a.capacidade)}%
+                  </span>
+                )}
+                <p className="font-bold text-zinc-300 whitespace-nowrap text-[clamp(8px,3.4cqmin,15px)]" title="Custo previsto: carros × gasto fixo + fichas agendadas × custo por ficha">
+                  Previsto <span className="text-white">{reais(a.custo)}</span>
+                  {a.agendadas > 0 ? (
+                    <>
+                      {' '}• <span className="text-white">{reais(a.custoPorFicha)}</span>/ficha
+                    </>
+                  ) : null}
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-[1.2cqmin]">
               <ChipLegenda cor={VERDE}>{a.ok} OK</ChipLegenda>
               <ChipLegenda cor={AMARELO}>{a.pendentes} Pend.</ChipLegenda>
               <ChipLegenda cor={VERMELHO}>{a.vazios} Vazio</ChipLegenda>
             </div>
-            <BarrasTV
-              dias={a.dias.map((d) => d.data)}
-              valores={a.dias.map((d) => d.alunos)}
+            <BarrasCusto
+              rotulos={a.dias.map((d) => String(Number(d.data.slice(8))))}
+              qtd={a.dias.map((d) => d.alunos)}
               extra={a.dias.map((d) => Math.max(0, d.agendadas - d.alunos))}
-              rotulo={(v) => num(v)}
-              cor={(v) => x.corAgendamento(v)}
-              diasGrandes
+              custos={a.dias.map((d) => (d.agendadas > 0 ? d.custo / d.agendadas : null))}
+              corBarra={(v) => x.corAgendamento(v)}
+              corCusto={(v) => (custo.mensal.media > 0 ? (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE) : '#d4d4d8')}
+              fonteMax={20}
             />
-            {!compacto && <LegendaAgendamento x={x} tv />}
+            {!compacto && <LegendaAgendamento x={x} tv comCusto />}
           </MiniTV>
 
         </div>

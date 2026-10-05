@@ -209,6 +209,8 @@ export const nomeCarro = (v: Registro | undefined) => (v ? `${t(v.modelo)}${v.pl
 //  Agendadas = a projeção: visitas e retornos agendados, pelas confirmadas ou, enquanto a escola não confirma,
 //  pelas previstas no contrato. Encerrou a visita, ela sai daqui e entra nos fotografados.
 //  Capacidade = fichas agendadas ÷ o que a meta pede nesses dias (meta diária × dias)
+//  Custo previsto (regra do dono, igual ao realizado): cada carro que sai no dia × gasto fixo do carro
+//  + fichas agendadas × custo variável por ficha
 export type SituacaoDia = 'OK' | 'Pendente' | 'Vazio'
 export interface DiaAgenda {
   data: string
@@ -216,6 +218,7 @@ export interface DiaAgenda {
   agendadas: number
   visitas: number
   situacao: SituacaoDia
+  custo: number // custo previsto do dia (R$)
 }
 
 // fichas de uma visita agendada na projeção: as confirmadas pela escola ou, sem confirmação, as previstas no contrato
@@ -223,6 +226,7 @@ export const fichasAgendadas = (v: Registro) => (n(v.fichasConfirmadas) > 0 ? n(
 
 export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
   const agendadas = colecao(s, 'agenda_visitas').filter((v) => t(v.status) === 'Agendada')
+  const veiculos = colecao(s, 'veiculos')
   const dias: DiaAgenda[] = []
   for (let d = hoje(); dias.length < quantos; d = addDias(d, 1)) {
     if (!ehDiaUtil(d)) continue
@@ -230,15 +234,20 @@ export function agendaFutura(s: ErpState, metaDiaria: number, quantos = 20) {
     const alunos = doDia.reduce((a, v) => a + n(v.fichasConfirmadas), 0)
     const agendadasDia = doDia.reduce((a, v) => a + fichasAgendadas(v), 0)
     const tudoOk = doDia.every((v) => n(v.fichasConfirmadas) > 0 && equipeDaVisita(s, v).completa)
-    dias.push({ data: d, alunos, agendadas: agendadasDia, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente' })
+    const carros = [...new Set(doDia.map((v) => t(v.veiculoId)).filter(Boolean))]
+    const custo = carros.reduce((a, id) => a + gastoFixoCarro(veiculos.find((x) => x.id === id), d.slice(0, 7)), 0) + agendadasDia * custoVariavelFicha(s, d.slice(0, 7))
+    dias.push({ data: d, alunos, agendadas: agendadasDia, visitas: doDia.length, situacao: !doDia.length ? 'Vazio' : tudoOk ? 'OK' : 'Pendente', custo })
   }
   const total = dias.reduce((a, d) => a + d.alunos, 0)
   const totalAgendadas = dias.reduce((a, d) => a + d.agendadas, 0)
+  const custo = dias.reduce((a, d) => a + d.custo, 0)
   const esperado = metaDiaria * quantos
   return {
     dias,
     total,
     agendadas: totalAgendadas,
+    custo, // custo previsto dos 20 dias (R$)
+    custoPorFicha: totalAgendadas > 0 ? custo / totalAgendadas : 0,
     comAgenda: dias.filter((d) => d.visitas > 0).length,
     ok: dias.filter((d) => d.situacao === 'OK').length,
     pendentes: dias.filter((d) => d.situacao === 'Pendente').length,

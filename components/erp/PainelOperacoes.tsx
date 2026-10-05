@@ -373,7 +373,7 @@ function CardResumo({ x, modo }: { x: Dados; modo: Modo }) {
 // ---------------- Agenda futura (próximos 20 dias úteis) ----------------
 // Legenda das barras da agenda: cheia = confirmadas pela escola, clara = ainda a confirmar (previstas no contrato);
 // a cor compara o agendamento do dia com a média de fichas por dia dos 3 meses anteriores
-export function LegendaAgendamento({ x, tv = false }: { x: Dados; tv?: boolean }) {
+export function LegendaAgendamento({ x, tv = false, comCusto = false }: { x: Dados; tv?: boolean; comCusto?: boolean }) {
   const media = Math.round(x.mediaDia)
   const ponto = (cor: string, texto: string) => (
     <span className="inline-flex items-center gap-1 whitespace-nowrap">
@@ -399,6 +399,7 @@ export function LegendaAgendamento({ x, tv = false }: { x: Dados; tv?: boolean }
       ) : (
         <span className="whitespace-nowrap">• cor pela meta do dia (ainda sem histórico)</span>
       )}
+      {comCusto && <span className="whitespace-nowrap">• R$ = custo previsto por ficha</span>}
     </p>
   )
 }
@@ -413,6 +414,9 @@ function CardAgendaFutura({ x, modo }: { x: Dados; modo: Modo }) {
       <div className="flex flex-wrap gap-2">
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Fichas agendadas: {num(a.agendadas)}</span>
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Confirmadas: {num(a.total)}</span>
+        <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`} title="Carros × gasto fixo + fichas agendadas × custo por ficha">
+          Custo previsto: {reais(a.custo)}
+        </span>
         <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`}>Dias: {a.comAgenda}/{a.dias.length}</span>
         {a.capacidade !== null && (
           <span className={`${chip} border-white/[0.08] bg-white/[0.04] text-white`} title="Fichas agendadas ÷ o que a meta pede nesses dias">
