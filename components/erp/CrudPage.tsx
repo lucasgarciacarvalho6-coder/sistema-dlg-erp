@@ -246,7 +246,7 @@ export default function CrudPage(p: CrudProps) {
                       ))}
                       {p.status && (
                         <td className="px-6 py-4">
-                          <Badge texto={st} tom={p.status.tons[st] ?? 'zinc'} />
+                          <Badge texto={st} tom={p.status.tons[st]} />
                         </td>
                       )}
                       <td className="px-6 py-4">

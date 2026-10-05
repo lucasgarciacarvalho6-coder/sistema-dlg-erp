@@ -5,7 +5,7 @@ import type { Registro } from '@/lib/erp/types'
 import { trazerParaProducao, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
-import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, diasAtraso, escolasParadas, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
+import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, corDaEtapa, diasAtraso, escolasParadas, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, TONS, btnPrimario, btnSecundario, inputCls } from '@/components/erp/ui'
 import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 import { Drive } from '@/components/edicao/LinkDrive'
@@ -35,7 +35,7 @@ export default function ControleProducaoPage() {
   const entreguesMes = lotes.filter((l) => String(l.confirmadoEm).startsWith(mes))
   const dia = hoje()
   const atrasadas = lotes.filter((l) => diasAtraso(l, dia) > 0) // passou da entrega prevista e continua com o editor
-  // escolas paradas além do prazo da etapa (2, 3 ou 5 dias úteis): aviso amarelo na linha
+  // escolas paradas além do prazo da etapa (2, 3 ou 5 dias úteis): selo e aviso vermelhos na linha
   const paradas = new Map(escolasParadas(s, dia).map((x) => [x.lote.id, x]))
 
   const termo = busca.trim().toLowerCase()
@@ -186,9 +186,9 @@ export default function ControleProducaoPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <Badge texto={etapa} tom={TOM_ETAPA[etapa]} />
+                        <Badge texto={etapa} tom={corDaEtapa(etapa, diasAtraso(l, dia) > 0 || paradas.has(l.id))} />
                         {paradas.has(l.id) && (
-                          <span className="block mt-1 text-[10px] font-black text-yellow-400" title={`Mais de ${paradas.get(l.id)!.prazo} dias úteis nesta etapa`}>
+                          <span className="block mt-1 text-[10px] font-black text-red-400" title={`Mais de ${paradas.get(l.id)!.prazo} dias úteis nesta etapa`}>
                             parada há {num(paradas.get(l.id)!.dias)} dias úteis
                           </span>
                         )}

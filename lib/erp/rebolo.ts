@@ -107,16 +107,16 @@ export type SituacaoFicha = (typeof SITUACOES_FICHA)[number]
 export const FINALIZADAS: readonly string[] = ['Vendida', 'Descarte', 'Cancelada']
 export const EM_ABERTO: readonly string[] = ['Aguardando contato', 'Tentar de novo', 'Em negociação', 'Agendado']
 export const MOTIVOS_DESCARTE = ['Sem interesse', 'Sem retorno', 'Não localizado', 'Sem condição financeira', 'Restrição nos nomes'] as const
-// cor só para alerta (regra do ADM): tentar de novo = atenção, vendida = bom, descarte = ruim; o resto neutro
+// cores das situações: vendida = verde • aguardando / em andamento = amarelo • descarte e cancelada = vermelho
 export const TOM_SITUACAO: Record<string, 'emerald' | 'red' | 'yellow' | 'zinc'> = {
-  'Aguardando contato': 'zinc',
+  'Aguardando contato': 'yellow',
   'Tentar de novo': 'yellow',
-  'Em negociação': 'zinc',
-  Agendado: 'zinc',
-  'Venda a efetivar': 'zinc',
+  'Em negociação': 'yellow',
+  Agendado: 'yellow',
+  'Venda a efetivar': 'yellow',
   Vendida: 'emerald',
   Descarte: 'red',
-  Cancelada: 'zinc',
+  Cancelada: 'red',
 }
 
 export const pacoteFinalizado = (fichas: Registro[]) => fichas.length > 0 && fichas.every((f) => FINALIZADAS.includes(String(f.situacao)))

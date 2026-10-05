@@ -51,7 +51,7 @@ export default function FinanceiroDashboardPage() {
                       <p className="text-sm font-bold text-white truncate">{String(c.favorecido || c.descricao)}</p>
                       <p className="text-[11px] text-zinc-500">{dataBR(String(c.vencimento))} • {brl(Number(c.valor))}</p>
                     </div>
-                    <Badge texto={String(c.vencimento) < hoje() ? 'Vencida' : String(c.status)} tom={String(c.vencimento) < hoje() ? 'red' : c.status === 'Aguardando aprovação' ? 'yellow' : 'zinc'} />
+                    <Badge texto={String(c.vencimento) < hoje() ? 'Vencida' : String(c.status)} tom={String(c.vencimento) < hoje() ? 'red' : undefined} />
                   </div>
                 ))}
               </div>

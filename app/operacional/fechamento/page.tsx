@@ -23,8 +23,8 @@ import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, Tabs, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
 type Aba = 'escolas' | 'vendedores' | 'freelancers'
-// cor só para alerta: rascunho (falta enviar) = amarelo; enviado e pago = neutros
-const TOM_FECH: Record<string, Tom> = { Rascunho: 'yellow', 'Enviado ao financeiro': 'zinc', Pago: 'zinc' }
+// rascunho (falta enviar) e enviado (aguardando o Financeiro pagar) = amarelo • pago = verde
+const TOM_FECH: Record<string, Tom> = { Rascunho: 'yellow', 'Enviado ao financeiro': 'yellow', Pago: 'emerald' }
 const n = (v: unknown) => Number(v) || 0
 const t = (v: unknown) => (v === null || v === undefined ? '' : String(v))
 

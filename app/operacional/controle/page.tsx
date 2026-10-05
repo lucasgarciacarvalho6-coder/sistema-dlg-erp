@@ -416,7 +416,7 @@ function ControleRota() {
                 { chave: 'cidade', label: 'Cidade', tipo: 'texto', obrigatorio: true },
                 { chave: 'dataVisita', label: 'Data visita', tipo: 'data' },
                 { chave: 'visitada', label: 'Visitada', tipo: 'select', opcoes: ['Não', 'Sim'], obrigatorio: true, tabela: false },
-                { chave: 'fechou', label: 'Fechou?', tipo: 'select', opcoes: ['SIM', 'NÃO'], exibir: (r) => (r.fechou ? <Badge texto={String(r.fechou)} tom={r.fechou === 'SIM' ? 'emerald' : 'zinc'} /> : '—') },
+                { chave: 'fechou', label: 'Fechou?', tipo: 'select', opcoes: ['SIM', 'NÃO'], exibir: (r) => (r.fechou ? <Badge texto={String(r.fechou)} tom={r.fechou === 'SIM' ? 'emerald' : 'red'} /> : '—') },
                 { chave: 'contratos', label: 'Contratos', tipo: 'numero' },
                 { chave: 'motivo', label: 'Motivo (se não)', tipo: 'texto' },
                 { chave: 'observacao', label: 'Observação', tipo: 'textarea', tabela: false },

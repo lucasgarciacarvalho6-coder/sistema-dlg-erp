@@ -24,6 +24,19 @@ export const TOM_ETAPA: Record<EtapaLote, Tom> = {
   'Na caixa': 'zinc',
 }
 
+// Selo da etapa nas telas da Produção (regra das situações): andando no prazo ou pronta = verde •
+// aguardando alguém = amarelo • editor atrasado ou parada além do prazo da etapa = vermelho
+const COR_ETAPA: Record<EtapaLote, Tom> = {
+  'Aguardando fotos': 'yellow',
+  'Em edição': 'emerald',
+  'Análise de qualidade': 'yellow',
+  'Conferência final': 'yellow',
+  'Aguardando revelação': 'yellow',
+  Revelando: 'emerald',
+  'Na caixa': 'emerald',
+}
+export const corDaEtapa = (etapa: EtapaLote, foraDoPrazo: boolean): Tom => (foraDoPrazo ? 'red' : COR_ETAPA[etapa])
+
 // Etapas em que a Produção ainda está trabalhando (o resto já foi entregue à Revelação)
 export const ETAPAS_EM_PRODUCAO: EtapaLote[] = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Conferência final']
 

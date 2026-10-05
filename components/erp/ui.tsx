@@ -10,6 +10,7 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { Tom } from '@/lib/erp/types'
 import Icon from './Icon'
+import { corDaSituacao } from '@/lib/erp/coresSituacao'
 
 type EstiloTom = { texto: string; solido: string; suave: string; borda: string; barra: string; brilho: string }
 const NEUTRO: EstiloTom = { texto: 'text-zinc-300', solido: 'bg-zinc-400', suave: 'bg-white/[0.05]', borda: 'border-white/[0.1]', barra: 'bg-zinc-500/70', brilho: '' }
@@ -132,8 +133,9 @@ export function ProgressBar({ valor, tom = 'zinc', altura = 'h-1.5' }: { valor: 
   )
 }
 
-export function Badge({ texto, tom = 'zinc' }: { texto: ReactNode; tom?: Tom }) {
-  const t = TONS[tom]
+// Selo de situação: sem cor informada, segue a regra única das situações (lib/erp/coresSituacao.ts)
+export function Badge({ texto, tom }: { texto: ReactNode; tom?: Tom }) {
+  const t = TONS[tom ?? corDaSituacao(texto)]
   return (
     <span className={`inline-flex items-center gap-2 border ${t.borda} ${t.suave} px-3 py-1 rounded-full whitespace-nowrap`}>
       <span className={`w-1.5 h-1.5 rounded-full ${t.solido}`}></span>

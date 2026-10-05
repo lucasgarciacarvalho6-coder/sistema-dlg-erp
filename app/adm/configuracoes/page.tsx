@@ -125,7 +125,7 @@ export default function ConfiguracoesPage() {
                 <p className="text-sm font-bold text-white">{i.nome}</p>
                 <p className="text-[11px] text-zinc-500">{i.descricao}</p>
               </div>
-              <Badge texto={i.conectado ? 'Conectado' : 'Não configurado'} tom={i.conectado ? 'zinc' : 'yellow'} />
+              <Badge texto={i.conectado ? 'Conectado' : 'Não configurado'} />
             </div>
           ))}
         </div>
