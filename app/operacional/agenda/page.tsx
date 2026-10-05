@@ -11,8 +11,19 @@ import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import type { Tom } from '@/lib/erp/types'
 
-// status sem cor (regra do ADM: cor só para alerta); vermelho só na visita de dia anterior que ainda não foi encerrada
-const tomStatus = (v: Registro): Tom => (v.status === 'Agendada' && String(v.data) < hoje() ? 'red' : 'zinc')
+// Cores da agenda: confirmada (a escola confirmou as fichas) = verde • a confirmar = amarelo • cancelada = vermelho;
+// fotografada e fechada ficam neutras (já foram feitas). Dia anterior ainda sem encerrar ganha o aviso "⚠ não encerrada".
+const situacao = (v: Registro): { tom: Tom; rotulo: string } =>
+  v.status === 'Cancelada'
+    ? { tom: 'red', rotulo: 'Cancelada' }
+    : v.status === 'Fechamento enviado'
+      ? { tom: 'zinc', rotulo: 'Fechado' }
+      : v.status === 'Fotografada'
+        ? { tom: 'zinc', rotulo: 'Fotografada' }
+        : Number(v.fichasConfirmadas) > 0
+          ? { tom: 'emerald', rotulo: 'Confirmada' }
+          : { tom: 'yellow', rotulo: 'A confirmar' }
+const naoEncerrada = (v: Registro) => v.status === 'Agendada' && String(v.data) < hoje()
 const DIAS = ['SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB', 'DOM']
 const SEM_EQUIPE = '__sem__'
 const DIA_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb']
@@ -56,16 +67,18 @@ export default function AgendaFotograficaPage() {
   const [filtroUF, setFiltroUF] = useState('')
 
   const visitas = colecao(s, 'agenda_visitas')
-  const ativasDoMes = visitas.filter((v) => String(v.data).startsWith(mes) && v.status !== 'Cancelada')
-  const equipesDoMes = [...new Set(ativasDoMes.map((v) => String(v.equipe || '').trim()).filter(Boolean))].sort()
-  const ufsDoMes = [...new Set(ativasDoMes.map((v) => String(v.uf || '')).filter(Boolean))].sort()
+  const visitasDoMes = visitas.filter((v) => String(v.data).startsWith(mes)) // inclui as canceladas (aparecem em vermelho)
+  const equipesDoMes = [...new Set(visitasDoMes.map((v) => String(v.equipe || '').trim()).filter(Boolean))].sort()
+  const ufsDoMes = [...new Set(visitasDoMes.map((v) => String(v.uf || '')).filter(Boolean))].sort()
   // filtros (equipe e estado) valem para o calendário e para a visão por equipe
   const passa = (v: Registro) =>
     (!filtroEquipe || (filtroEquipe === SEM_EQUIPE ? !String(v.equipe || '').trim() : String(v.equipe || '').trim() === filtroEquipe)) && (!filtroUF || v.uf === filtroUF)
-  const doMes = ativasDoMes.filter(passa)
-  const previstas = doMes.reduce((a, v) => a + Number(v.fichasPrevistas || 0), 0)
-  const confirmadas = doMes.reduce((a, v) => a + Number(v.fichasConfirmadas || 0), 0)
-  const fotografadas = doMes.reduce((a, v) => a + Number(v.fichasFotografadas || 0), 0)
+  const doMes = visitasDoMes.filter(passa)
+  const ativas = doMes.filter((v) => v.status !== 'Cancelada') // os números do mês não contam as canceladas
+  const canceladas = doMes.length - ativas.length
+  const previstas = ativas.reduce((a, v) => a + Number(v.fichasPrevistas || 0), 0)
+  const confirmadas = ativas.reduce((a, v) => a + Number(v.fichasConfirmadas || 0), 0)
+  const fotografadas = ativas.reduce((a, v) => a + Number(v.fichasFotografadas || 0), 0)
   const semanas = useMemo(() => semanasDoMes(mes), [mes])
   const visita = visitas.find((v) => v.id === visitaId) ?? null
   const responsavelRMC = s.colaboradores.find((c) => c.setor === 'operacional' && /rmc|coorden/i.test(c.funcao))
@@ -107,7 +120,7 @@ export default function AgendaFotograficaPage() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
           </button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 w-full lg:w-auto">
           <div className="bg-white/[0.02] border border-white/[0.05] px-5 py-3 rounded-2xl text-center">
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Previstas</p>
             <p className="text-xl font-black text-white">{num(previstas)}</p>
@@ -123,6 +136,10 @@ export default function AgendaFotograficaPage() {
           <div className="bg-white/[0.02] border border-white/[0.05] px-5 py-3 rounded-2xl text-center">
             <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Fotografadas</p>
             <p className="text-xl font-black text-white">{num(fotografadas)}</p>
+          </div>
+          <div className={`px-5 py-3 rounded-2xl text-center border ${canceladas ? 'bg-red-500/10 border-red-500/20' : 'bg-white/[0.02] border-white/[0.05]'}`}>
+            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Canceladas</p>
+            <p className={`text-xl font-black ${canceladas ? 'text-red-400' : 'text-white'}`}>{num(canceladas)}</p>
           </div>
         </div>
       </div>
@@ -169,8 +186,15 @@ export default function AgendaFotograficaPage() {
       {visao === 'calendario' && (
       <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6 shadow-2xl overflow-x-auto custom-scrollbar">
         <div className="flex justify-between items-center mb-6 border-b border-white/[0.05] pb-4 min-w-[900px]">
-          <h3 className="text-sm font-bold text-white uppercase tracking-widest">{doMes.length} visita(s) no mês</h3>
-          <span className="text-xs text-zinc-500">Vermelho = visita de dia anterior ainda sem encerrar • clique para ver dados, equipe e fichas</span>
+          <h3 className="text-sm font-bold text-white uppercase tracking-widest">
+            {ativas.length} visita(s) no mês{canceladas ? <span className="text-red-400"> • {canceladas} cancelada(s)</span> : null}
+          </h3>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+            <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${TONS.emerald.solido}`}></span>Confirmada</span>
+            <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${TONS.yellow.solido}`}></span>A confirmar</span>
+            <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${TONS.red.solido}`}></span>Cancelada</span>
+            <span>• clique para ver dados, equipe e fichas</span>
+          </span>
         </div>
         <div className="grid grid-cols-7 gap-3 mb-3 text-center min-w-[900px]">
           {DIAS.map((d) => (
@@ -183,11 +207,11 @@ export default function AgendaFotograficaPage() {
               {semana.map((dia) => {
                 const doDia = doMes
                   .filter((v) => v.data === dia)
-                  .sort((a, b) => `${a.equipe || 'zz'}${a.uf}`.localeCompare(`${b.equipe || 'zz'}${b.uf}`))
+                  .sort((a, b) => Number(a.status === 'Cancelada') - Number(b.status === 'Cancelada') || `${a.equipe || 'zz'}${a.uf}`.localeCompare(`${b.equipe || 'zz'}${b.uf}`))
                 const foraDoMes = !dia.startsWith(mes)
                 const eHoje = dia === hoje()
-                const equipesDia = new Set(doDia.map((v) => String(v.equipe || '').trim()).filter(Boolean))
-                const ufsDia = [...new Set(doDia.map((v) => String(v.uf)))]
+                const equipesDia = new Set(doDia.filter((v) => v.status !== 'Cancelada').map((v) => String(v.equipe || '').trim()).filter(Boolean))
+                const ufsDia = [...new Set(doDia.filter((v) => v.status !== 'Cancelada').map((v) => String(v.uf)))]
                 return (
                   <div key={dia} className={`min-h-[120px] rounded-2xl p-1.5 space-y-1.5 border ${eHoje ? 'border-blue-500/40 bg-blue-500/[0.04]' : 'border-dashed border-white/[0.04]'} ${foraDoMes ? 'opacity-35' : ''}`}>
                     <div className="flex items-center justify-between gap-1 px-1">
@@ -200,8 +224,8 @@ export default function AgendaFotograficaPage() {
                     </div>
                     {doDia.map((v) => {
                       const eq = equipeDaVisita(s, v)
-                      const cor = TONS[corEquipe(eq.nome)]
-                      const st = TONS[tomStatus(v)]
+                      const sit = situacao(v)
+                      const st = TONS[sit.tom]
                       return (
                         <button
                           key={v.id}
@@ -209,12 +233,12 @@ export default function AgendaFotograficaPage() {
                           title={`${v.escola} • ${v.cidade}-${v.uf}${eq.nome ? ` • ${eq.nome}` : ''}`}
                           className="relative w-full text-left bg-white/[0.03] border border-white/[0.06] rounded-xl pl-3 pr-2 py-2 space-y-1 hover:border-blue-500/50 transition-all group"
                         >
-                          <span className={`absolute left-1 top-2 bottom-2 w-1 rounded-full ${eq.nome ? cor.solido : 'bg-zinc-700'}`}></span>
+                          <span className={`absolute left-1 top-2 bottom-2 w-1 rounded-full ${st.solido}`}></span>
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-[9px] font-black text-white bg-white/[0.08] px-1.5 py-0.5 rounded">{String(v.uf)}</span>
-                            <span className={`text-[9px] font-black uppercase tracking-wider truncate ${eq.nome ? cor.texto : 'text-zinc-500'}`}>{eq.nome || 'Sem equipe'}</span>
+                            <span className={`text-[9px] font-black uppercase tracking-wider truncate ${eq.nome ? 'text-zinc-300' : 'text-zinc-500'}`}>{eq.nome || 'Sem equipe'}</span>
                           </div>
-                          <p className="text-[11px] font-bold text-white group-hover:text-blue-400 transition-colors leading-tight line-clamp-2">{String(v.escola)}</p>
+                          <p className={`text-[11px] font-bold group-hover:text-blue-400 transition-colors leading-tight line-clamp-2 ${v.status === 'Cancelada' ? 'text-zinc-400 line-through decoration-red-400/60' : 'text-white'}`}>{String(v.escola)}</p>
                           {v.retornoDe && <p className="text-[9px] font-black uppercase tracking-wider text-zinc-400">↺ Retorno</p>}
                           <p className="text-[10px] text-zinc-400 truncate">{String(v.cidade)}</p>
                           <div className="flex items-center justify-between gap-1 text-[9px] font-bold">
@@ -223,9 +247,10 @@ export default function AgendaFotograficaPage() {
                             </span>
                             <span className={`flex items-center gap-1 uppercase ${st.texto}`}>
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.solido}`}></span>
-                              {rotuloStatus(v.status)}
+                              {sit.rotulo}
                             </span>
                           </div>
+                          {naoEncerrada(v) && <p className="text-[9px] font-bold text-red-400 leading-tight">⚠ dia passou: falta encerrar</p>}
                           {v.status === 'Agendada' && !eq.completa && <p className="text-[9px] font-bold text-yellow-400 leading-tight">⚠ falta {eq.faltando.join(', ')}</p>}
                         </button>
                       )
@@ -259,12 +284,13 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
       {ordem.map((nome) => {
         const lista = grupos.get(nome)!
         const cor = TONS[corEquipe(nome)]
+        const validas = lista.filter((v) => v.status !== 'Cancelada') // as canceladas aparecem, mas não contam
         // composição: da próxima visita agendada (ou da última, se todas já passaram)
-        const ref = lista.find((v) => v.status === 'Agendada' && String(v.data) >= hoje()) ?? lista[lista.length - 1]
+        const ref = validas.find((v) => v.status === 'Agendada' && String(v.data) >= hoje()) ?? validas[validas.length - 1] ?? lista[lista.length - 1]
         const eq = equipeDaVisita(s, ref)
-        const ufs = [...new Set(lista.map((v) => String(v.uf)))]
-        const fichas = lista.reduce((a, v) => a + Number(v.status === 'Agendada' ? v.fichasPrevistas : v.fichasFotografadas) || 0, 0)
-        const diasDuplos = new Set(lista.filter((v, i) => lista.some((o, j) => j !== i && o.data === v.data && o.cidade !== v.cidade)).map((v) => String(v.data)))
+        const ufs = [...new Set(validas.map((v) => String(v.uf)))]
+        const fichas = validas.reduce((a, v) => a + Number(v.status === 'Agendada' ? v.fichasPrevistas : v.fichasFotografadas) || 0, 0)
+        const diasDuplos = new Set(validas.filter((v, i) => validas.some((o, j) => j !== i && o.data === v.data && o.cidade !== v.cidade)).map((v) => String(v.data)))
         return (
           <div key={nome || SEM_EQUIPE} className={`bg-painel/80 border rounded-3xl overflow-hidden ${nome ? cor.borda : 'border-yellow-500/20'}`}>
             <div className="px-6 py-4 border-b border-white/[0.05] flex flex-wrap items-center justify-between gap-3">
@@ -273,7 +299,8 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
                 <div>
                   <p className="text-base font-black text-white">{nome || 'Sem equipe definida'}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                    {lista.length} escola(s) • {num(fichas)} fichas • {ufs.join(' · ')}
+                    {validas.length} escola(s) • {num(fichas)} fichas • {ufs.join(' · ')}
+                    {lista.length > validas.length ? <span className="text-red-400"> • {lista.length - validas.length} cancelada(s)</span> : null}
                   </p>
                 </div>
               </div>
@@ -287,7 +314,8 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
             </div>
             <div className="divide-y divide-white/[0.03]">
               {lista.map((v) => {
-                const st = TONS[tomStatus(v)]
+                const sit = situacao(v)
+                const st = TONS[sit.tom]
                 const e = equipeDaVisita(s, v)
                 return (
                   <button key={v.id} onClick={() => onAbrir(v.id)} className="w-full text-left px-6 py-3 flex items-center gap-4 hover:bg-white/[0.02] transition-colors">
@@ -296,17 +324,18 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
                       <p className="text-[9px] font-bold uppercase text-zinc-500">{diaSemana(String(v.data))}</p>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{String(v.escola)}</p>
+                      <p className={`text-xs font-bold truncate ${v.status === 'Cancelada' ? 'text-zinc-400 line-through decoration-red-400/60' : 'text-white'}`}>{String(v.escola)}</p>
                       <p className="text-[10px] text-zinc-400">
                         {String(v.cidade)}-{String(v.uf)}
                         {v.retornoDe && <span className="text-zinc-400 font-bold"> • ↺ Retorno</span>}
                         {diasDuplos.has(String(v.data)) && <span className="text-yellow-400 font-bold"> • 2 cidades no mesmo dia</span>}
                         {v.status === 'Agendada' && !e.completa && <span className="text-yellow-400 font-bold"> • falta {e.faltando.join(', ')}</span>}
+                        {naoEncerrada(v) && <span className="text-red-400 font-bold"> • dia passou: falta encerrar</span>}
                       </p>
                     </div>
                     <span className={`flex items-center gap-1.5 text-[9px] font-bold uppercase whitespace-nowrap ${st.texto}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${st.solido}`}></span>
-                      {rotuloStatus(v.status)}
+                      {sit.rotulo}
                     </span>
                   </button>
                 )
