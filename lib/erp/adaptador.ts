@@ -42,12 +42,13 @@ export const COLUNAS: Record<string, string[]> = {
   documentos_externos: ['vendedor_id', 'tipo', 'escola', 'descricao', 'paginas', 'status'],
   devolucoes_books: ['vendedor_id', 'escola', 'quantidade', 'data', 'observacao', 'status'],
   // ---- Vendas Rebolo ----
-  rebolo_pacotes: ['tipo', 'vendedora_id', 'observacao'], // numero é gerado pelo banco
+  rebolo_pacotes: ['tipo', 'vendedora_id', 'observacao'], // numero é gerado pelo banco (sequência da vendedora, SQL 034)
   rebolo_fichas: ['pacote_id', 'vendedora_id', 'escola', 'data_visita', 'numero_ficha', 'aluno', 'serie', 'data_nascimento', 'qtd_fotos',
     'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietario_fazenda', 'bairro', 'cidade', 'uf', 'ponto_referencia',
     'whatsapp1', 'whatsapp2', 'whatsapp3', 'telefone', 'nome_pai', 'nome_mae', 'horario', 'observacao'],
   // contatos, situação, desconto e envio mudam só pelas funções do banco (registrar_contato_rebolo etc.)
   rebolo_contatos: [],
+  rebolo_numeracao: [], // próximo número do pacote de cada vendedora: muda só pelo banco (SQL 034)
   // ---- Produção (setor 'edicao'): editores são só um cadastro; os lotes mudam pelas funções do banco (SQL 020) ----
   editores: ['nome', 'telefone', 'observacao', 'status'],
   producao_lotes: [],

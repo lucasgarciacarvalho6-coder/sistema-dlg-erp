@@ -10,6 +10,7 @@ import { addDias, addMeses, dataBR, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 import { chaveEscola } from './escolas'
+import { proximoPacote } from './rebolo'
 
 export interface Contexto {
   autorId: string
@@ -1313,6 +1314,23 @@ export function registrarContatoRebolo(
   return null
 }
 
+// Número do pacote por vendedora (mesma regra do SQL 034): pega o próximo dela e anda o contador
+export function numerarPacoteRebolo(d: ErpState, vendedoraId: string): number {
+  const atual = col(d, 'rebolo_numeracao').find((n) => n.vendedoraId === vendedoraId)
+  const numero = proximoPacote(atual, col(d, 'rebolo_pacotes').filter((p) => p.vendedoraId === vendedoraId))
+  if (atual) atual.proximo = numero + 1
+  else inserir(d, 'rebolo_numeracao', { vendedoraId, proximo: numero + 1 })
+  return numero
+}
+export function definirProximoPacoteRebolo(d: ErpState, vendedoraId: string, proximo: number): string | null {
+  if (!Number.isInteger(proximo) || proximo < 1) return 'Informe um número a partir de 1.'
+  if (col(d, 'rebolo_pacotes').some((p) => p.vendedoraId === vendedoraId && Number(p.numero) === proximo)) return `Esta vendedora já tem o pacote P${proximo}. Escolha outro número.`
+  const atual = col(d, 'rebolo_numeracao').find((n) => n.vendedoraId === vendedoraId)
+  if (atual) atual.proximo = proximo
+  else inserir(d, 'rebolo_numeracao', { vendedoraId, proximo })
+  return null
+}
+
 // Supervisora/ADM devolve um descarte para a fila
 // Mesma regra do SQL 031 (reabrir_ficha_rebolo): volta para Em negociação ou Tentar de novo, com a observação no histórico
 export function reabrirFichaRebolo(d: ErpState, fichaId: string, situacao: string, observacao: string, ctx: Contexto): string | null {
@@ -1364,6 +1382,65 @@ export function atualizarVendaRebolo(d: ErpState, vendaId: string, acao: 'enviar
   v.conferenciaMotivo = ''
   notificar(d, ctx, { setores: ['financeiro', 'adm'], tipo: 'aprovacao', titulo: 'Venda do rebolo para conferir', descricao: `${v.responsavel} • ${v.pacote} • R$ ${(Number(v.valor) || 0).toFixed(2).replace('.', ',')}`, link: '/financeiro/conferencia' })
   auditar(d, ctx, 'EDITAR', `Venda rebolo enviada ao Financeiro: ${v.responsavel}`, 'rebolo')
+  return null
+}
+
+// Venda fechada corrigida sem cancelar (mesmas regras do SQL 032): só a efetivar ou devolvida;
+// produto, valor, pagamento e dados do comprador; o histórico da ficha registra o que mudou
+export interface EdicaoVendaRebolo {
+  pacote: string
+  valor: number
+  formaPagamento: string
+  parcelas: number
+  formaParcelamento: string
+  primeiroVencimento: string
+  responsavel: string
+  cpf: string
+  rg: string
+  whatsapp: string
+  observacao: string
+}
+export function editarVendaRebolo(d: ErpState, vendaId: string, e: EdicaoVendaRebolo, ctx: Contexto): string | null {
+  const v = col(d, 'vendas_ebooks').find((x) => x.id === vendaId)
+  if (!v || v.canal !== 'Rebolo') return 'Venda não encontrada.'
+  if (!['Aguardando contrato', 'Devolvida'].includes(String(v.conferencia))) return `Só dá para editar a venda a efetivar ou devolvida (esta está: ${v.conferencia}).`
+  const pix = e.formaPagamento === 'PIX'
+  if (!e.pacote.trim()) return 'Escolha o produto.'
+  if (!(e.valor > 0)) return 'Informe o valor da venda.'
+  if (!['PIX', 'Cartão de crédito', 'Boleto'].includes(e.formaPagamento)) return 'Forma de pagamento inválida.'
+  const parcelas = pix ? 1 : e.parcelas
+  if (!(parcelas >= 1 && parcelas <= 24)) return 'Número de parcelas inválido.'
+  if (e.formaPagamento === 'Boleto' && !e.primeiroVencimento) return 'Informe o 1º vencimento do boleto.'
+  if (!e.responsavel.trim()) return 'Informe o nome do comprador.'
+  if (e.cpf.replace(/\D/g, '').length !== 11) return 'Informe o CPF do comprador (11 dígitos).'
+  const parcelamento = pix ? 'À vista' : e.formaParcelamento.trim()
+  const resumo = (pacote: unknown, forma: unknown, parc: unknown, valor: unknown) =>
+    [pacote, forma, parc, `R$ ${(Number(valor) || 0).toFixed(2).replace('.', ',')}`].filter(Boolean).join(' • ')
+  const antes = resumo(v.pacote, v.formaPagamento, v.formaParcelamento, v.valor)
+  const depois = resumo(e.pacote.trim(), e.formaPagamento, parcelamento, e.valor)
+  Object.assign(v, {
+    pacote: e.pacote.trim(),
+    valor: e.valor,
+    formaPagamento: e.formaPagamento,
+    parcelas,
+    formaParcelamento: parcelamento,
+    primeiroVencimento: e.formaPagamento === 'Boleto' ? e.primeiroVencimento : '',
+    responsavel: e.responsavel.trim().toUpperCase(),
+    cpf: e.cpf.trim(),
+    rg: e.rg.trim(),
+    whatsapp: e.whatsapp.trim(),
+    telefone: e.whatsapp.trim() || v.telefone,
+    observacao: e.observacao.trim(),
+  })
+  inserir(d, 'rebolo_contatos', {
+    fichaId: v.fichaReboloId,
+    vendedoraId: ctx.autorId,
+    resultado: 'Venda editada',
+    observacao: antes === depois ? 'Dados do comprador corrigidos' : `${antes} → ${depois}`,
+    agendadoPara: '',
+    data: agora(),
+  })
+  auditar(d, ctx, 'EDITAR', `Venda rebolo editada: ${v.responsavel}`, 'rebolo')
   return null
 }
 

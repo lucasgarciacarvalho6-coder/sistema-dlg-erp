@@ -2,17 +2,19 @@
 
 // Vendas do rebolo: "Vendas a efetivar" → gerar o Contrato de Compra Online (PDF) → cliente assina no site
 // de assinatura eletrônica → anexar o PDF assinado → Financeiro confere → aprovada (parcelas + meta).
+// A venda a efetivar ou devolvida pode ser EDITADA (produto, valor, pagamento, comprador) sem cancelar.
 
 import { useMemo, useRef, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { anexarContratoRebolo, avisar, cancelarVendaRebolo, enviarVendaRebolo, urlArquivoContrato, usePode } from '@/lib/erp/store'
 import { imprimirContratoRebolo } from '@/lib/erp/impressao-rebolo'
-import { escolaFicha } from '@/lib/erp/rebolo'
+import { escolaFicha, faixaDaFicha } from '@/lib/erp/rebolo'
 import { lerJSON } from '@/lib/erp/operacional'
-import { brl, dataBR } from '@/lib/erp/format'
+import { brl, dataBR, hoje } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import { useRebolo } from '@/components/rebolo/comum'
+import { FecharVenda } from '@/components/rebolo/Atendimento'
 
 const ABAS = [
   { id: 'Aguardando contrato', label: 'A efetivar (contrato)', tom: 'cyan' },
@@ -24,13 +26,14 @@ const ABAS = [
 type Aba = (typeof ABAS)[number]['id']
 
 export default function VendasReboloPage() {
-  const { eu, supervisao, vendas, fichas, vendedoras, nome } = useRebolo()
+  const { eu, supervisao, vendas, fichas, vendedoras, nome, tabela } = useRebolo()
   const podeFazer = usePode()
   const [aba, setAba] = useState<Aba>('Aguardando contrato')
   const [vendedora, setVendedora] = useState('')
   const [anexos, setAnexos] = useState<Record<string, string>>({}) // venda → caminho do contrato assinado recém-enviado
   const [enviando, setEnviando] = useState<string | null>(null)
   const [cancelar, setCancelar] = useState<Registro | null>(null)
+  const [editar, setEditar] = useState<Registro | null>(null)
   const [motivo, setMotivo] = useState('')
   const inputArquivo = useRef<HTMLInputElement>(null)
   const alvo = useRef<string | null>(null)
@@ -158,6 +161,9 @@ export default function VendasReboloPage() {
                         <button onClick={() => void enviar(v)} disabled={!anexos[v.id] || enviando === v.id} className={btnPrimario} title={anexos[v.id] ? '' : 'Anexe o contrato assinado primeiro'}>
                           {enviando === v.id ? 'Enviando...' : v.conferencia === 'Devolvida' ? 'Reenviar ao Financeiro' : 'Enviar ao Financeiro'}
                         </button>
+                        <button onClick={() => setEditar(v)} className="px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-blue-500/50 bg-blue-500/15 text-blue-400 hover:bg-blue-500/25">
+                          ✎ Editar
+                        </button>
                         <button onClick={() => (setCancelar(v), setMotivo(''))} className="px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-widest text-red-400 hover:bg-red-500/10">
                           Cancelar
                         </button>
@@ -181,6 +187,22 @@ export default function VendasReboloPage() {
           </div>
         )}
       </Panel>
+
+      <EditarVenda
+        venda={editar}
+        ficha={fichas.find((f) => f.id === editar?.fichaReboloId)}
+        tabela={tabela}
+        onFechar={(salvou) => {
+          // o contrato anexado antes da edição ficou com os dados velhos: precisa anexar o novo
+          if (salvou && editar)
+            setAnexos((a) => {
+              const resto = { ...a }
+              delete resto[editar.id]
+              return resto
+            })
+          setEditar(null)
+        }}
+      />
 
       <Modal
         aberto={!!cancelar}
@@ -209,5 +231,25 @@ export default function VendasReboloPage() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+// Editar a venda (a efetivar ou devolvida): o mesmo formulário de Fechar venda, já preenchido, com o preço da faixa
+// do dia em que a venda foi fechada
+function EditarVenda({ venda, ficha, tabela, onFechar }: { venda: Registro | null; ficha?: Registro; tabela: ReturnType<typeof useRebolo>['tabela']; onFechar: (salvou: boolean) => void }) {
+  return (
+    <Modal
+      aberto={!!venda}
+      titulo="Editar venda"
+      subtitulo={venda ? `${venda.responsavel} • ${venda.pacote} • ${brl(Number(venda.valor) || 0)}` : ''}
+      onFechar={() => onFechar(false)}
+      largura="max-w-3xl"
+    >
+      {venda && ficha ? (
+        <FecharVenda key={venda.id} ficha={ficha} faixa={faixaDaFicha(String(ficha.dataVisita), tabela, String(venda.data || hoje()))} venda={venda} onFeito={() => onFechar(true)} />
+      ) : (
+        <p className="text-sm text-zinc-400">Ficha da venda não encontrada.</p>
+      )}
+    </Modal>
   )
 }

@@ -1,14 +1,16 @@
 'use client'
 
 // Pacotes (caixas de 10 álbuns que voltaram do vendedor externo) e o cadastro das fichas.
-// A vendedora tem um pacote aberto por vez: só abre outro quando as fichas estão vendidas ou em descarte.
+// Sem trava (pedido de 06/10/2026): a vendedora abre um pacote novo (Padrão ou Avulso) a qualquer momento.
+// Número do pacote por vendedora (SQL 034): cada uma tem a sua sequência; a supervisão ajusta o próximo número.
 // Pacote Padrão: ao criar, já abre a tela com os 10 álbuns para cadastrar tudo de uma vez (FichasLote).
 
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
-import { abrirPacoteRebolo, avisar, usePode } from '@/lib/erp/store'
+import { abrirPacoteRebolo, avisar, definirProximoPacoteRebolo, usePode } from '@/lib/erp/store'
+import { colecao } from '@/lib/erp/metrics'
 import { imprimirEtiquetaPacote, imprimirEtiquetas } from '@/lib/erp/impressao-rebolo'
-import { escolaFicha, faltaParaLiberar, pacoteFinalizado, pacoteLiberado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { escolaFicha, pacoteFinalizado, proximoPacote, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario } from '@/components/erp/ui'
@@ -28,6 +30,7 @@ export default function PacotesReboloPage() {
   const [form, setForm] = useState<{ ficha: Registro | null } | null>(null)
   // tela dos 10 álbuns: id do pacote, ou 'novo' = o pacote que acabou de ser criado (aparece quando chega da gravação)
   const [lote, setLote] = useState<string | null>(null)
+  const [antes, setAntes] = useState<Set<string> | null>(null) // meus pacotes antes de criar o novo
 
   const linhas = useMemo(
     () =>
@@ -35,26 +38,28 @@ export default function PacotesReboloPage() {
         .filter((p) => (supervisao ? !vendedora || p.vendedoraId === vendedora : p.vendedoraId === eu?.id))
         .map((p) => ({ p, fichas: fichas.filter((f) => f.pacoteId === p.id) }))
         .filter(({ fichas: fs }) => filtro === 'todos' || (filtro === 'finalizados' ? pacoteFinalizado(fs) : !pacoteFinalizado(fs)))
-        .sort((a, b) => Number(b.p.numero) - Number(a.p.numero)),
-    [pacotes, fichas, supervisao, vendedora, eu, filtro],
+        // o número repete entre vendedoras: com todas na lista, agrupa por vendedora
+        .sort((a, b) => (supervisao && !vendedora ? nome(a.p.vendedoraId).localeCompare(nome(b.p.vendedoraId)) : 0) || Number(b.p.numero) - Number(a.p.numero)),
+    [pacotes, fichas, supervisao, vendedora, eu, filtro, nome],
   )
   const total = linhas.reduce((a, l) => a + l.fichas.length, 0)
   const aberto = pacotes.find((p) => p.id === abertoId) ?? null
   const fichasAberto = aberto ? fichas.filter((f) => f.pacoteId === aberto.id).sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm))) : []
   const capacidade = aberto?.tipo === 'Avulso' ? 1 : 10
   const podeCadastrar = !!aberto && (aberto.vendedoraId === eu?.id || supervisao) && podeFazer('rebolo', 'criar')
-  // o pacote que ainda prende a vendedora (incompleto ou com ficha aguardando contato): o próximo só abre depois dele
-  const meuAberto = pacotes
-    .filter((p) => p.vendedoraId === eu?.id)
-    .sort((a, b) => Number(a.numero) - Number(b.numero))
-    .find((p) => !pacoteLiberado(p, fichas.filter((f) => f.pacoteId === p.id)))
+  const meus = pacotes.filter((p) => p.vendedoraId === eu?.id)
 
   const abrir = async (tipo: 'Padrão' | 'Avulso') => {
     setNovo(false)
+    const ids = new Set(meus.map((p) => p.id))
     const erro = await abrirPacoteRebolo(tipo)
-    if (!erro && tipo === 'Padrão') setLote('novo')
+    if (!erro && tipo === 'Padrão') {
+      setAntes(ids)
+      setLote('novo')
+    }
   }
-  const pacoteLote = lote === 'novo' ? (meuAberto ?? null) : (pacotes.find((p) => p.id === lote) ?? null)
+  const meuNovo = antes ? meus.filter((p) => !antes.has(p.id)).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0] : undefined
+  const pacoteLote = lote === 'novo' ? (meuNovo ?? null) : (pacotes.find((p) => p.id === lote) ?? null)
   const fecharLote = () => {
     if (pacoteLote) setAbertoId(pacoteLote.id)
     setLote(null)
@@ -87,8 +92,8 @@ export default function PacotesReboloPage() {
         acoes={
           eu?.setor === 'rebolo' &&
           podeFazer('rebolo', 'criar') && (
-            <button onClick={() => (meuAberto ? setAbertoId(meuAberto.id) : setNovo(true))} className={btnBranco}>
-              <Icon nome="plus" className="w-5 h-5" /> {meuAberto ? `Meu pacote aberto: P${meuAberto.numero}` : 'Novo pacote'}
+            <button onClick={() => setNovo(true)} className={btnBranco}>
+              <Icon nome="plus" className="w-5 h-5" /> Novo pacote
             </button>
           )
         }
@@ -170,9 +175,7 @@ export default function PacotesReboloPage() {
         <Panel
           semPadding
           titulo={`Pacote P${aberto.numero} • ${nome(aberto.vendedoraId)}`}
-          subtitulo={`${fichasAberto.length} de ${capacidade} ficha(s) • aberto em ${dataBR(String(aberto.criadoEm).slice(0, 10))} • ${
-            faltaParaLiberar(aberto, fichasAberto) ? `para abrir o próximo pacote: ${faltaParaLiberar(aberto, fichasAberto)}` : 'próximo pacote liberado'
-          }`}
+          subtitulo={`${fichasAberto.length} de ${capacidade} ficha(s) • aberto em ${dataBR(String(aberto.criadoEm).slice(0, 10))}`}
           acoes={
             <div className="flex flex-wrap gap-2">
               <button onClick={etiquetaPacote} className={btnSecundario} title="Etiqueta para colar na caixa: número do pacote, vendedora e cidades (6 por folha A4)">
@@ -236,6 +239,8 @@ export default function PacotesReboloPage() {
         </Panel>
       )}
 
+      {supervisao && <NumeracaoPacotes />}
+
       <Modal aberto={novo} titulo="Novo pacote de vendas" subtitulo="Escolha o tipo de pacote" onFechar={() => setNovo(false)} largura="max-w-lg">
         <div className="space-y-3">
           <button onClick={() => void abrir('Padrão')} className="w-full text-left p-5 rounded-2xl border border-white/[0.12] bg-white/[0.03] hover:bg-white/[0.06]">
@@ -270,5 +275,74 @@ export default function PacotesReboloPage() {
       </Modal>
 
     </div>
+  )
+}
+
+// Supervisão: o próximo número de pacote de cada vendedora (cada uma tem a sua sequência; pode repetir entre elas)
+function NumeracaoPacotes() {
+  const { s, vendedoras, pacotes } = useRebolo()
+  const numeracao = colecao(s, 'rebolo_numeracao')
+  const [digitado, setDigitado] = useState<Record<string, string>>({})
+  const [salvando, setSalvando] = useState<string | null>(null)
+  const salvar = async (vendedoraId: string, numero: number) => {
+    setSalvando(vendedoraId)
+    const erro = await definirProximoPacoteRebolo(vendedoraId, numero)
+    setSalvando(null)
+    if (!erro)
+      setDigitado((d) => {
+        const resto = { ...d }
+        delete resto[vendedoraId]
+        return resto
+      })
+  }
+  return (
+    <Panel semPadding titulo="Numeração dos pacotes" subtitulo="Cada vendedora tem a sua sequência e continua de onde parou. O número pode repetir entre vendedoras.">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left text-sm text-zinc-300">
+          <thead className="text-[10px] uppercase tracking-[0.15em] bg-white/[0.02] text-zinc-500 border-b border-white/[0.05]">
+            <tr>
+              <th className="px-5 py-3 font-bold">Vendedora</th>
+              <th className="px-5 py-3 font-bold">Último pacote</th>
+              <th className="px-5 py-3 font-bold">Próximo pacote</th>
+              <th className="px-5 py-3 font-bold">Mudar o próximo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.02]">
+            {vendedoras.map((v) => {
+              const dela = pacotes.filter((p) => p.vendedoraId === v.id)
+              const ultimo = dela.length ? Math.max(...dela.map((p) => Number(p.numero) || 0)) : 0
+              const proximo = proximoPacote(
+                numeracao.find((n) => n.vendedoraId === v.id),
+                dela,
+              )
+              const valor = digitado[v.id] ?? String(proximo)
+              const n = Number(valor)
+              return (
+                <tr key={v.id}>
+                  <td className="px-5 py-3 font-bold text-white">{v.nome}</td>
+                  <td className="px-5 py-3">{ultimo ? `P${ultimo}` : '—'}</td>
+                  <td className="px-5 py-3 font-black text-white">P{proximo}</td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={valor}
+                        onChange={(e) => setDigitado((d) => ({ ...d, [v.id]: e.target.value }))}
+                        aria-label={`Próximo pacote de ${v.nome}`}
+                        className="w-28 bg-black/50 border border-white/[0.05] rounded-xl px-3 py-2.5 text-sm font-bold text-white outline-none focus:border-blue-500/50 transition-all"
+                      />
+                      <button disabled={salvando === v.id || !Number.isInteger(n) || n < 1 || n === proximo} onClick={() => void salvar(v.id, n)} className={btnSecundario}>
+                        {salvando === v.id ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }

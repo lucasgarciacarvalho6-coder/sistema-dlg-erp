@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { brl, hoje, iniciais } from '@/lib/erp/format'
 import { equipeComMeta, metaColaborador } from '@/lib/erp/metrics'
-import { pacoteFinalizado, pacoteLiberado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { pacoteFinalizado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { Avatar, EmptyState, PageHeader, Panel, StatCard, TONS } from '@/components/erp/ui'
 import { useRebolo } from '@/components/rebolo/comum'
 
@@ -29,12 +29,12 @@ export default function GestaoDiariaReboloPage() {
     const cont = contatos.filter((x) => x.vendedoraId === c.id && doDia(x.data))
     const fechadas = vendas.filter((v) => daVendedora(v, c.id) && doDia(v.criadoEm))
     const aprovadas = vendas.filter((v) => daVendedora(v, c.id) && v.conferencia === 'Conferida' && doDia(v.conferidoEm || v.data))
-    // o pacote atual: o que ainda prende (incompleto ou com ficha aguardando contato); senão, o mais novo em andamento
-    const dela = pacotes.filter((p) => p.vendedoraId === c.id).sort((a, b) => Number(a.numero) - Number(b.numero))
+    // o pacote atual: o mais novo em andamento (a vendedora pode ter vários abertos: abrir pacote não tem trava)
     const fichasDe = (p: (typeof pacotes)[number]) => fichas.filter((f) => f.pacoteId === p.id)
-    const aberto = dela.find((p) => !pacoteLiberado(p, fichasDe(p))) ?? [...dela].reverse().find((p) => !pacoteFinalizado(fichasDe(p)))
+    const emAndamento = pacotes.filter((p) => p.vendedoraId === c.id && !pacoteFinalizado(fichasDe(p))).sort((a, b) => Number(b.numero) - Number(a.numero))
+    const aberto = emAndamento[0]
     const metaDia = comMeta.has(c.id) ? metaColaborador(c, 'valor_vendido', dia.slice(0, 7)).diaria : 0
-    return { c, minhas, cont, fechadas, aprovadas, aberto, metaDia, valorAprovado: aprovadas.reduce((a, v) => a + (Number(v.valor) || 0), 0) }
+    return { c, minhas, cont, fechadas, aprovadas, aberto, emAndamento: emAndamento.length, metaDia, valorAprovado: aprovadas.reduce((a, v) => a + (Number(v.valor) || 0), 0) }
   })
   const tot = (k: 'cont' | 'fechadas' | 'aprovadas') => linhas.reduce((a, l) => a + l[k].length, 0)
   const alvo = visiveis[0]
@@ -65,7 +65,7 @@ export default function GestaoDiariaReboloPage() {
         <StatCard label="Contatos no dia" valor={tot('cont')} />
         <StatCard label="Vendas fechadas" valor={tot('fechadas')} detalhe="aguardando contrato / Financeiro" />
         <StatCard label="Aprovadas no dia" valor={tot('aprovadas')} detalhe={brl(linhas.reduce((a, l) => a + l.valorAprovado, 0))} />
-        <StatCard label="Pacote aberto" valor={aberto ? `P${aberto.numero}` : '—'} detalhe={aberto ? `${fichas.filter((f) => f.pacoteId === aberto.id).length} de ${aberto.tipo === 'Avulso' ? 1 : 10} ficha(s)` : 'nenhum pacote aberto'} />
+        <StatCard label="Pacote aberto" valor={aberto ? `P${aberto.numero}` : '—'} detalhe={aberto ? `${fichas.filter((f) => f.pacoteId === aberto.id).length} de ${aberto.tipo === 'Avulso' ? 1 : 10} ficha(s)${(linhas[0]?.emAndamento ?? 0) > 1 ? ` • ${linhas[0].emAndamento} pacotes em andamento` : ''}` : 'nenhum pacote aberto'} />
       </div>
 
       <Panel semPadding titulo={alvo ? `O dia de ${alvo.nome}` : 'O dia da vendedora'}>

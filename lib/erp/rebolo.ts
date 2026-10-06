@@ -127,6 +127,19 @@ export function nomeDaVenda(produto: ProdutoRebolo, opcoes: readonly OpcaoComple
   return `${sem.length ? `Completo ${sem.join(' e ')}` : 'Completo (maleta de luxo)'}${opcoes.includes('com_poster') ? ' + pôster' : ''}`
 }
 
+// O contrário de nomeDaVenda, para editar a venda fechada: "Completo sem maleta + pôster" → completo + opções.
+// Vendas antigas ("Kit Completo", "Kit Sem Moldura"...) abrem como Completo.
+export function produtoDaVenda(pacote: string): { produto: ProdutoRebolo; opcoes: OpcaoCompleto[] } {
+  const t = pacote.toLowerCase()
+  if (/^p[ôo]ster/.test(t)) return { produto: 'poster_moldura', opcoes: [] }
+  const opcoes: OpcaoCompleto[] = []
+  if (t.includes('sem maleta')) opcoes.push('sem_maleta')
+  if (t.includes('sem moldura')) opcoes.push('sem_moldura')
+  if (/p[ôo]ster/.test(t)) opcoes.push('com_poster')
+  return { produto: 'completo', opcoes }
+}
+export const formaDaVenda = (formaPagamento: string): FormaRebolo => FORMAS_REBOLO.find((f) => f.formaPagamento === formaPagamento)?.id ?? 'boleto'
+
 // Combinações do Completo que a faixa tem (colunas do quadro de preços): Completo, Sem maleta, Sem moldura...
 export function combinacoesDaFaixa(t: TabelaRebolo, f: Faixa): { opcoes: OpcaoCompleto[]; rotulo: string }[] {
   const tem = new Set(opcoesDaFaixa(t, f).map((o) => o.id))
@@ -171,7 +184,7 @@ export const nomeForma = (id: string) => FORMAS_REBOLO.find((f) => f.id === id)?
 // ---- Situações da ficha (fila de contatos) ----
 export const SITUACOES_FICHA = ['Aguardando contato', 'Tentar de novo', 'Em negociação', 'Agendado', 'Venda a efetivar', 'Vendida', 'Descarte', 'Cancelada'] as const
 export type SituacaoFicha = (typeof SITUACOES_FICHA)[number]
-// fichas "finalizadas" liberam a vendedora para abrir o próximo pacote
+// fichas "finalizadas": o pacote com todas elas assim sai de "Em andamento"
 export const FINALIZADAS: readonly string[] = ['Vendida', 'Descarte', 'Cancelada']
 export const EM_ABERTO: readonly string[] = ['Aguardando contato', 'Tentar de novo', 'Em negociação', 'Agendado']
 export const MOTIVOS_DESCARTE = ['Sem interesse', 'Sem retorno', 'Não localizado', 'Sem condição financeira', 'Restrição nos nomes'] as const
@@ -197,19 +210,18 @@ export const escolaFicha = (f: Registro | undefined) => {
 
 export const pacoteFinalizado = (fichas: Registro[]) => fichas.length > 0 && fichas.every((f) => FINALIZADAS.includes(String(f.situacao)))
 
-// Quando a vendedora pode abrir o PRÓXIMO pacote (pedido de 06/10/2026; mesma regra do SQL 031):
-// o atual está completo (Padrão 10 fichas, Avulso 1) e todo contatado (nenhuma ficha em "Aguardando contato");
-// ou já tem todas as fichas terminadas (pacote antigo). Negociações e agendamentos seguem no pacote antigo.
+// Abrir pacote novo NÃO tem trava (pedido de 06/10/2026, SQL 033): a vendedora abre um Padrão (10) ou Avulso (1)
+// a qualquer momento, mesmo com outros em andamento.
 export const capacidadePacote = (p: Registro | undefined) => (p?.tipo === 'Avulso' ? 1 : 10)
-export const pacoteLiberado = (p: Registro, fichas: Registro[]) =>
-  (fichas.length >= capacidadePacote(p) && fichas.every((f) => f.situacao !== 'Aguardando contato')) || pacoteFinalizado(fichas)
-// O que falta para liberar o próximo pacote ('' = liberado)
-export function faltaParaLiberar(p: Registro, fichas: Registro[]): string {
-  if (pacoteLiberado(p, fichas)) return ''
-  const cap = capacidadePacote(p)
-  if (fichas.length < cap) return `cadastre as ${cap} fichas (tem ${fichas.length})`
-  const n = fichas.filter((f) => f.situacao === 'Aguardando contato').length
-  return `contate todas as fichas (${n} ainda em "Aguardando contato")`
+
+// Número do pacote POR VENDEDORA (pedido de 06/10/2026, SQL 034): cada uma tem a sua sequência e o número pode
+// repetir entre elas. Próximo = o informado pela supervisão (rebolo_numeracao); sem ele, o último dela + 1
+// (vendedora nova começa no 1); número que ela já usou é pulado.
+export function proximoPacote(numeracao: Registro | undefined, pacotesDela: Registro[]): number {
+  const usados = new Set(pacotesDela.map((p) => Number(p.numero) || 0))
+  let n = Number(numeracao?.proximo) || Math.max(0, ...usados) + 1
+  while (usados.has(n)) n++
+  return n
 }
 export const rotuloPacote = (p: Registro | undefined) => (p ? `P${p.numero}` : '—')
 

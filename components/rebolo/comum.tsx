@@ -14,6 +14,7 @@ import {
   precoVenda,
   rotuloPacote,
   tabelaRebolo,
+  TOM_FAIXA,
   TOM_SITUACAO,
   type Faixa,
   type TabelaRebolo,
@@ -46,7 +47,7 @@ export function SituacaoBadge({ situacao }: { situacao: unknown }) {
 
 export function FaixaBadge({ ficha, tabela }: { ficha: Registro; tabela: ReturnType<typeof tabelaRebolo> }) {
   const f = faixaDaFicha(String(ficha.dataVisita), tabela)
-  return <Badge texto={`Faixa ${f}`} />
+  return <Badge texto={`Faixa ${f}`} tom={TOM_FAIXA[f]} />
 }
 
 export const PacoteBadge = ({ pacote }: { pacote: Registro | undefined }) => <Badge texto={rotuloPacote(pacote)} />

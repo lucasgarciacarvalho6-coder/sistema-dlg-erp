@@ -25,7 +25,6 @@ import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, 
 import type { AtividadeEquipe } from './gerente'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
-import { faltaParaLiberar, pacoteLiberado } from './rebolo'
 
 export const MODO: 'demo' | 'supabase' = supabaseConfigurado ? 'supabase' : 'demo'
 
@@ -1319,25 +1318,14 @@ async function acaoRebolo(rpc: string, params: Record<string, unknown>, demo: (d
   return erro
 }
 
-// Nova caixa: Padrão (10 álbuns) ou Avulso (1). Só abre com o pacote anterior completo e todo contatado
-// (ou com todas as fichas terminadas) — mesma regra do SQL 031.
+// Nova caixa: Padrão (10 álbuns) ou Avulso (1). Sem trava (pedido de 06/10/2026, SQL 033): abre a qualquer
+// momento, mesmo com outros pacotes em andamento.
 export async function abrirPacoteRebolo(tipo: 'Padrão' | 'Avulso'): Promise<string | null> {
   const eu = lerSessao()?.colaboradorId
   if (!eu) return 'Sessão expirada.'
-  const s = carregar()
-  const fichasDe = (p: Registro) => F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === p.id)
-  const preso = F.col(s, 'rebolo_pacotes')
-    .filter((p) => p.vendedoraId === eu)
-    .sort((a, b) => Number(a.numero) - Number(b.numero))
-    .find((p) => !pacoteLiberado(p, fichasDe(p)))
-  if (preso) {
-    const msg = `Para abrir outro pacote, ${faltaParaLiberar(preso, fichasDe(preso))} do P${preso.numero}.`
-    avisar(msg)
-    return msg
-  }
   if (MODO === 'supabase') return gravar(() => sb().from('rebolo_pacotes').insert({ tipo, vendedora_id: eu }), `Pacote ${tipo.toLowerCase()} aberto.`)
   mutar((d, ctx) => {
-    const numero = Math.max(245, ...F.col(d, 'rebolo_pacotes').map((p) => Number(p.numero) || 0)) + 1
+    const numero = F.numerarPacoteRebolo(d, eu)
     F.inserir(d, 'rebolo_pacotes', { numero, tipo, vendedoraId: eu, observacao: '' })
     F.auditar(d, ctx, 'CRIAR', `Pacote P${numero} (${tipo}) aberto`, 'rebolo')
   })
@@ -1388,6 +1376,15 @@ export const reabrirFichaRebolo = (fichaId: string, situacao: 'Em negociação' 
     `Ficha reaberta: voltou para "${situacao}".`,
   )
 
+// A supervisão ajusta o próximo número de pacote de uma vendedora (SQL 034)
+export const definirProximoPacoteRebolo = (vendedoraId: string, proximo: number) =>
+  acaoRebolo(
+    'definir_proximo_pacote_rebolo',
+    { p_vendedora: vendedoraId, p_proximo: proximo },
+    (d) => F.definirProximoPacoteRebolo(d, vendedoraId, proximo),
+    `Próximo pacote: P${proximo}.`,
+  )
+
 export const pedirDescontoRebolo = (fichaId: string, valor: number, motivo: string) =>
   acaoRebolo('pedir_desconto_rebolo', { p_ficha: fichaId, p_valor: valor, p_motivo: motivo }, (d, ctx) => F.pedirDescontoRebolo(d, fichaId, valor, motivo, ctx), 'Desconto enviado para a Gerência aprovar.')
 
@@ -1414,6 +1411,30 @@ export const cancelarVendaRebolo = (vendaId: string, motivo: string) =>
     { p_venda: vendaId, p_acao: 'cancelar', p_contrato: null, p_motivo: motivo },
     (d, ctx) => F.atualizarVendaRebolo(d, vendaId, 'cancelar', { motivo }, ctx),
     'Venda cancelada.',
+  )
+
+// Venda fechada corrigida sem cancelar: a efetivar ou devolvida; a dona ou a supervisão (SQL 032)
+export const editarVendaRebolo = (vendaId: string, e: F.EdicaoVendaRebolo) =>
+  acaoRebolo(
+    'editar_venda_rebolo',
+    {
+      p_venda: vendaId,
+      p_dados: {
+        pacote: e.pacote,
+        valor: e.valor,
+        forma_pagamento: e.formaPagamento,
+        parcelas: e.parcelas,
+        forma_parcelamento: e.formaParcelamento,
+        primeiro_vencimento: e.primeiroVencimento,
+        responsavel: e.responsavel,
+        cpf: e.cpf,
+        rg: e.rg,
+        whatsapp: e.whatsapp,
+        observacao: e.observacao,
+      },
+    },
+    (d, ctx) => F.editarVendaRebolo(d, vendaId, e, ctx),
+    'Venda atualizada.',
   )
 
 export const registrarEnvioRebolo = (fichaId: string, rastreio: string) =>
