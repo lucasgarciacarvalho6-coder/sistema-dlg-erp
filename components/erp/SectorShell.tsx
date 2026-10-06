@@ -46,7 +46,7 @@ export default function SectorShell({ setor, children }: { setor: Setor; childre
 
   // ADM e Gerência têm um atalho para os dashboards de todos os setores
   const setoresAcessiveis = (setor === 'adm' || setor === 'gerencia') && visaoTotal
-    ? SETORES_ERP.filter((x) => x !== setor && pode(usuario, s.permissoes, x, 'visualizar'))
+    ? SETORES_ERP.filter((x) => x !== setor && x !== 'vendas' && pode(usuario, s.permissoes, x, 'visualizar')) // a DLG não tem setor "Vendas" interno (só Vendas Rebolo)
     : []
 
   const ativo = (href: string) => (href === SETORES[setor].home || href === `/${setor}` ? pathname === href : pathname.startsWith(href))
