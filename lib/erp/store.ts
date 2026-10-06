@@ -25,6 +25,7 @@ import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, 
 import type { AtividadeEquipe } from './gerente'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
+import { faltaParaLiberar, pacoteLiberado } from './rebolo'
 
 export const MODO: 'demo' | 'supabase' = supabaseConfigurado ? 'supabase' : 'demo'
 
@@ -1318,18 +1319,19 @@ async function acaoRebolo(rpc: string, params: Record<string, unknown>, demo: (d
   return erro
 }
 
-// Nova caixa: Padrão (10 álbuns) ou Avulso (1). Só abre com o pacote anterior finalizado.
+// Nova caixa: Padrão (10 álbuns) ou Avulso (1). Só abre com o pacote anterior completo e todo contatado
+// (ou com todas as fichas terminadas) — mesma regra do SQL 031.
 export async function abrirPacoteRebolo(tipo: 'Padrão' | 'Avulso'): Promise<string | null> {
   const eu = lerSessao()?.colaboradorId
   if (!eu) return 'Sessão expirada.'
   const s = carregar()
-  const meus = F.col(s, 'rebolo_pacotes').filter((p) => p.vendedoraId === eu)
-  const aberto = meus.find((p) => {
-    const fichas = F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === p.id)
-    return !(fichas.length > 0 && fichas.every((f) => ['Vendida', 'Descarte', 'Cancelada'].includes(String(f.situacao))))
-  })
-  if (aberto) {
-    const msg = `Finalize o pacote P${aberto.numero} (todas as fichas vendidas ou em descarte) antes de abrir outro.`
+  const fichasDe = (p: Registro) => F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === p.id)
+  const preso = F.col(s, 'rebolo_pacotes')
+    .filter((p) => p.vendedoraId === eu)
+    .sort((a, b) => Number(a.numero) - Number(b.numero))
+    .find((p) => !pacoteLiberado(p, fichasDe(p)))
+  if (preso) {
+    const msg = `Para abrir outro pacote, ${faltaParaLiberar(preso, fichasDe(preso))} do P${preso.numero}.`
     avisar(msg)
     return msg
   }
@@ -1377,8 +1379,14 @@ export const registrarContatoRebolo = (fichaId: string, c: { resultado: F.Result
     'Contato registrado.',
   )
 
-export const reabrirFichaRebolo = (fichaId: string) =>
-  acaoRebolo('reabrir_ficha_rebolo', { p_ficha: fichaId }, (d, ctx) => F.reabrirFichaRebolo(d, fichaId, ctx), 'Ficha devolvida para a fila.')
+// Descarte reaberto (o cliente mudou de ideia): a dona ou a supervisão; volta para Em negociação ou Tentar de novo (SQL 031)
+export const reabrirFichaRebolo = (fichaId: string, situacao: 'Em negociação' | 'Tentar de novo', observacao: string) =>
+  acaoRebolo(
+    'reabrir_ficha_rebolo',
+    { p_ficha: fichaId, p_situacao: situacao, p_observacao: observacao.trim() || null },
+    (d, ctx) => F.reabrirFichaRebolo(d, fichaId, situacao, observacao, ctx),
+    `Ficha reaberta: voltou para "${situacao}".`,
+  )
 
 export const pedirDescontoRebolo = (fichaId: string, valor: number, motivo: string) =>
   acaoRebolo('pedir_desconto_rebolo', { p_ficha: fichaId, p_valor: valor, p_motivo: motivo }, (d, ctx) => F.pedirDescontoRebolo(d, fichaId, valor, motivo, ctx), 'Desconto enviado para a Gerência aprovar.')

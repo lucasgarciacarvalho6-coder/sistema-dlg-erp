@@ -103,7 +103,7 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
       <div className="lg:col-span-3 space-y-4">
         <QuadroFaixa tabela={tabela} faixa={faixa} meses={mesesDesde(String(ficha.dataVisita))} />
         {!aberta ? (
-          <SemAcao ficha={ficha} venda={venda} supervisao={supervisao} />
+          <SemAcao ficha={ficha} venda={venda} podeReabrir={minha && podeFazer('rebolo', 'editar')} />
         ) : !podeAgir ? (
           <p className="text-sm text-zinc-400">Esta ficha é de {nome(ficha.vendedoraId)}. Só ela ou a supervisão registram os contatos.</p>
         ) : (
@@ -127,26 +127,50 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
   )
 }
 
-function SemAcao({ ficha, venda, supervisao }: { ficha: Registro; venda?: Registro; supervisao: boolean }) {
+// Descarte: a dona da ficha (ou a supervisão) reabre quando o cliente muda de ideia — volta para Em negociação
+// ou Tentar de novo, com uma observação no histórico
+function SemAcao({ ficha, venda, podeReabrir }: { ficha: Registro; venda?: Registro; podeReabrir: boolean }) {
   const [reabrindo, setReabrindo] = useState(false)
+  const [destino, setDestino] = useState<'Em negociação' | 'Tentar de novo'>('Em negociação')
+  const [obs, setObs] = useState('')
   if (ficha.situacao === 'Descarte')
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <p className="text-sm text-zinc-300">
           Descartada: <strong className="text-red-400">{String(ficha.motivoDescarte || '—')}</strong>. O álbum fica guardado na empresa.
         </p>
-        {supervisao && (
-          <button
-            disabled={reabrindo}
-            onClick={async () => {
-              setReabrindo(true)
-              await reabrirFichaRebolo(ficha.id)
-              setReabrindo(false)
-            }}
-            className={btnSecundario}
-          >
-            ↺ Reabrir e devolver para a fila
-          </button>
+        {podeReabrir && (
+          <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4 space-y-3">
+            <p className="text-sm font-black text-white">↺ Reabrir a ficha (o cliente mudou de ideia)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Em negociação', 'Tentar de novo'] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDestino(d)}
+                  className={`p-3 rounded-xl border text-left ${destino === d ? 'border-blue-500/50 bg-blue-500/10' : 'border-white/[0.06] hover:bg-white/[0.02]'}`}
+                >
+                  <p className="text-sm font-black text-white">{d}</p>
+                  <p className="text-[10px] text-zinc-500">{d === 'Em negociação' ? 'o cliente quer conversar / voltou a ter interesse' : 'ligar de novo mais tarde'}</p>
+                </button>
+              ))}
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelCls}>Observação (fica no histórico)</label>
+              <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: a mãe ligou de volta e quer o álbum" className={inputCls} />
+            </div>
+            <button
+              disabled={reabrindo}
+              onClick={async () => {
+                setReabrindo(true)
+                await reabrirFichaRebolo(ficha.id, destino, obs)
+                setReabrindo(false)
+              }}
+              className={btnPrimario}
+            >
+              {reabrindo ? 'Reabrindo...' : `Reabrir → ${destino}`}
+            </button>
+          </div>
         )}
       </div>
     )

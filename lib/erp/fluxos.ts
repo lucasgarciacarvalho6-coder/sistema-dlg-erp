@@ -1314,12 +1314,15 @@ export function registrarContatoRebolo(
 }
 
 // Supervisora/ADM devolve um descarte para a fila
-export function reabrirFichaRebolo(d: ErpState, fichaId: string, ctx: Contexto): string | null {
+// Mesma regra do SQL 031 (reabrir_ficha_rebolo): volta para Em negociação ou Tentar de novo, com a observação no histórico
+export function reabrirFichaRebolo(d: ErpState, fichaId: string, situacao: string, observacao: string, ctx: Contexto): string | null {
   const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
   if (!f || f.situacao !== 'Descarte') return 'Só fichas em descarte podem ser reabertas.'
-  f.situacao = 'Aguardando contato'
-  f.motivoDescarte = ''
-  inserir(d, 'rebolo_contatos', { fichaId, vendedoraId: ctx.autorId, resultado: 'Reaberta', observacao: `Descarte reaberto por ${ctx.autorNome}`, agendadoPara: '', data: agora() })
+  if (!['Em negociação', 'Tentar de novo'].includes(situacao)) return 'Escolha para onde a ficha volta: Em negociação ou Tentar de novo.'
+  const motivo = String(f.motivoDescarte || 'sem motivo')
+  Object.assign(f, { situacao, motivoDescarte: '', ultimoContato: agora() })
+  const obs = [`Descarte (${motivo}) reaberto → ${situacao}`, observacao.trim()].filter(Boolean).join(' • ')
+  inserir(d, 'rebolo_contatos', { fichaId, vendedoraId: ctx.autorId, resultado: 'Reaberta', observacao: obs, agendadoPara: '', data: agora() })
   return null
 }
 

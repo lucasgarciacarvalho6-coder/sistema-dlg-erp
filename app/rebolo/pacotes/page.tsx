@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { abrirPacoteRebolo, avisar, usePode } from '@/lib/erp/store'
 import { imprimirEtiquetas } from '@/lib/erp/impressao-rebolo'
-import { escolaFicha, pacoteFinalizado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { escolaFicha, faltaParaLiberar, pacoteFinalizado, pacoteLiberado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario } from '@/components/erp/ui'
@@ -43,7 +43,11 @@ export default function PacotesReboloPage() {
   const fichasAberto = aberto ? fichas.filter((f) => f.pacoteId === aberto.id).sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm))) : []
   const capacidade = aberto?.tipo === 'Avulso' ? 1 : 10
   const podeCadastrar = !!aberto && (aberto.vendedoraId === eu?.id || supervisao) && podeFazer('rebolo', 'criar')
-  const meuAberto = pacotes.find((p) => p.vendedoraId === eu?.id && !pacoteFinalizado(fichas.filter((f) => f.pacoteId === p.id)))
+  // o pacote que ainda prende a vendedora (incompleto ou com ficha aguardando contato): o próximo só abre depois dele
+  const meuAberto = pacotes
+    .filter((p) => p.vendedoraId === eu?.id)
+    .sort((a, b) => Number(a.numero) - Number(b.numero))
+    .find((p) => !pacoteLiberado(p, fichas.filter((f) => f.pacoteId === p.id)))
 
   const abrir = async (tipo: 'Padrão' | 'Avulso') => {
     setNovo(false)
@@ -157,7 +161,9 @@ export default function PacotesReboloPage() {
         <Panel
           semPadding
           titulo={`Pacote P${aberto.numero} • ${nome(aberto.vendedoraId)}`}
-          subtitulo={`${fichasAberto.length} de ${capacidade} ficha(s) • aberto em ${dataBR(String(aberto.criadoEm).slice(0, 10))}`}
+          subtitulo={`${fichasAberto.length} de ${capacidade} ficha(s) • aberto em ${dataBR(String(aberto.criadoEm).slice(0, 10))} • ${
+            faltaParaLiberar(aberto, fichasAberto) ? `para abrir o próximo pacote: ${faltaParaLiberar(aberto, fichasAberto)}` : 'próximo pacote liberado'
+          }`}
           acoes={
             <div className="flex flex-wrap gap-2">
               <button onClick={() => void etiquetas()} disabled={!fichasAberto.length} className={btnSecundario}>

@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { brl, hoje, iniciais } from '@/lib/erp/format'
 import { equipeComMeta, metaColaborador } from '@/lib/erp/metrics'
-import { pacoteFinalizado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { pacoteFinalizado, pacoteLiberado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { Avatar, EmptyState, PageHeader, Panel, StatCard, TONS } from '@/components/erp/ui'
 import { useRebolo } from '@/components/rebolo/comum'
 
@@ -29,7 +29,10 @@ export default function GestaoDiariaReboloPage() {
     const cont = contatos.filter((x) => x.vendedoraId === c.id && doDia(x.data))
     const fechadas = vendas.filter((v) => daVendedora(v, c.id) && doDia(v.criadoEm))
     const aprovadas = vendas.filter((v) => daVendedora(v, c.id) && v.conferencia === 'Conferida' && doDia(v.conferidoEm || v.data))
-    const aberto = pacotes.find((p) => p.vendedoraId === c.id && !pacoteFinalizado(fichas.filter((f) => f.pacoteId === p.id)))
+    // o pacote atual: o que ainda prende (incompleto ou com ficha aguardando contato); senão, o mais novo em andamento
+    const dela = pacotes.filter((p) => p.vendedoraId === c.id).sort((a, b) => Number(a.numero) - Number(b.numero))
+    const fichasDe = (p: (typeof pacotes)[number]) => fichas.filter((f) => f.pacoteId === p.id)
+    const aberto = dela.find((p) => !pacoteLiberado(p, fichasDe(p))) ?? [...dela].reverse().find((p) => !pacoteFinalizado(fichasDe(p)))
     const metaDia = comMeta.has(c.id) ? metaColaborador(c, 'valor_vendido', dia.slice(0, 7)).diaria : 0
     return { c, minhas, cont, fechadas, aprovadas, aberto, metaDia, valorAprovado: aprovadas.reduce((a, v) => a + (Number(v.valor) || 0), 0) }
   })

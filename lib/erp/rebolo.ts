@@ -196,6 +196,21 @@ export const escolaFicha = (f: Registro | undefined) => {
 }
 
 export const pacoteFinalizado = (fichas: Registro[]) => fichas.length > 0 && fichas.every((f) => FINALIZADAS.includes(String(f.situacao)))
+
+// Quando a vendedora pode abrir o PRÓXIMO pacote (pedido de 06/10/2026; mesma regra do SQL 031):
+// o atual está completo (Padrão 10 fichas, Avulso 1) e todo contatado (nenhuma ficha em "Aguardando contato");
+// ou já tem todas as fichas terminadas (pacote antigo). Negociações e agendamentos seguem no pacote antigo.
+export const capacidadePacote = (p: Registro | undefined) => (p?.tipo === 'Avulso' ? 1 : 10)
+export const pacoteLiberado = (p: Registro, fichas: Registro[]) =>
+  (fichas.length >= capacidadePacote(p) && fichas.every((f) => f.situacao !== 'Aguardando contato')) || pacoteFinalizado(fichas)
+// O que falta para liberar o próximo pacote ('' = liberado)
+export function faltaParaLiberar(p: Registro, fichas: Registro[]): string {
+  if (pacoteLiberado(p, fichas)) return ''
+  const cap = capacidadePacote(p)
+  if (fichas.length < cap) return `cadastre as ${cap} fichas (tem ${fichas.length})`
+  const n = fichas.filter((f) => f.situacao === 'Aguardando contato').length
+  return `contate todas as fichas (${n} ainda em "Aguardando contato")`
+}
 export const rotuloPacote = (p: Registro | undefined) => (p ? `P${p.numero}` : '—')
 
 // ---- Telefones ----
