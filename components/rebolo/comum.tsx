@@ -1,7 +1,7 @@
 'use client'
 
 // Peças comuns das telas do setor Vendas Rebolo
-import { useMemo } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { useErp, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
@@ -19,7 +19,8 @@ import {
   type TabelaRebolo,
 } from '@/lib/erp/rebolo'
 import { brl } from '@/lib/erp/format'
-import { Badge } from '@/components/erp/ui'
+import { carregarCidades, cidadesComNome, sugerirCidades, type Cidades } from '@/lib/erp/cidades'
+import { Badge, inputCls, labelCls } from '@/components/erp/ui'
 
 // Supervisão (ADM, Gerência ou supervisora do rebolo) vê e atende todas as fichas; a vendedora, as dela
 export function useRebolo() {
@@ -131,6 +132,55 @@ export function QuadroFaixa({ tabela, faixa, meses, titulo }: { tabela: TabelaRe
           {opcoes.map((o) => `${o.nome} ${o.sinal < 0 ? '−' : '+'}${reais(tabela.opcao(faixa, o.id))}`).join(' • ')} • podem ser somados
         </p>
       )}
+    </div>
+  )
+}
+
+// Lista de municípios do IBGE (baixa uma vez, quando o cadastro abre)
+export function useCidades() {
+  const [cidades, setCidades] = useState<Cidades | null>(null)
+  useEffect(() => {
+    let vivo = true
+    void carregarCidades().then((c) => vivo && setCidades(c))
+    return () => {
+      vivo = false
+    }
+  }, [])
+  return cidades
+}
+
+// Campo Cidade do cadastro das fichas: sugere "Cidade - UF" enquanto digita e preenche a UF sozinho quando o nome
+// é de uma cidade só (ex.: Lavras → MG). Nome que existe em mais de um estado: avisa e a vendedora escolhe.
+// Ao sair do campo, corrige a grafia (acentos e maiúsculas) do nome oficial.
+export function CampoCidade({ cidade, uf, onMudar, classe = '' }: { cidade: string; uf: string; onMudar: (cidade: string, uf: string) => void; classe?: string }) {
+  const cidades = useCidades()
+  const id = useId()
+  const opcoes = cidades ? sugerirCidades(cidades, cidade) : []
+  const iguais = cidades ? cidadesComNome(cidades, cidade) : []
+  const mudar = (v: string) => {
+    const m = v.match(/^(.+) - ([A-Z]{2})$/) // escolheu uma sugestão
+    if (m && cidades) {
+      const achada = cidadesComNome(cidades, m[1]).find((x) => x.uf === m[2])
+      if (achada) return onMudar(achada.nome, achada.uf)
+    }
+    const mesmas = cidades ? cidadesComNome(cidades, v) : []
+    onMudar(v, mesmas.length === 1 ? mesmas[0].uf : uf)
+  }
+  const aoSair = () => {
+    const certa = iguais.length === 1 ? iguais[0] : iguais.find((x) => x.uf === uf)
+    if (certa && (certa.nome !== cidade || certa.uf !== uf)) onMudar(certa.nome, certa.uf)
+  }
+  const escolher = iguais.length > 1 && !iguais.some((x) => x.uf === uf)
+  return (
+    <div className={`space-y-1 ${classe}`}>
+      <label className={labelCls}>Cidade</label>
+      <input list={id} value={cidade} onChange={(e) => mudar(e.target.value)} onBlur={aoSair} autoComplete="off" className={inputCls} />
+      <datalist id={id}>
+        {opcoes.map((o) => (
+          <option key={`${o.nome}-${o.uf}`} value={`${o.nome} - ${o.uf}`} />
+        ))}
+      </datalist>
+      {escolher && <p className="text-[10px] font-bold text-yellow-400">Tem em {iguais.map((x) => x.uf).join(', ')}: escolha a UF</p>}
     </div>
   )
 }

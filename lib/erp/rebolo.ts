@@ -33,6 +33,8 @@ export type FormaRebolo = (typeof FORMAS_REBOLO)[number]['id']
 
 export const FAIXAS = [1, 2, 3] as const
 export type Faixa = (typeof FAIXAS)[number]
+// cor da faixa no cadastro das fichas (pedido de 06/10/2026): 1 = verde • 2 = amarelo • 3 = vermelho
+export const TOM_FAIXA: Record<Faixa, 'emerald' | 'yellow' | 'red'> = { 1: 'emerald', 2: 'yellow', 3: 'red' }
 
 // ---- Tabela de preços (padrão = tabela da parede de 06/10/2026; o que vale é o que está salvo em Tabela de Preços) ----
 // [PIX, Cartão, Boleto]. 0 = sem preço definido (produto não aparece para venda nessa faixa)

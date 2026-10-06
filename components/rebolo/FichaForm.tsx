@@ -21,7 +21,7 @@ import {
   UFS,
 } from '@/lib/erp/rebolo'
 import { btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { QuadroFaixa, useRebolo } from './comum'
+import { CampoCidade, QuadroFaixa, useRebolo } from './comum'
 
 const CAMPOS = [
   'escola', 'dataVisita', 'numeroFicha', 'aluno', 'serie', 'dataNascimento', 'qtdFotos', 'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietarioFazenda',
@@ -145,7 +145,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         {campo('numero', 'Nº')}
         {campo('apto', 'Apto')}
         {campo('bairro', 'Bairro', {}, 'md:col-span-2')}
-        {campo('cidade', 'Cidade', {}, 'md:col-span-2')}
+        <CampoCidade cidade={f.cidade} uf={f.uf} onMudar={(cidade, uf) => setF((x) => ({ ...x, cidade, uf }))} classe="md:col-span-2" />
         <div className="space-y-1.5">
           <label className={labelCls}>UF</label>
           <select value={f.uf} onChange={(e) => set('uf', e.target.value)} className={`${inputCls} appearance-none`}>

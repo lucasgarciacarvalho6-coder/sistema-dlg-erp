@@ -7,14 +7,15 @@
 //    "+ endereço, pais e outros dados" abre o resto;
 //  • "Salvar fichas" grava os álbuns preenchidos e pula os vazios; álbum incompleto ou repetido fica em vermelho
 //    com o motivo, e os outros são gravados. WhatsApp sem DDD ganha o DDD da cidade/UF do álbum.
+//  • a cidade preenche a UF sozinha (lista do IBGE; nome em mais de um estado: a vendedora escolhe).
 
 import { useState } from 'react'
 import type { Registro, Valor } from '@/lib/erp/types'
 import { brl } from '@/lib/erp/format'
 import { salvarFichasRebolo } from '@/lib/erp/store'
-import { buscarCep, faixaDaFicha, formatarCep, formatarTelefone, FORMAS_REBOLO, mesesDesde, SEM_ESCOLA, soDigitos, sugerirDDD, UFS } from '@/lib/erp/rebolo'
-import { btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { QuadroFaixa, useRebolo } from './comum'
+import { buscarCep, faixaDaFicha, formatarCep, formatarTelefone, FORMAS_REBOLO, mesesDesde, SEM_ESCOLA, soDigitos, sugerirDDD, TOM_FAIXA, UFS } from '@/lib/erp/rebolo'
+import { TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
+import { CampoCidade, QuadroFaixa, useRebolo } from './comum'
 
 const CAMPOS = [
   'dataVisita', 'numeroFicha', 'aluno', 'serie', 'dataNascimento', 'qtdFotos', 'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietarioFazenda',
@@ -150,7 +151,10 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
               <p className="text-sm font-black text-white">Álbum {n}</p>
               {fx ? (
                 <button type="button" onClick={() => alternarEm(setTabelas, i)} className="text-[11px] text-zinc-300 hover:text-white text-right" title="Ver a tabela de preços da faixa">
-                  <strong className="text-white">Faixa {fx}</strong> • {mesesDesde(a.dataVisita)} meses • Completo {FORMAS_REBOLO.map((x) => `${x.nome} ${reais(tabela.preco(fx, 'completo', x.id))}`).join(' • ')}{' '}
+                  <strong className={TONS[TOM_FAIXA[fx]].texto}>
+                    Faixa {fx} • {mesesDesde(a.dataVisita)} meses
+                  </strong>{' '}
+                  • Completo {FORMAS_REBOLO.map((x) => `${x.nome} ${reais(tabela.preco(fx, 'completo', x.id))}`).join(' • ')}{' '}
                   <span className="text-blue-400 font-bold">{tabelas.has(i) ? '▾' : '▸ tabela'}</span>
                 </button>
               ) : (
@@ -162,7 +166,7 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
               {inp(i, 'dataVisita', 'Data da visita *', { type: 'date' }, 'md:col-span-2')}
               {inp(i, 'numeroFicha', 'Nº da ficha *', { inputMode: 'numeric' }, 'md:col-span-2')}
               {inp(i, 'aluno', 'Nome do aluno *', {}, 'col-span-2 md:col-span-4')}
-              {inp(i, 'cidade', 'Cidade', {}, 'md:col-span-2')}
+              <CampoCidade cidade={a.cidade} uf={a.uf} onMudar={(cidade, uf) => setAlbuns((l) => l.map((x, j) => (j === i ? { ...x, cidade, uf } : x)))} classe="md:col-span-2" />
               <div className="space-y-1 md:col-span-1">
                 <label className={labelCls}>UF</label>
                 <select value={a.uf} onChange={(e) => mudar(i, 'uf', e.target.value)} className={`${inputCls} appearance-none`}>
