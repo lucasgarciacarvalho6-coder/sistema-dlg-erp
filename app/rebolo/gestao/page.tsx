@@ -1,7 +1,8 @@
 'use client'
 
-// Gestão diária do rebolo: por vendedora, o que foi feito no dia (contatos, vendas fechadas e aprovadas)
+// Gestão diária do rebolo: o que a vendedora fez no dia (contatos, vendas fechadas e aprovadas)
 // e como está a fila dela (fichas por situação e pacote aberto).
+// SEMPRE de UMA vendedora (pedido de 06/10/2026): a vendedora vê só ela; a supervisão escolhe no seletor.
 
 import { useState } from 'react'
 import { brl, hoje, iniciais } from '@/lib/erp/format'
@@ -11,40 +12,62 @@ import { Avatar, EmptyState, PageHeader, Panel, StatCard, TONS } from '@/compone
 import { useRebolo } from '@/components/rebolo/comum'
 
 export default function GestaoDiariaReboloPage() {
-  const { s, vendedoras, fichas, contatos, vendas, pacotes } = useRebolo()
+  const { s, eu, supervisao, vendedoras, fichas, contatos, vendas, pacotes } = useRebolo()
   const [dia, setDia] = useState(hoje())
+  const [escolhida, setEscolhida] = useState('')
+  // vendedora vê só ela; a supervisão escolhe (começa nela mesma, se vende, ou na primeira vendedora)
+  const alvoId = supervisao ? escolhida || (vendedoras.some((v) => v.id === eu?.id) ? eu!.id : vendedoras[0]?.id ?? '') : eu?.id ?? ''
+  const visiveis = vendedoras.filter((c) => c.id === alvoId)
+  // a venda é da dona da ficha (sem ficha, de quem fechou)
+  const dona = new Map(fichas.map((f) => [f.id, String(f.vendedoraId)]))
+  const daVendedora = (v: (typeof vendas)[number], id: string) => (dona.get(String(v.fichaReboloId)) ?? String(v.cobradorId)) === id
   const doDia = (iso: unknown) => String(iso || '').slice(0, 10) === dia
   const comMeta = new Set(equipeComMeta(s, 'rebolo', dia.slice(0, 7)).map((c) => c.id))
 
-  const linhas = vendedoras.map((c) => {
+  const linhas = visiveis.map((c) => {
     const minhas = fichas.filter((f) => f.vendedoraId === c.id)
     const cont = contatos.filter((x) => x.vendedoraId === c.id && doDia(x.data))
-    const fechadas = vendas.filter((v) => v.cobradorId === c.id && doDia(v.criadoEm))
-    const aprovadas = vendas.filter((v) => v.cobradorId === c.id && v.conferencia === 'Conferida' && doDia(v.conferidoEm || v.data))
+    const fechadas = vendas.filter((v) => daVendedora(v, c.id) && doDia(v.criadoEm))
+    const aprovadas = vendas.filter((v) => daVendedora(v, c.id) && v.conferencia === 'Conferida' && doDia(v.conferidoEm || v.data))
     const aberto = pacotes.find((p) => p.vendedoraId === c.id && !pacoteFinalizado(fichas.filter((f) => f.pacoteId === p.id)))
     const metaDia = comMeta.has(c.id) ? metaColaborador(c, 'valor_vendido', dia.slice(0, 7)).diaria : 0
     return { c, minhas, cont, fechadas, aprovadas, aberto, metaDia, valorAprovado: aprovadas.reduce((a, v) => a + (Number(v.valor) || 0), 0) }
   })
   const tot = (k: 'cont' | 'fechadas' | 'aprovadas') => linhas.reduce((a, l) => a + l[k].length, 0)
+  const alvo = visiveis[0]
+  const aberto = linhas[0]?.aberto
 
   return (
     <div className="space-y-8 animate-fade-in-up">
       <PageHeader
         modulo="Vendas Rebolo / Gestão Diária"
-        titulo="Gestão Diária"
-        descricao="O que cada vendedora fez no dia e como está a fila dela."
-        acoes={<input type="date" value={dia} onChange={(e) => setDia(e.target.value || hoje())} className="bg-black/50 border border-white/[0.05] text-white text-xs font-bold rounded-xl px-4 py-3 outline-none" />}
+        titulo={supervisao && alvo ? `Gestão Diária • ${alvo.nome}` : 'Gestão Diária'}
+        descricao={supervisao ? 'O que a vendedora fez no dia e como está a fila dela.' : 'O que você fez no dia e como está a sua fila.'}
+        acoes={
+          <>
+            {supervisao && (
+              <select value={alvoId} onChange={(e) => setEscolhida(e.target.value)} aria-label="Vendedora" className="bg-black/50 border border-white/[0.05] text-white text-xs font-bold uppercase tracking-widest rounded-xl px-4 py-3.5 outline-none appearance-none">
+                {vendedoras.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.nome}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input type="date" value={dia} onChange={(e) => setDia(e.target.value || hoje())} className="bg-black/50 border border-white/[0.05] text-white text-xs font-bold rounded-xl px-4 py-3 outline-none" />
+          </>
+        }
       />
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard label="Contatos no dia" valor={tot('cont')} />
         <StatCard label="Vendas fechadas" valor={tot('fechadas')} detalhe="aguardando contrato / Financeiro" />
         <StatCard label="Aprovadas no dia" valor={tot('aprovadas')} detalhe={brl(linhas.reduce((a, l) => a + l.valorAprovado, 0))} />
-        <StatCard label="Pacotes abertos" valor={linhas.filter((l) => l.aberto).length} detalhe={`${linhas.length} vendedora(s)`} />
+        <StatCard label="Pacote aberto" valor={aberto ? `P${aberto.numero}` : '—'} detalhe={aberto ? `${fichas.filter((f) => f.pacoteId === aberto.id).length} de ${aberto.tipo === 'Avulso' ? 1 : 10} ficha(s)` : 'nenhum pacote aberto'} />
       </div>
 
-      <Panel semPadding titulo="Por vendedora">
+      <Panel semPadding titulo={alvo ? `O dia de ${alvo.nome}` : 'O dia da vendedora'}>
         {linhas.length === 0 ? (
-          <EmptyState titulo="Nenhuma vendedora no setor" descricao="Cadastre a equipe em ADM › Colaboradores, no setor Vendas Rebolo." />
+          <EmptyState titulo={supervisao ? 'Nenhuma vendedora no setor' : 'Sem dados'} descricao={supervisao ? 'Cadastre a equipe em ADM › Colaboradores, no setor Vendas Rebolo.' : 'Seu login não está no setor Vendas Rebolo.'} />
         ) : (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-sm text-zinc-300">
