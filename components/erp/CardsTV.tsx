@@ -479,6 +479,7 @@ export function GradeTV({
   base,
   ajustar = false,
   producao = false,
+  proporcional = false,
   onAbrir,
 }: {
   s: ErpState
@@ -487,6 +488,7 @@ export function GradeTV({
   base?: Colaborador[]
   ajustar?: boolean
   producao?: boolean
+  proporcional?: boolean // aba de um setor na TV: os cards ocupam a tela, mas sem ficar mais largos que 1,6 × a altura (centralizados)
   onAbrir?: (c: Colaborador) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -568,7 +570,9 @@ export function GradeTV({
             style={
               base
                 ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.w)}px)`, gridAutoRows: Math.floor(layout.h), gridAutoFlow: 'dense', gap: GAP }
-                : { gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gridAutoFlow: 'dense', gap: GAP }
+                : proporcional && layout.w > layout.h * 1.6
+                  ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.h * 1.6)}px)`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, justifyContent: 'center', gridAutoFlow: 'dense', gap: GAP }
+                  : { gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gridAutoFlow: 'dense', gap: GAP }
             }
           >
             {cardProducao}

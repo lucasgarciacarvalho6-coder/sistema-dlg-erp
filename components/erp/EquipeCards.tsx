@@ -233,7 +233,18 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
       </div>
       <FaixaGerente s={s} />
       <div className="flex-1 min-h-0">
-        <GradeTV key={filtro || 'todos'} s={s} mes={mes} pessoas={lista.map(({ c }) => c)} base={todos.map(({ c }) => c)} producao={!filtro || filtro === 'edicao'} ajustar />
+        {/* Todos e Operacional: o tamanho dos cards é o da equipe toda (como sempre). As abas dos outros setores
+            ajustam os cards à quantidade da aba e ocupam a tela (pedido de 06/10/2026). */}
+        <GradeTV
+          key={filtro || 'todos'}
+          s={s}
+          mes={mes}
+          pessoas={lista.map(({ c }) => c)}
+          base={!filtro || filtro === 'operacional' ? todos.map(({ c }) => c) : undefined}
+          producao={!filtro || filtro === 'edicao'}
+          proporcional={!!filtro && filtro !== 'operacional'}
+          ajustar
+        />
       </div>
     </div>,
     document.body,
