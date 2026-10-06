@@ -7,7 +7,8 @@
 //    "+ endereço, pais e outros dados" abre o resto;
 //  • "Salvar fichas" grava os álbuns preenchidos e pula os vazios; álbum incompleto ou repetido fica em vermelho
 //    com o motivo, e os outros são gravados. WhatsApp sem DDD ganha o DDD da cidade/UF do álbum.
-//  • a cidade preenche a UF sozinha (lista do IBGE; nome em mais de um estado: a vendedora escolhe).
+//  • a cidade preenche a UF e o DDD sozinha (lista do IBGE com o DDD de cada cidade; nome em mais de um estado:
+//    a vendedora escolhe). Telefone sem DDD ganha o DDD da cidade (ao escolher a cidade ou ao sair do campo).
 
 import { useState } from 'react'
 import type { Registro, Valor } from '@/lib/erp/types'
@@ -15,7 +16,8 @@ import { brl } from '@/lib/erp/format'
 import { salvarFichasRebolo } from '@/lib/erp/store'
 import { buscarCep, faixaDaFicha, formatarCep, formatarTelefone, FORMAS_REBOLO, mesesDesde, SEM_ESCOLA, soDigitos, sugerirDDD, TOM_FAIXA, UFS } from '@/lib/erp/rebolo'
 import { TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { CampoCidade, QuadroFaixa, useRebolo } from './comum'
+import { CampoCidade, QuadroFaixa, useCidades, useRebolo } from './comum'
+import { dddDaCidade } from '@/lib/erp/cidades'
 
 const CAMPOS = [
   'dataVisita', 'numeroFicha', 'aluno', 'serie', 'dataNascimento', 'qtdFotos', 'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietarioFazenda',
@@ -29,9 +31,21 @@ const novoAlbum = (): Album => ({ ...(Object.fromEntries(CAMPOS.map((c) => [c, '
 const vazio = (a: Album) => !a.numeroFicha.trim() && !a.aluno.trim() && !a.dataVisita && TELEFONES.every((t) => !soDigitos(a[t]))
 const chaveFicha = (numero: unknown, aluno: unknown) => `${String(numero ?? '').trim()}|${String(aluno ?? '').trim().toUpperCase()}`
 const reais = (v: number) => brl(v).replace(/,00$/, '')
+// telefones digitados sem DDD (8 ou 9 dígitos) ganham o DDD da cidade
+const comDDD = (a: Album, ddd: string): Album => {
+  if (!ddd) return a
+  const n = { ...a }
+  for (const k of TELEFONES) {
+    const d = soDigitos(a[k])
+    if (d.length === 8 || d.length === 9) n[k] = formatarTelefone(ddd + d)
+  }
+  return n
+}
 
 export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onFechar: () => void }) {
   const { tabela, fichas } = useRebolo()
+  const cidades = useCidades()
+  const dddDe = (a: Album) => dddDaCidade(cidades, a.cidade, a.uf) || sugerirDDD(a.uf, a.cidade) || ''
   const doPacote = fichas.filter((x) => x.pacoteId === pacote.id)
   const capacidade = pacote.tipo === 'Avulso' ? 1 : 10
   const [vagas] = useState(() => Math.max(0, capacidade - doPacote.length))
@@ -54,11 +68,11 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
       return n
     })
 
-  // telefone digitado sem DDD (8 ou 9 dígitos): coloca o DDD sugerido pela cidade/UF do álbum
+  // telefone digitado sem DDD (8 ou 9 dígitos): ao sair do campo, coloca o DDD da cidade do álbum
   const completarDDD = (i: number, k: (typeof TELEFONES)[number]) => {
     const a = albuns[i]
     const d = soDigitos(a[k])
-    const ddd = sugerirDDD(a.uf, a.cidade)
+    const ddd = dddDe(a)
     if (ddd && (d.length === 8 || d.length === 9)) mudar(i, k, formatarTelefone(ddd + d))
   }
   const aoMudarCep = async (i: number, valor: string) => {
@@ -71,7 +85,7 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
       delete n[i]
       return n
     })
-    setAlbuns((l) => l.map((a, j) => (j === i ? { ...a, rua: e.rua || a.rua, bairro: e.bairro || a.bairro, cidade: e.cidade || a.cidade, uf: e.uf || a.uf } : a)))
+    setAlbuns((l) => l.map((a, j) => (j === i ? comDDD({ ...a, rua: e.rua || a.rua, bairro: e.bairro || a.bairro, cidade: e.cidade || a.cidade, uf: e.uf || a.uf }, e.ddd) : a)))
   }
   const alternarHorario = (i: number, h: string) => {
     const lista = albuns[i].horario.split(',').map((x) => x.trim()).filter(Boolean)
@@ -117,7 +131,7 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
     </div>
   )
   const tel = (i: number, k: (typeof TELEFONES)[number], rotulo: string, classe = '') => {
-    const ddd = sugerirDDD(albuns[i].uf, albuns[i].cidade)
+    const ddd = dddDe(albuns[i])
     return (
       <div className={`space-y-1 ${classe}`}>
         <label className={labelCls}>{rotulo}</label>
@@ -129,7 +143,8 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
   if (vagas === 0) return <p className="text-sm text-zinc-400">O pacote P{String(pacote.numero)} já está completo ({capacidade} fichas).</p>
 
   return (
-    <div className="space-y-5">
+    // scroll-mb: o campo em foco (Tab) não fica escondido atrás da barra fixa do "Salvar fichas"
+    <div className="space-y-5 [&_input]:scroll-mb-28 [&_select]:scroll-mb-28">
       <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl px-4 py-3">
         <p className="text-sm text-zinc-300">
           Pacote <strong className="text-white">P{String(pacote.numero)}</strong> • {vagas} álbum(ns) para cadastrar • cada álbum tem a sua data da visita: a faixa e o preço aparecem no álbum
@@ -166,7 +181,7 @@ export default function FichasLote({ pacote, onFechar }: { pacote: Registro; onF
               {inp(i, 'dataVisita', 'Data da visita *', { type: 'date' }, 'md:col-span-2')}
               {inp(i, 'numeroFicha', 'Nº da ficha *', { inputMode: 'numeric' }, 'md:col-span-2')}
               {inp(i, 'aluno', 'Nome do aluno *', {}, 'col-span-2 md:col-span-4')}
-              <CampoCidade cidade={a.cidade} uf={a.uf} onMudar={(cidade, uf) => setAlbuns((l) => l.map((x, j) => (j === i ? { ...x, cidade, uf } : x)))} classe="md:col-span-2" />
+              <CampoCidade cidade={a.cidade} uf={a.uf} onMudar={(cidade, uf, ddd) => setAlbuns((l) => l.map((x, j) => (j === i ? comDDD({ ...x, cidade, uf }, ddd) : x)))} classe="md:col-span-2" />
               <div className="space-y-1 md:col-span-1">
                 <label className={labelCls}>UF</label>
                 <select value={a.uf} onChange={(e) => mudar(i, 'uf', e.target.value)} className={`${inputCls} appearance-none`}>

@@ -1,7 +1,7 @@
 'use client'
 
 // Peças comuns das telas do setor Vendas Rebolo
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { useErp, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
@@ -19,7 +19,7 @@ import {
   type TabelaRebolo,
 } from '@/lib/erp/rebolo'
 import { brl } from '@/lib/erp/format'
-import { carregarCidades, cidadesComNome, sugerirCidades, type Cidades } from '@/lib/erp/cidades'
+import { carregarCidades, cidadesComNome, sugerirCidades, type Cidade, type Cidades } from '@/lib/erp/cidades'
 import { Badge, inputCls, labelCls } from '@/components/erp/ui'
 
 // Supervisão (ADM, Gerência ou supervisora do rebolo) vê e atende todas as fichas; a vendedora, as dela
@@ -149,38 +149,83 @@ export function useCidades() {
   return cidades
 }
 
-// Campo Cidade do cadastro das fichas: sugere "Cidade - UF" enquanto digita e preenche a UF sozinho quando o nome
-// é de uma cidade só (ex.: Lavras → MG). Nome que existe em mais de um estado: avisa e a vendedora escolhe.
-// Ao sair do campo, corrige a grafia (acentos e maiúsculas) do nome oficial.
-export function CampoCidade({ cidade, uf, onMudar, classe = '' }: { cidade: string; uf: string; onMudar: (cidade: string, uf: string) => void; classe?: string }) {
+// Campo Cidade do cadastro das fichas (lista própria, sem acento: "perdoes" acha Perdões; aceita "lavras mg").
+//  • ↑ ↓ escolhem, Enter (ou clique) confirma; cada sugestão mostra a UF e o DDD;
+//  • nome de uma cidade só (ex.: Lavras) já define a UF e o DDD; ao sair do campo, corrige a grafia oficial;
+//  • nome que existe em mais de um estado: avisa e a vendedora escolhe na lista (ou na UF).
+// onMudar(cidade, uf, ddd): ddd vem quando a cidade é certa (para completar os telefones sem DDD).
+export function CampoCidade({ cidade, uf, onMudar, classe = '' }: { cidade: string; uf: string; onMudar: (cidade: string, uf: string, ddd: string) => void; classe?: string }) {
   const cidades = useCidades()
-  const id = useId()
-  const opcoes = cidades ? sugerirCidades(cidades, cidade) : []
+  const [aberto, setAberto] = useState(false)
+  const [ativo, setAtivo] = useState(0)
+  const opcoes = cidades && aberto ? sugerirCidades(cidades, cidade) : []
   const iguais = cidades ? cidadesComNome(cidades, cidade) : []
-  const mudar = (v: string) => {
-    const m = v.match(/^(.+) - ([A-Z]{2})$/) // escolheu uma sugestão
-    if (m && cidades) {
-      const achada = cidadesComNome(cidades, m[1]).find((x) => x.uf === m[2])
-      if (achada) return onMudar(achada.nome, achada.uf)
-    }
+  const escolher = (o: Cidade) => {
+    onMudar(o.nome, o.uf, o.ddd)
+    setAberto(false)
+  }
+  const digitar = (v: string) => {
+    setAtivo(0)
+    setAberto(true)
     const mesmas = cidades ? cidadesComNome(cidades, v) : []
-    onMudar(v, mesmas.length === 1 ? mesmas[0].uf : uf)
+    if (mesmas.length === 1) onMudar(v, mesmas[0].uf, mesmas[0].ddd)
+    else onMudar(v, uf, '')
+  }
+  const teclas = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!opcoes.length) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setAtivo((a) => Math.min(opcoes.length - 1, a + 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setAtivo((a) => Math.max(0, a - 1))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      escolher(opcoes[Math.min(ativo, opcoes.length - 1)])
+    } else if (e.key === 'Escape') setAberto(false)
   }
   const aoSair = () => {
+    setAberto(false)
     const certa = iguais.length === 1 ? iguais[0] : iguais.find((x) => x.uf === uf)
-    if (certa && (certa.nome !== cidade || certa.uf !== uf)) onMudar(certa.nome, certa.uf)
+    if (certa && (certa.nome !== cidade || certa.uf !== uf)) onMudar(certa.nome, certa.uf, certa.ddd)
   }
-  const escolher = iguais.length > 1 && !iguais.some((x) => x.uf === uf)
+  const pedirUf = iguais.length > 1 && !iguais.some((x) => x.uf === uf)
   return (
-    <div className={`space-y-1 ${classe}`}>
+    <div className={`space-y-1 relative ${classe}`}>
       <label className={labelCls}>Cidade</label>
-      <input list={id} value={cidade} onChange={(e) => mudar(e.target.value)} onBlur={aoSair} autoComplete="off" className={inputCls} />
-      <datalist id={id}>
-        {opcoes.map((o) => (
-          <option key={`${o.nome}-${o.uf}`} value={`${o.nome} - ${o.uf}`} />
-        ))}
-      </datalist>
-      {escolher && <p className="text-[10px] font-bold text-yellow-400">Tem em {iguais.map((x) => x.uf).join(', ')}: escolha a UF</p>}
+      <input
+        value={cidade}
+        onChange={(e) => digitar(e.target.value)}
+        onFocus={() => cidade.trim().length >= 2 && setAberto(true)}
+        onKeyDown={teclas}
+        onBlur={aoSair}
+        autoComplete="off"
+        placeholder="Digite (sem acento também)"
+        className={inputCls}
+      />
+      {opcoes.length > 0 && (
+        <div className="absolute left-0 top-full mt-1 z-30 w-full min-w-[260px] max-h-72 overflow-auto custom-scrollbar rounded-xl border border-white/[0.1] bg-painel shadow-2xl py-1">
+          {opcoes.map((o, k) => (
+            <button
+              key={`${o.nome}-${o.uf}`}
+              type="button"
+              tabIndex={-1}
+              onMouseDown={(e) => {
+                e.preventDefault() // não tira o foco antes de escolher
+                escolher(o)
+              }}
+              onMouseEnter={() => setAtivo(k)}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm ${k === ativo ? 'bg-blue-500/15 text-white' : 'text-zinc-300'}`}
+            >
+              <span className="truncate">
+                <strong className="text-white">{o.nome}</strong> <span className="text-zinc-400">- {o.uf}</span>
+              </span>
+              {o.ddd && <span className="shrink-0 text-[10px] font-bold text-zinc-500">DDD {o.ddd}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {pedirUf && <p className="text-[10px] font-bold text-yellow-400">Tem em {iguais.map((x) => x.uf).join(', ')}: escolha na lista</p>}
     </div>
   )
 }

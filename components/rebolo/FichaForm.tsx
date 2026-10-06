@@ -21,7 +21,8 @@ import {
   UFS,
 } from '@/lib/erp/rebolo'
 import { btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { CampoCidade, QuadroFaixa, useRebolo } from './comum'
+import { CampoCidade, QuadroFaixa, useCidades, useRebolo } from './comum'
+import { dddDaCidade } from '@/lib/erp/cidades'
 
 const CAMPOS = [
   'escola', 'dataVisita', 'numeroFicha', 'aluno', 'serie', 'dataNascimento', 'qtdFotos', 'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietarioFazenda',
@@ -35,6 +36,7 @@ const TELEFONES = ['whatsapp1', 'whatsapp2', 'whatsapp3', 'telefone'] as const
 
 export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registro; ficha?: Registro | null; onFechar: () => void }) {
   const { tabela, fichas } = useRebolo()
+  const cidades = useCidades()
   const [f, setF] = useState<Form>(() => (ficha ? (Object.fromEntries(CAMPOS.map((c) => [c, String(ficha[c] ?? '')])) as Form) : vazio()))
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
@@ -45,7 +47,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
   const capacidade = pacote.tipo === 'Avulso' ? 1 : 10
 
   const faixa = f.dataVisita ? faixaDaFicha(f.dataVisita, tabela) : null
-  const ddd = dddCep || sugerirDDD(f.uf, f.cidade) || ''
+  const ddd = dddCep || dddDaCidade(cidades, f.cidade, f.uf) || sugerirDDD(f.uf, f.cidade) || ''
 
   const aoMudarCep = async (valor: string) => {
     set('cep', formatarCep(valor))
@@ -109,7 +111,17 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
   const telefone = (k: (typeof TELEFONES)[number], rotulo: string) => (
     <div className="space-y-1.5">
       <label className={labelCls}>{rotulo}</label>
-      <input value={f[k]} onChange={(e) => set(k, formatarTelefone(e.target.value))} inputMode="tel" placeholder={ddd ? `(${ddd}) 9____-____` : '(00) 00000-0000'} className={inputCls} />
+      <input
+        value={f[k]}
+        onChange={(e) => set(k, formatarTelefone(e.target.value))}
+        onBlur={() => {
+          const d = soDigitos(f[k])
+          if (ddd && (d.length === 8 || d.length === 9)) set(k, formatarTelefone(ddd + d)) // sem DDD: o da cidade
+        }}
+        inputMode="tel"
+        placeholder={ddd ? `(${ddd}) 9____-____` : '(00) 00000-0000'}
+        className={inputCls}
+      />
     </div>
   )
 
@@ -145,7 +157,15 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         {campo('numero', 'Nº')}
         {campo('apto', 'Apto')}
         {campo('bairro', 'Bairro', {}, 'md:col-span-2')}
-        <CampoCidade cidade={f.cidade} uf={f.uf} onMudar={(cidade, uf) => setF((x) => ({ ...x, cidade, uf }))} classe="md:col-span-2" />
+        <CampoCidade
+          cidade={f.cidade}
+          uf={f.uf}
+          onMudar={(cidade, uf, codigo) => {
+            setF((x) => ({ ...x, cidade, uf }))
+            if (codigo) aplicarDDD(codigo) // telefones já digitados sem DDD
+          }}
+          classe="md:col-span-2"
+        />
         <div className="space-y-1.5">
           <label className={labelCls}>UF</label>
           <select value={f.uf} onChange={(e) => set('uf', e.target.value)} className={`${inputCls} appearance-none`}>
