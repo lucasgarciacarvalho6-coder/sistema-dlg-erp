@@ -45,3 +45,6 @@ next-env.d.ts
 
 # importações com dados pessoais (telefones, observações): rodar no Supabase, nunca versionar
 /docs/supabase/importacao/
+
+# auditoria de segurança (lista de brechas): fica só no computador, nunca versionar
+/docs/auditoria/
