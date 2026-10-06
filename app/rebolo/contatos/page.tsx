@@ -110,7 +110,7 @@ export default function ContatosReboloPage() {
               <thead className="text-[10px] uppercase tracking-[0.15em] bg-white/[0.02] text-zinc-500 border-b border-white/[0.05]">
                 <tr>
                   <th className="px-5 py-4 font-bold">Ação</th>
-                  <th className="px-5 py-4 font-bold">Comprador / aluno</th>
+                  <th className="px-5 py-4 font-bold">Aluno / responsável</th>
                   <th className="px-5 py-4 font-bold">Faixa</th>
                   <th className="px-5 py-4 font-bold">Pacote / vendedora</th>
                   <th className="px-5 py-4 font-bold">Cidade</th>
@@ -128,8 +128,11 @@ export default function ContatosReboloPage() {
                       </button>
                     </td>
                     <td className="px-5 py-3.5">
-                      <p className="font-bold text-white">{String(f.nomeMae || f.nomePai || '—')}</p>
-                      <p className="text-[11px] text-zinc-500">{String(f.aluno)} • ficha {String(f.numeroFicha)}</p>
+                      {/* o nome do aluno em destaque (identifica o cliente); a mãe/o pai embaixo, quando houver */}
+                      <p className="text-sm font-black text-white leading-tight">{String(f.aluno)}</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {[`Ficha ${String(f.numeroFicha)}`, f.nomeMae ? `Mãe: ${String(f.nomeMae)}` : f.nomePai ? `Pai: ${String(f.nomePai)}` : ''].filter(Boolean).join(' • ')}
+                      </p>
                       {aba === HOJE && <div className="mt-1"><SituacaoBadge situacao={f.situacao} /></div>}
                     </td>
                     <td className="px-5 py-3.5"><FaixaBadge ficha={f} tabela={tabela} /></td>
