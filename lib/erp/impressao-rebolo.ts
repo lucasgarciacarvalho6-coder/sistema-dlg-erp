@@ -1,5 +1,7 @@
 // Impressões do Rebolo (abrem numa janela e chamam a impressão do navegador — "Salvar como PDF" gera o arquivo):
-//  • etiquetas do pacote: folha A4 comum, 10 etiquetas (2 × 5) com linha de corte e QR code;
+//  • etiqueta do PACOTE (para colar na caixa com as 10 fichas, como no sistema antigo): A4 com 6 etiquetas iguais
+//    (2 × 3) — DLG PHOTO STUDIO • PACOTE DE VENDAS • P266 • nome da vendedora • cidades dos álbuns;
+//  • etiquetas das fichas: folha A4 comum, 10 etiquetas (2 × 5) com linha de corte e QR code;
 //  • "Contrato de Compra Online": mesmo texto do contrato atual, já preenchido.
 
 import QRCode from 'qrcode'
@@ -24,7 +26,36 @@ function imprimir(titulo: string, css: string, corpo: string): string | null {
   return null
 }
 
-// ---------------- Etiquetas ----------------
+// ---------------- Etiqueta do pacote (6 iguais por folha A4) ----------------
+// cidades = "Cidade/UF" dos álbuns do pacote, sem repetir
+export function imprimirEtiquetaPacote(pacote: Registro, fichas: Registro[], vendedora: string): string | null {
+  const cidades = [...new Set(fichas.map((f) => [String(f.cidade || '').trim(), String(f.uf || '').trim()].filter(Boolean).join('/')).filter(Boolean))]
+  const etiqueta = `<div class="etq">
+    <p class="emp">DLG PHOTO STUDIO</p>
+    <p class="tit">PACOTE DE VENDAS</p>
+    <p class="num">P${esc(pacote.numero)}</p>
+    <p class="vend">${esc(vendedora)}</p>
+    <p class="rot">CIDADE(S)</p>
+    <p class="cid">${cidades.length ? cidades.map(esc).join(' / ') : '—'}</p>
+  </div>`
+  const css = `
+    @page { size: A4; margin: 6mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #1f2937; }
+    .folha { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 94mm); }
+    .etq { border: 1px dashed #9ca3af; padding: 8mm 6mm; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; break-inside: avoid; }
+    .etq p { margin: 0; line-height: 1.15; }
+    .emp { font-size: 12pt; font-weight: 700; letter-spacing: 1.5px; }
+    .tit { font-size: 11pt; letter-spacing: 1px; margin-top: 1mm !important; }
+    .num { font-size: 50pt; font-weight: 900; margin: 3mm 0 1mm !important; }
+    .vend { font-size: 22pt; font-weight: 700; }
+    .rot { font-size: 8.5pt; letter-spacing: 1px; color: #6b7280; margin-top: 3mm !important; }
+    .cid { font-size: 12pt; font-weight: 700; margin-top: 1mm !important; }
+  `
+  return imprimir(`Etiqueta do pacote P${pacote.numero}`, css, `<div class="folha">${Array.from({ length: 6 }, () => etiqueta).join('')}</div>`)
+}
+
+// ---------------- Etiquetas das fichas (uma por álbum, com QR) ----------------
 export async function imprimirEtiquetas(pacote: Registro, fichas: Registro[], vendedora: string): Promise<string | null> {
   if (!fichas.length) return 'Cadastre as fichas do pacote antes de imprimir as etiquetas.'
   const etiquetas = await Promise.all(

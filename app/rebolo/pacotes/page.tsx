@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { abrirPacoteRebolo, avisar, usePode } from '@/lib/erp/store'
-import { imprimirEtiquetas } from '@/lib/erp/impressao-rebolo'
+import { imprimirEtiquetaPacote, imprimirEtiquetas } from '@/lib/erp/impressao-rebolo'
 import { escolaFicha, faltaParaLiberar, pacoteFinalizado, pacoteLiberado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
@@ -60,6 +60,15 @@ export default function PacotesReboloPage() {
     setLote(null)
   }
 
+  // etiqueta do pacote (para colar na caixa): primeiro nome da vendedora; com o sobrenome se outra tiver o mesmo primeiro nome
+  const etiquetaPacote = () => {
+    if (!aberto) return
+    const completo = String(nome(aberto.vendedoraId)).trim()
+    const partes = completo.split(/\s+/)
+    const repetido = vendedoras.filter((v) => v.id !== aberto.vendedoraId && String(v.nome).trim().split(/\s+/)[0].toLowerCase() === partes[0]?.toLowerCase()).length > 0
+    const erro = imprimirEtiquetaPacote(aberto, fichasAberto, repetido && partes.length > 1 ? `${partes[0]} ${partes.at(-1)}` : partes[0] || completo)
+    if (erro) avisar(erro)
+  }
   const etiquetas = async () => {
     if (!aberto) return
     const erro = await imprimirEtiquetas(aberto, fichasAberto, nome(aberto.vendedoraId))
@@ -166,8 +175,11 @@ export default function PacotesReboloPage() {
           }`}
           acoes={
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => void etiquetas()} disabled={!fichasAberto.length} className={btnSecundario}>
+              <button onClick={etiquetaPacote} className={btnSecundario} title="Etiqueta para colar na caixa: número do pacote, vendedora e cidades (6 por folha A4)">
                 <Icon nome="doc" className="w-4 h-4" /> Imprimir etiquetas
+              </button>
+              <button onClick={() => void etiquetas()} disabled={!fichasAberto.length} className={btnSecundario} title="Uma etiqueta por álbum, com QR code (10 por folha A4)">
+                Etiquetas das fichas
               </button>
               {podeCadastrar && fichasAberto.length < capacidade && (
                 <button onClick={() => (aberto.tipo === 'Avulso' ? setForm({ ficha: null }) : setLote(aberto.id))} className={btnPrimario}>
