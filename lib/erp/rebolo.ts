@@ -5,13 +5,23 @@
 import type { ErpState, Registro } from './types'
 import { hoje } from './format'
 
+// Produtos (tabela de 06/10/2026): o Completo (maleta de luxo), com as opções sem maleta / sem moldura / com pôster,
+// e o Pôster com Moldura vendido sozinho. (Kit Completo, Kit Sem Moldura e Álbum Simples saíram; as vendas antigas
+// continuam com o nome que tinham.)
 export const PRODUTOS_REBOLO = [
-  { id: 'kit_completo', nome: 'Kit Completo' },
-  { id: 'kit_sem_moldura', nome: 'Kit Sem Moldura' },
-  { id: 'album_simples', nome: 'Álbum Simples' },
-  { id: 'poster_moldura', nome: 'Pôster com Moldura' }, // o pôster só é vendido com moldura
+  { id: 'completo', nome: 'Completo (maleta de luxo)' },
+  { id: 'poster_moldura', nome: 'Pôster com Moldura' }, // o pôster sozinho só é vendido com moldura
 ] as const
 export type ProdutoRebolo = (typeof PRODUTOS_REBOLO)[number]['id']
+
+// Opções do Completo: valor em R$ por faixa (o mesmo nas 3 formas de pagamento); 0 = a faixa não tem a opção.
+// Podem ser marcadas juntas (ex.: sem maleta + sem moldura = −R$ 400).
+export const OPCOES_COMPLETO = [
+  { id: 'sem_maleta', nome: 'Sem maleta', sinal: -1 },
+  { id: 'sem_moldura', nome: 'Sem moldura', sinal: -1 },
+  { id: 'com_poster', nome: 'Com pôster', sinal: 1 }, // alguns books vêm com pôster (faixa 3)
+] as const
+export type OpcaoCompleto = (typeof OPCOES_COMPLETO)[number]['id']
 
 // Cartão = crédito (parcelado); PIX à vista
 export const FORMAS_REBOLO = [
@@ -24,28 +34,40 @@ export type FormaRebolo = (typeof FORMAS_REBOLO)[number]['id']
 export const FAIXAS = [1, 2, 3] as const
 export type Faixa = (typeof FAIXAS)[number]
 
-// ---- Tabela de preços (padrão = sistema antigo; o que vale é o que está salvo em Tabela de Preços) ----
+// ---- Tabela de preços (padrão = tabela da parede de 06/10/2026; o que vale é o que está salvo em Tabela de Preços) ----
 // [PIX, Cartão, Boleto]. 0 = sem preço definido (produto não aparece para venda nessa faixa)
 const PRECOS_PADRAO: Record<Faixa, Record<ProdutoRebolo, [number, number, number]>> = {
-  1: { kit_completo: [1800, 1900, 2400], kit_sem_moldura: [1600, 1700, 2200], album_simples: [0, 0, 0], poster_moldura: [350, 350, 350] },
-  2: { kit_completo: [900, 1000, 1500], kit_sem_moldura: [700, 800, 1300], album_simples: [0, 0, 0], poster_moldura: [350, 350, 350] },
-  3: { kit_completo: [700, 800, 1000], kit_sem_moldura: [500, 600, 800], album_simples: [300, 400, 600], poster_moldura: [350, 350, 350] },
+  1: { completo: [1800, 1900, 2400], poster_moldura: [350, 350, 350] },
+  2: { completo: [900, 1000, 1500], poster_moldura: [350, 350, 350] },
+  3: { completo: [500, 600, 800], poster_moldura: [350, 350, 350] },
+}
+const OPCOES_PADRAO: Record<Faixa, Record<OpcaoCompleto, number>> = {
+  1: { sem_maleta: 200, sem_moldura: 200, com_poster: 0 },
+  2: { sem_maleta: 200, sem_moldura: 200, com_poster: 0 },
+  3: { sem_maleta: 200, sem_moldura: 0, com_poster: 200 },
 }
 const PARCELAS_PADRAO: Record<Faixa, { cartao: number; boleto: number }> = { 1: { cartao: 12, boleto: 15 }, 2: { cartao: 10, boleto: 15 }, 3: { cartao: 8, boleto: 10 } }
 
 export const chavePreco = (f: Faixa, p: ProdutoRebolo, forma: FormaRebolo) => `rebolo_f${f}_${p}_${forma}`
 export const chaveParcelas = (f: Faixa, forma: 'cartao' | 'boleto') => `rebolo_f${f}_parc_${forma}`
+export const chaveOpcao = (f: Faixa, o: OpcaoCompleto) => `rebolo_f${f}_op_${o}`
+export const chaveComissao = (forma: FormaRebolo) => `rebolo_comissao_${forma}`
 export const REGRAS_REBOLO = [
   { chave: 'rebolo_faixa1_ate', label: 'Faixa 1 vai até (meses desde a visita)', padrao: 12 },
   { chave: 'rebolo_faixa2_ate', label: 'Faixa 2 vai até (meses desde a visita)', padrao: 18 },
   { chave: 'rebolo_parcela_minima', label: 'Valor mínimo por parcela (R$)', padrao: 100 },
   { chave: 'rebolo_parcelas_max', label: 'Máximo de parcelas (qualquer forma)', padrao: 15 },
+  // comissão da vendedora sobre o valor da venda, pela forma de pagamento
+  { chave: 'rebolo_comissao_pix', label: 'Comissão da vendedora • PIX (%)', padrao: 10 },
+  { chave: 'rebolo_comissao_cartao', label: 'Comissão da vendedora • Cartão (%)', padrao: 5 },
+  { chave: 'rebolo_comissao_boleto', label: 'Comissão da vendedora • Boleto (%)', padrao: 3 },
 ] as const
 
 export function valoresPadraoRebolo(): Record<string, number> {
   const v: Record<string, number> = Object.fromEntries(REGRAS_REBOLO.map((r) => [r.chave, r.padrao]))
   for (const f of FAIXAS) {
     for (const p of PRODUTOS_REBOLO) FORMAS_REBOLO.forEach((forma, i) => (v[chavePreco(f, p.id, forma.id)] = PRECOS_PADRAO[f][p.id][i]))
+    for (const o of OPCOES_COMPLETO) v[chaveOpcao(f, o.id)] = OPCOES_PADRAO[f][o.id]
     v[chaveParcelas(f, 'cartao')] = PARCELAS_PADRAO[f].cartao
     v[chaveParcelas(f, 'boleto')] = PARCELAS_PADRAO[f].boleto
   }
@@ -58,24 +80,68 @@ export interface TabelaRebolo {
   parcelaMinima: number
   parcelasMax: number
   preco: (f: Faixa, p: ProdutoRebolo, forma: FormaRebolo) => number
+  opcao: (f: Faixa, o: OpcaoCompleto) => number // R$ da opção do Completo (0 = a faixa não tem)
+  comissao: (forma: FormaRebolo) => number // % da vendedora
   parcelas: (f: Faixa, forma: 'cartao' | 'boleto') => number
   valores: Record<string, number>
 }
 
-export function tabelaRebolo(s: ErpState): TabelaRebolo {
-  const salvos = s.empresa.parametros ?? {}
-  const padrao = valoresPadraoRebolo()
-  const v = Object.fromEntries(Object.entries(padrao).map(([k, p]) => [k, Number.isFinite(salvos[k]) ? Number(salvos[k]) : p]))
+// Tabela a partir dos valores (os salvos ou os que estão sendo editados na Tabela de Preços)
+export function tabelaDeValores(v: Record<string, number>): TabelaRebolo {
   return {
     faixa1Ate: v.rebolo_faixa1_ate,
     faixa2Ate: v.rebolo_faixa2_ate,
     parcelaMinima: v.rebolo_parcela_minima,
     parcelasMax: v.rebolo_parcelas_max,
     preco: (f, p, forma) => v[chavePreco(f, p, forma)] ?? 0,
+    opcao: (f, o) => Math.max(0, v[chaveOpcao(f, o)] ?? 0),
+    comissao: (forma) => Math.max(0, v[chaveComissao(forma)] ?? 0),
     parcelas: (f, forma) => v[chaveParcelas(f, forma)] ?? 1,
     valores: v,
   }
 }
+
+export function tabelaRebolo(s: ErpState): TabelaRebolo {
+  const salvos = s.empresa.parametros ?? {}
+  const padrao = valoresPadraoRebolo()
+  return tabelaDeValores(Object.fromEntries(Object.entries(padrao).map(([k, p]) => [k, Number.isFinite(salvos[k]) ? Number(salvos[k]) : p])))
+}
+
+// Opções do Completo que a faixa tem (valor > 0)
+export const opcoesDaFaixa = (t: TabelaRebolo, f: Faixa) => OPCOES_COMPLETO.filter((o) => t.opcao(f, o.id) > 0)
+
+// Preço da venda: produto da faixa + opções marcadas (só no Completo; opção que a faixa não tem é ignorada)
+export function precoVenda(t: TabelaRebolo, f: Faixa, produto: ProdutoRebolo, forma: FormaRebolo, opcoes: readonly OpcaoCompleto[] = []): number {
+  const base = t.preco(f, produto, forma)
+  if (!(base > 0) || produto !== 'completo') return base > 0 ? base : 0
+  const ajuste = OPCOES_COMPLETO.filter((o) => opcoes.includes(o.id)).reduce((a, o) => a + o.sinal * t.opcao(f, o.id), 0)
+  return Math.max(0, base + ajuste)
+}
+
+// Nome que vai na venda e no contrato: "Completo (maleta de luxo)", "Completo sem maleta e sem moldura", "Completo + pôster"...
+export function nomeDaVenda(produto: ProdutoRebolo, opcoes: readonly OpcaoCompleto[] = []): string {
+  if (produto !== 'completo') return PRODUTOS_REBOLO.find((p) => p.id === produto)?.nome ?? produto
+  const sem = (['sem_maleta', 'sem_moldura'] as const).filter((o) => opcoes.includes(o)).map((o) => (o === 'sem_maleta' ? 'sem maleta' : 'sem moldura'))
+  return `${sem.length ? `Completo ${sem.join(' e ')}` : 'Completo (maleta de luxo)'}${opcoes.includes('com_poster') ? ' + pôster' : ''}`
+}
+
+// Combinações do Completo que a faixa tem (colunas do quadro de preços): Completo, Sem maleta, Sem moldura...
+export function combinacoesDaFaixa(t: TabelaRebolo, f: Faixa): { opcoes: OpcaoCompleto[]; rotulo: string }[] {
+  const tem = new Set(opcoesDaFaixa(t, f).map((o) => o.id))
+  const todas: { opcoes: OpcaoCompleto[]; rotulo: string }[] = [
+    { opcoes: [], rotulo: 'Completo' },
+    { opcoes: ['sem_maleta'], rotulo: 'Sem maleta' },
+    { opcoes: ['sem_moldura'], rotulo: 'Sem moldura' },
+    { opcoes: ['sem_maleta', 'sem_moldura'], rotulo: 'Sem maleta e moldura' },
+    { opcoes: ['com_poster'], rotulo: 'Com pôster' },
+    { opcoes: ['sem_maleta', 'com_poster'], rotulo: 'Sem maleta + pôster' },
+    { opcoes: ['sem_moldura', 'com_poster'], rotulo: 'Sem moldura + pôster' },
+    { opcoes: ['sem_maleta', 'sem_moldura', 'com_poster'], rotulo: 'Sem maleta e moldura + pôster' },
+  ]
+  return todas.filter((c) => c.opcoes.every((o) => tem.has(o)))
+}
+
+export const comissaoDaVenda = (t: TabelaRebolo, forma: FormaRebolo, valor: number) => Math.round(valor * t.comissao(forma)) / 100
 
 // Meses completos desde a visita da escola (data da ficha)
 export function mesesDesde(dataISO: string, ref: string = hoje()): number {

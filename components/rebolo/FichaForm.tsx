@@ -2,12 +2,12 @@
 
 // Cadastro manual da ficha (uma por álbum), feito no PC: Tab passa de campo em campo.
 // CEP completa o endereço (e traz o DDD); o DDD também é sugerido pela cidade/UF.
-// Escola → data da visita (agenda) → faixa e preços na hora.
+// Escola → data da visita (agenda) → faixa e o quadro de preços da faixa na hora (igual à tabela da parede).
 
 import { useMemo, useState } from 'react'
 import type { Registro, Valor } from '@/lib/erp/types'
 import { colecao } from '@/lib/erp/metrics'
-import { brl, dataBR } from '@/lib/erp/format'
+import { dataBR } from '@/lib/erp/format'
 import { salvarFichaRebolo } from '@/lib/erp/store'
 import {
   buscarCep,
@@ -15,15 +15,13 @@ import {
   faixaDaFicha,
   formatarCep,
   formatarTelefone,
-  FORMAS_REBOLO,
   mesesDesde,
-  PRODUTOS_REBOLO,
   soDigitos,
   sugerirDDD,
   UFS,
 } from '@/lib/erp/rebolo'
 import { btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { useRebolo } from './comum'
+import { QuadroFaixa, useRebolo } from './comum'
 
 const CAMPOS = [
   'escola', 'dataVisita', 'numeroFicha', 'aluno', 'serie', 'dataNascimento', 'qtdFotos', 'cep', 'rua', 'numero', 'apto', 'fazenda', 'proprietarioFazenda',
@@ -137,15 +135,9 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
         <p className="text-sm text-zinc-300">
           Pacote <strong className="text-white">P{String(pacote.numero)}</strong> • {ficha ? 'editando ficha' : `ficha ${doPacote.length + 1} de ${capacidade}`}
         </p>
-        {faixa && (
-          <p className="text-xs text-zinc-400">
-            <strong className="text-white">Faixa {faixa}</strong> ({mesesDesde(f.dataVisita)} meses desde a visita) •{' '}
-            {PRODUTOS_REBOLO.filter((p) => tabela.preco(faixa, p.id, 'pix') > 0)
-              .map((p) => `${p.nome}: ${FORMAS_REBOLO.map((x) => brl(tabela.preco(faixa, p.id, x.id))).join(' / ')}`)
-              .join(' • ')}
-          </p>
-        )}
+        {!faixa && <p className="text-xs text-zinc-500">Digite a data da visita: a faixa e a tabela de preços aparecem aqui.</p>}
       </div>
+      {faixa && <QuadroFaixa tabela={tabela} faixa={faixa} meses={mesesDesde(f.dataVisita)} />}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="space-y-1.5 md:col-span-2">

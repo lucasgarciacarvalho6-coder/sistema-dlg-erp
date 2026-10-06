@@ -2,16 +2,18 @@
 
 // Atendimento de uma ficha: dados, histórico de contatos e as ações
 //  • Registrar contato: Sem resposta (tentar de novo) • Em negociação • Agendado • Descarte (motivo)
-//  • Fechar venda: produto + forma pelo preço da faixa (sem entrada, até 15x, parcela mínima R$ 100)
+//  • Fechar venda: Completo (com as opções sem maleta / sem moldura / com pôster que a faixa tem) ou Pôster com Moldura,
+//    forma de pagamento pelo preço da faixa (sem entrada, até 15x, parcela mínima R$ 100) e a comissão da vendedora
 //  • Pedir desconto fora da tabela (Gerência aprova)
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import type { Registro, Valor } from '@/lib/erp/types'
 import type { ResultadoContato } from '@/lib/erp/fluxos'
 import { addDias, brl, dataBR, hoje } from '@/lib/erp/format'
 import { fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarContatoRebolo, usePode } from '@/lib/erp/store'
 import {
+  comissaoDaVenda,
   EM_ABERTO,
   faixaDaFicha,
   formatarTelefone,
@@ -19,12 +21,16 @@ import {
   maxParcelas,
   mesesDesde,
   MOTIVOS_DESCARTE,
+  nomeDaVenda,
+  opcoesDaFaixa,
+  precoVenda,
   PRODUTOS_REBOLO,
   type FormaRebolo,
+  type OpcaoCompleto,
   type ProdutoRebolo,
 } from '@/lib/erp/rebolo'
 import { Badge, Tabs, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import { dataHoraCurta, FaixaBadge, SituacaoBadge, Telefones, useRebolo } from './comum'
+import { dataHoraCurta, FaixaBadge, QuadroFaixa, SituacaoBadge, Telefones, useRebolo } from './comum'
 
 type Aba = 'contato' | 'venda' | 'desconto'
 
@@ -90,8 +96,9 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
         </div>
       </div>
 
-      {/* Ações */}
+      {/* Ações (com a tabela de preços da faixa na frente, para a ligação) */}
       <div className="lg:col-span-3 space-y-4">
+        <QuadroFaixa tabela={tabela} faixa={faixa} meses={mesesDesde(String(ficha.dataVisita))} />
         {!aberta ? (
           <SemAcao ficha={ficha} venda={venda} supervisao={supervisao} />
         ) : !podeAgir ? (
@@ -233,7 +240,12 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
   const disponiveis = PRODUTOS_REBOLO.filter((p) => FORMAS_REBOLO.some((f) => tabela.preco(faixa, p.id, f.id) > 0))
   const [produto, setProduto] = useState<ProdutoRebolo | ''>(disponiveis[0]?.id ?? '')
   const [forma, setForma] = useState<FormaRebolo>('boleto')
-  const precoTabela = produto ? tabela.preco(faixa, produto, forma) : 0
+  // opções do Completo que a faixa tem (sem maleta, sem moldura, com pôster); podem ser marcadas juntas
+  const opcoesFaixa = opcoesDaFaixa(tabela, faixa)
+  const [marcadas, setMarcadas] = useState<OpcaoCompleto[]>([])
+  const opcoes = produto === 'completo' ? marcadas.filter((o) => opcoesFaixa.some((x) => x.id === o)) : []
+  const alternar = (o: OpcaoCompleto) => setMarcadas((m) => (m.includes(o) ? m.filter((x) => x !== o) : [...m, o]))
+  const precoTabela = produto ? precoVenda(tabela, faixa, produto, forma, opcoes) : 0
   const descontoOk = ficha.descontoStatus === 'Aprovado' && Number(ficha.descontoValor) > 0
   const [usarDesconto, setUsarDesconto] = useState(false)
   const valor = usarDesconto && descontoOk ? Number(ficha.descontoValor) : precoTabela
@@ -251,7 +263,8 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const parcelamento = forma === 'pix' || n <= 1 ? 'À vista' : `${n}x ${brl(Math.round((valor / n) * 100) / 100)}`
-  const precos = useMemo(() => FORMAS_REBOLO.map((f) => ({ ...f, preco: produto ? tabela.preco(faixa, produto, f.id) : 0 })), [tabela, faixa, produto])
+  const precos = FORMAS_REBOLO.map((f) => ({ ...f, preco: produto ? precoVenda(tabela, faixa, produto, f.id, opcoes) : 0 }))
+  const comissao = comissaoDaVenda(tabela, forma, valor)
 
   const salvar = async () => {
     if (!produto) return setErro('Escolha o produto.')
@@ -279,7 +292,7 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
       uf: String(ficha.uf || ''),
       nomePai: String(ficha.nomePai || ''),
       nomeMae: String(ficha.nomeMae || ''),
-      pacote: PRODUTOS_REBOLO.find((p) => p.id === produto)!.nome,
+      pacote: nomeDaVenda(produto, opcoes),
       quantidade: 1,
       qtdFotos: Number(ficha.qtdFotos) || 0,
       valor,
@@ -317,6 +330,17 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
           ))}
         </div>
       </div>
+      {produto === 'completo' && opcoesFaixa.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {opcoesFaixa.map((o) => (
+            <label key={o.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm cursor-pointer ${opcoes.includes(o.id) ? 'border-blue-500/50 bg-blue-500/10 text-white' : 'border-white/[0.06] text-zinc-300'}`}>
+              <input type="checkbox" checked={opcoes.includes(o.id)} onChange={() => alternar(o.id)} />
+              {o.nome} ({o.sinal < 0 ? '−' : '+'}
+              {brl(tabela.opcao(faixa, o.id)).replace(/,00$/, '')})
+            </label>
+          ))}
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2">
         {precos.map((f) => (
           <button
@@ -357,8 +381,13 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
         )}
       </div>
       <p className="text-xs text-zinc-400">
-        Total <strong className="text-white">{brl(valor)}</strong> • {parcelamento} • sem entrada
+        {produto && <strong className="text-white">{nomeDaVenda(produto, opcoes)}</strong>} • Total <strong className="text-white">{brl(valor)}</strong> • {parcelamento} • sem entrada
       </p>
+      {valor > 0 && (
+        <p className="text-xs text-zinc-400">
+          Comissão da vendedora ({FORMAS_REBOLO.find((f) => f.id === forma)!.nome} {tabela.comissao(forma)}%): <strong className="text-white">{brl(comissao)}</strong>
+        </p>
+      )}
       <p className="text-sm font-black text-white pt-2 border-t border-white/[0.06]">Comprador</p>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5 col-span-2">

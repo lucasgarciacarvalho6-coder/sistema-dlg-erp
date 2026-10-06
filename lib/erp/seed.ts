@@ -699,7 +699,7 @@ export function gerarSeed(): ErpState {
       const venda = inserir(s, 'vendas_ebooks', {
         canal: 'Rebolo', fichaReboloId: f.id, cobradorId: 'u-re1', responsavel: resp.toUpperCase(), aluno: '', modelo: aluno.toUpperCase(), numeroFicha: f.numeroFicha, escola: f.escola,
         telefone: f.whatsapp1, whatsapp: f.whatsapp1, cpf: '069.905.156-86', rg: '', endereco: `${f.rua}, ${f.numero}`, bairro: f.bairro, cep: f.cep, cidade: f.cidade, uf: f.uf,
-        nomePai: '', nomeMae: resp, pacote: 'Kit Sem Moldura', quantidade: 1, qtdFotos: 26, valor: 800, entrada: 0, formaPagamento: 'Boleto', parcelas: 8,
+        nomePai: '', nomeMae: resp, pacote: 'Completo (maleta de luxo)', quantidade: 1, qtdFotos: 26, valor: 800, entrada: 0, formaPagamento: 'Boleto', parcelas: 8,
         formaParcelamento: '8x R$ 100,00', primeiroVencimento: addDias(hojeISO, 20), data: addDias(hojeISO, -1), observacao: '', anexos: '{}', referencias: '[]',
       })
       APOS_CRIAR.vendas_ebooks(s, venda, cBianca)

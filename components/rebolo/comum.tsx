@@ -5,7 +5,20 @@ import { useMemo } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { useErp, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { faixaDaFicha, linkWhatsApp, rotuloPacote, tabelaRebolo, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import {
+  combinacoesDaFaixa,
+  faixaDaFicha,
+  FORMAS_REBOLO,
+  linkWhatsApp,
+  opcoesDaFaixa,
+  precoVenda,
+  rotuloPacote,
+  tabelaRebolo,
+  TOM_SITUACAO,
+  type Faixa,
+  type TabelaRebolo,
+} from '@/lib/erp/rebolo'
+import { brl } from '@/lib/erp/format'
 import { Badge } from '@/components/erp/ui'
 
 // Supervisão (ADM, Gerência ou supervisora do rebolo) vê e atende todas as fichas; a vendedora, as dela
@@ -60,6 +73,64 @@ export function Telefones({ ficha }: { ficha: Registro }) {
           <span aria-hidden="true">📞</span> {String(ficha.telefone)}
         </a>
       ) : null}
+    </div>
+  )
+}
+
+// Quadro de preços da faixa (igual à tabela da parede): PIX / Cartão / Boleto × Completo e as opções que a faixa tem,
+// o Pôster com Moldura sozinho e a comissão da vendedora. Aparece no cadastro da ficha, no atendimento e na Tabela de Preços.
+const reais = (v: number) => (v > 0 ? brl(v).replace(/,00$/, '') : '—')
+export function QuadroFaixa({ tabela, faixa, meses, titulo }: { tabela: TabelaRebolo; faixa: Faixa; meses?: number; titulo?: string }) {
+  const colunas = combinacoesDaFaixa(tabela, faixa)
+  const opcoes = opcoesDaFaixa(tabela, faixa)
+  const temPoster = FORMAS_REBOLO.some((x) => tabela.preco(faixa, 'poster_moldura', x.id) > 0)
+  const th = 'px-2 py-1.5 text-[9px] font-black uppercase tracking-wider text-zinc-400 text-right whitespace-nowrap'
+  const td = 'px-2 py-1.5 text-right font-bold text-white whitespace-nowrap'
+  return (
+    <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-3 space-y-2">
+      <p className="text-xs text-zinc-300">
+        {titulo ?? (
+          <>
+            <strong className="text-white">Faixa {faixa}</strong>
+            {meses !== undefined && ` • ${meses} ${meses === 1 ? 'mês' : 'meses'} desde a visita`} • tabela de preços
+          </>
+        )}
+      </p>
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-white/[0.06]">
+              <th className={`${th} text-left`}></th>
+              {colunas.map((c) => (
+                <th key={c.rotulo} className={th}>
+                  {c.rotulo}
+                </th>
+              ))}
+              {temPoster && <th className={th}>Pôster c/ moldura</th>}
+              <th className={th}>Comissão</th>
+            </tr>
+          </thead>
+          <tbody>
+            {FORMAS_REBOLO.map((x) => (
+              <tr key={x.id} className="border-b border-white/[0.03] last:border-0">
+                <td className="px-2 py-1.5 text-[10px] font-black uppercase tracking-wider text-zinc-400">{x.nome}</td>
+                {colunas.map((c) => (
+                  <td key={c.rotulo} className={td}>
+                    {reais(precoVenda(tabela, faixa, 'completo', x.id, c.opcoes))}
+                  </td>
+                ))}
+                {temPoster && <td className={td}>{reais(tabela.preco(faixa, 'poster_moldura', x.id))}</td>}
+                <td className="px-2 py-1.5 text-right text-zinc-300 whitespace-nowrap">{tabela.comissao(x.id)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {opcoes.length > 0 && (
+        <p className="text-[10px] text-zinc-500">
+          {opcoes.map((o) => `${o.nome} ${o.sinal < 0 ? '−' : '+'}${reais(tabela.opcao(faixa, o.id))}`).join(' • ')} • podem ser somados
+        </p>
+      )}
     </div>
   )
 }

@@ -5,7 +5,7 @@
 import QRCode from 'qrcode'
 import type { Registro } from './types'
 import { brl, dataBR } from './format'
-import { EMPRESA_CONTRATO, PRODUTOS_REBOLO } from './rebolo'
+import { EMPRESA_CONTRATO } from './rebolo'
 
 const esc = (v: unknown) =>
   String(v ?? '')
@@ -60,7 +60,9 @@ export async function imprimirEtiquetas(pacote: Registro, fichas: Registro[], ve
 
 // ---------------- Contrato de Compra Online ----------------
 export function imprimirContratoRebolo(v: Registro, ficha: Registro | undefined, vendedora: string): string | null {
-  const marca = (id: string) => (PRODUTOS_REBOLO.find((p) => p.id === id)?.nome === v.pacote ? 'X' : '&nbsp;&nbsp;')
+  // marcas do item 3 pelo nome da venda ("Completo sem maleta + pôster"...); vendas antigas: Kit Completo / Kit Sem Moldura
+  const produto = String(v.pacote ?? '')
+  const marca = (re: RegExp) => (re.test(produto) ? 'X' : '&nbsp;&nbsp;')
   const linha = (a: string, b: unknown, c: string, d: unknown) =>
     `<tr><th>${a}</th><td>${esc(b)}</td><th>${c}</th><td>${esc(d)}</td></tr>`
   const hojeBR = dataBR(String(v.data || '').slice(0, 10))
@@ -87,7 +89,7 @@ export function imprimirContratoRebolo(v: Registro, ficha: Registro | undefined,
   <div class="caixa">
     <p><b>Modelo:</b> ${esc(v.modelo)}</p>
     <p><b>Quantidade de fotos:</b> ${esc(v.qtdFotos)}</p>
-    <p class="op"><b>(${marca('kit_completo')}) KIT COMPLETO</b> <b>(${marca('kit_sem_moldura')}) KIT SEM MOLDURA</b> <b>(${marca('album_simples')}) ÁLBUM SIMPLES</b> <b>(${marca('poster_moldura')}) PÔSTER COM MOLDURA</b></p>
+    <p class="op"><b>(${marca(/^(completo|kit )/i)}) COMPLETO (MALETA DE LUXO)</b> <b>(${marca(/sem maleta/i)}) SEM MALETA</b> <b>(${marca(/sem moldura/i)}) SEM MOLDURA</b> <b>(${marca(/\+ ?pôster|com pôster/i)}) COM PÔSTER</b> <b>(${marca(/^pôster com moldura/i)}) PÔSTER COM MOLDURA</b></p>
   </div>
   <h2>4. Envio</h2>
   <p>O álbum será enviado em até dois dias úteis após a assinatura do contrato, com informações de rastreio fornecidas via WhatsApp. A vendedora não se responsabiliza por atrasos dos Correios.</p>
