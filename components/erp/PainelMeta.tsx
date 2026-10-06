@@ -125,12 +125,14 @@ export default function PainelMeta({
   indicadorId,
   mes,
   grande = false,
+  formatarBarra,
 }: {
   s: ErpState
   colaborador: Colaborador | undefined
   indicadorId: string
   mes: string
   grande?: boolean
+  formatarBarra?: (v: number) => string // número em cima de cada barra (ex.: R$ curto "1,3k" para caber)
 }) {
   if (!colaborador) return <EmptyState titulo="Sem responsável pela meta" descricao="Cadastre a coordenação (RMC) do setor em Colaboradores." />
   const cfg = SETORES[colaborador.setor]
@@ -228,7 +230,7 @@ export default function PainelMeta({
               <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{ind.label} por dia útil</p>
               <LegendaDias comPiso={r.piso > 0} className="text-[10px] text-zinc-400" />
             </div>
-            <GraficoDiasUteis uteis={d.uteis} serie={d.serie} decorridos={d.decorridos} metaDiaria={d.metaDiaria} pisoDiario={d.pisoDiario} formatar={f} altura={grande ? 'h-72' : 'h-56'} />
+            <GraficoDiasUteis uteis={d.uteis} serie={d.serie} decorridos={d.decorridos} metaDiaria={d.metaDiaria} pisoDiario={d.pisoDiario} formatar={formatarBarra ?? f} altura={grande ? 'h-72' : 'h-56'} />
           </div>
           <Anel valor={r.pctMes} cor={STATUS[sit].cor} rotulo="da meta do mês" detalhe={`${f(r.mes)} / ${f(r.meta.mensal)} ${ind.unidade === 'qtd' ? ind.label.split(' ')[0].toLowerCase() : ''}`} tamanho={grande ? 'w-44 h-44' : 'w-36 h-36'} textoCls={grande ? 'text-4xl' : 'text-3xl'} />
         </div>
