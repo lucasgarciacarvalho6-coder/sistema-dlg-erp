@@ -2,6 +2,7 @@
 
 // Pacotes (caixas de 10 álbuns que voltaram do vendedor externo) e o cadastro das fichas.
 // A vendedora tem um pacote aberto por vez: só abre outro quando as fichas estão vendidas ou em descarte.
+// Pacote Padrão: ao criar, já abre a tela com os 10 álbuns para cadastrar tudo de uma vez (FichasLote).
 
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
@@ -12,6 +13,7 @@ import { dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario } from '@/components/erp/ui'
 import FichaForm from '@/components/rebolo/FichaForm'
+import FichasLote from '@/components/rebolo/FichasLote'
 import { FaixaBadge, SituacaoBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
 
 type Filtro = 'andamento' | 'finalizados' | 'todos'
@@ -24,6 +26,8 @@ export default function PacotesReboloPage() {
   const [novo, setNovo] = useState(false)
   const [abertoId, setAbertoId] = useState<string | null>(null)
   const [form, setForm] = useState<{ ficha: Registro | null } | null>(null)
+  // tela dos 10 álbuns: id do pacote, ou 'novo' = o pacote que acabou de ser criado (aparece quando chega da gravação)
+  const [lote, setLote] = useState<string | null>(null)
 
   const linhas = useMemo(
     () =>
@@ -43,7 +47,13 @@ export default function PacotesReboloPage() {
 
   const abrir = async (tipo: 'Padrão' | 'Avulso') => {
     setNovo(false)
-    await abrirPacoteRebolo(tipo)
+    const erro = await abrirPacoteRebolo(tipo)
+    if (!erro && tipo === 'Padrão') setLote('novo')
+  }
+  const pacoteLote = lote === 'novo' ? (meuAberto ?? null) : (pacotes.find((p) => p.id === lote) ?? null)
+  const fecharLote = () => {
+    if (pacoteLote) setAbertoId(pacoteLote.id)
+    setLote(null)
   }
 
   const etiquetas = async () => {
@@ -154,8 +164,8 @@ export default function PacotesReboloPage() {
                 <Icon nome="doc" className="w-4 h-4" /> Imprimir etiquetas
               </button>
               {podeCadastrar && fichasAberto.length < capacidade && (
-                <button onClick={() => setForm({ ficha: null })} className={btnPrimario}>
-                  <Icon nome="plus" className="w-4 h-4" /> Cadastrar ficha
+                <button onClick={() => (aberto.tipo === 'Avulso' ? setForm({ ficha: null }) : setLote(aberto.id))} className={btnPrimario}>
+                  <Icon nome="plus" className="w-4 h-4" /> {aberto.tipo === 'Avulso' ? 'Cadastrar ficha' : 'Cadastrar fichas'}
                 </button>
               )}
             </div>
@@ -229,6 +239,16 @@ export default function PacotesReboloPage() {
         largura="max-w-5xl"
       >
         {form && aberto && <FichaForm key={form.ficha?.id ?? 'nova'} pacote={aberto} ficha={form.ficha} onFechar={() => setForm(null)} />}
+      </Modal>
+
+      <Modal
+        aberto={!!pacoteLote}
+        titulo={pacoteLote ? `Cadastrar as fichas • P${pacoteLote.numero}` : ''}
+        subtitulo="Preencha os álbuns da caixa e salve tudo de uma vez"
+        onFechar={fecharLote}
+        largura="max-w-6xl"
+      >
+        {pacoteLote && <FichasLote key={pacoteLote.id} pacote={pacoteLote} onFechar={fecharLote} />}
       </Modal>
 
     </div>

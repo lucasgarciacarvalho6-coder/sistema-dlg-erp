@@ -1343,16 +1343,30 @@ export async function abrirPacoteRebolo(tipo: 'Padrão' | 'Avulso'): Promise<str
   return null
 }
 
-export async function salvarFichaRebolo(dados: Record<string, Valor>, id?: string): Promise<string | null> {
-  if (id) return atualizarRegistro('rebolo_fichas', id, dados, 'rebolo')
+async function criarFichaRebolo(dados: Record<string, Valor>): Promise<string | null> {
   const s = carregar()
   const pacote = F.col(s, 'rebolo_pacotes').find((p) => p.id === dados.pacoteId)
   if (!pacote) return 'Pacote não encontrado.'
   const capacidade = pacote.tipo === 'Avulso' ? 1 : 10
   if (F.col(s, 'rebolo_fichas').filter((f) => f.pacoteId === pacote.id).length >= capacidade) return `O pacote P${pacote.numero} já tem ${capacidade} ficha(s).`
-  const erro = await criarRegistro('rebolo_fichas', { ...dados, vendedoraId: pacote.vendedoraId, situacao: 'Aguardando contato', tentativas: 0 }, 'rebolo')
+  return criarRegistro('rebolo_fichas', { ...dados, vendedoraId: pacote.vendedoraId, situacao: 'Aguardando contato', tentativas: 0 }, 'rebolo')
+}
+
+export async function salvarFichaRebolo(dados: Record<string, Valor>, id?: string): Promise<string | null> {
+  if (id) return atualizarRegistro('rebolo_fichas', id, dados, 'rebolo')
+  const erro = await criarFichaRebolo(dados)
   if (!erro) avisar('Ficha cadastrada.', 'ok')
   return erro
+}
+
+// Várias fichas do mesmo pacote de uma vez (tela das 10 fichas): grava uma a uma, na ordem, e avisa uma vez só.
+// Devolve o erro de cada ficha (null = gravada).
+export async function salvarFichasRebolo(lista: Record<string, Valor>[]): Promise<(string | null)[]> {
+  const resultado: (string | null)[] = []
+  for (const dados of lista) resultado.push(await criarFichaRebolo(dados))
+  const ok = resultado.filter((r) => !r).length
+  if (ok) avisar(`${ok} ficha(s) cadastrada(s).`, 'ok')
+  return resultado
 }
 
 export const registrarContatoRebolo = (fichaId: string, c: { resultado: F.ResultadoContato; observacao: string; motivo?: string; agendadoPara?: string }) =>
