@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { abrirPacoteRebolo, avisar, usePode } from '@/lib/erp/store'
 import { imprimirEtiquetas } from '@/lib/erp/impressao-rebolo'
-import { pacoteFinalizado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { escolaFicha, pacoteFinalizado, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { EmptyState, Modal, PageHeader, Panel, StatCard, TONS, btnBranco, btnPrimario, btnSecundario } from '@/components/erp/ui'
@@ -193,7 +193,7 @@ export default function PacotesReboloPage() {
                       <td className="px-5 py-3 font-black text-white">{String(f.numeroFicha)}</td>
                       <td className="px-5 py-3">
                         <p className="font-bold text-white">{String(f.aluno)}</p>
-                        <p className="text-[11px] text-zinc-500">{String(f.escola)} • visita {dataBR(String(f.dataVisita))}</p>
+                        <p className="text-[11px] text-zinc-500">{[escolaFicha(f), `visita ${dataBR(String(f.dataVisita))}`].filter(Boolean).join(' • ')}</p>
                       </td>
                       <td className="px-5 py-3"><FaixaBadge ficha={f} tabela={tabela} /></td>
                       <td className="px-5 py-3 whitespace-nowrap">{[f.cidade, f.uf].filter(Boolean).join('/') || '—'}</td>

@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { hoje } from '@/lib/erp/format'
-import { EM_ABERTO, SITUACOES_FICHA } from '@/lib/erp/rebolo'
+import { EM_ABERTO, escolaFicha, SITUACOES_FICHA } from '@/lib/erp/rebolo'
 import { EmptyState, Modal, PageHeader, Panel } from '@/components/erp/ui'
 import Atendimento from '@/components/rebolo/Atendimento'
 import { dataHoraCurta, FaixaBadge, PacoteBadge, SituacaoBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
@@ -147,7 +147,7 @@ export default function ContatosReboloPage() {
         )}
       </Panel>
 
-      <Modal aberto={!!ficha} titulo={ficha ? `Atendimento • ${ficha.aluno}` : ''} subtitulo={ficha ? `Ficha ${ficha.numeroFicha} • ${ficha.escola}` : ''} onFechar={() => setAtendendo(null)} largura="max-w-6xl">
+      <Modal aberto={!!ficha} titulo={ficha ? `Atendimento • ${ficha.aluno}` : ''} subtitulo={ficha ? [`Ficha ${ficha.numeroFicha}`, escolaFicha(ficha)].filter(Boolean).join(' • ') : ''} onFechar={() => setAtendendo(null)} largura="max-w-6xl">
         {ficha && <Atendimento key={ficha.id} ficha={ficha} onFechar={() => setAtendendo(null)} />}
       </Modal>
     </div>

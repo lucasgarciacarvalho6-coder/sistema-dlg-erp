@@ -15,6 +15,7 @@ import { fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarCo
 import {
   comissaoDaVenda,
   EM_ABERTO,
+  escolaFicha,
   faixaDaFicha,
   formatarTelefone,
   FORMAS_REBOLO,
@@ -25,6 +26,7 @@ import {
   opcoesDaFaixa,
   precoVenda,
   PRODUTOS_REBOLO,
+  SEM_ESCOLA,
   type FormaRebolo,
   type OpcaoCompleto,
   type ProdutoRebolo,
@@ -58,7 +60,8 @@ export default function Atendimento({ ficha, onFechar }: { ficha: Registro; onFe
           </div>
           <p className="text-lg font-black text-white">{String(ficha.aluno)}</p>
           <p className="text-zinc-400">
-            Ficha <strong className="text-white">{String(ficha.numeroFicha)}</strong> • {String(ficha.escola)}
+            Ficha <strong className="text-white">{String(ficha.numeroFicha)}</strong>
+            {escolaFicha(ficha) ? ` • ${escolaFicha(ficha)}` : ''}
             {ficha.serie ? ` • ${ficha.serie}` : ''}
           </p>
           <p className="text-zinc-400">
@@ -280,7 +283,7 @@ function FecharVenda({ ficha, faixa, onFeito }: { ficha: Registro; faixa: 1 | 2 
       aluno: '',
       modelo: String(ficha.aluno),
       numeroFicha: String(ficha.numeroFicha),
-      escola: String(ficha.escola),
+      escola: escolaFicha(ficha) || SEM_ESCOLA, // a venda exige a escola: sem escola vai "—"
       telefone: d.whatsapp,
       whatsapp: d.whatsapp,
       cpf: d.cpf,

@@ -5,7 +5,7 @@
 import QRCode from 'qrcode'
 import type { Registro } from './types'
 import { brl, dataBR } from './format'
-import { EMPRESA_CONTRATO } from './rebolo'
+import { EMPRESA_CONTRATO, escolaFicha } from './rebolo'
 
 const esc = (v: unknown) =>
   String(v ?? '')
@@ -35,7 +35,7 @@ export async function imprimirEtiquetas(pacote: Registro, fichas: Registro[], ve
         <div class="txt">
           <p class="topo">P${esc(pacote.numero)} • FICHA <b>${esc(f.numeroFicha)}</b></p>
           <p class="aluno">${esc(f.aluno)}</p>
-          <p>${esc(f.escola)}</p>
+          ${escolaFicha(f) ? `<p>${esc(escolaFicha(f))}</p>` : ''}
           <p>${esc([f.cidade, f.uf].filter(Boolean).join(' / '))}${f.serie ? ` • ${esc(f.serie)}` : ''}</p>
           <p class="vend">Vendedora: ${esc(vendedora)}</p>
         </div>

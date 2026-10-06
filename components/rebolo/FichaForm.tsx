@@ -2,12 +2,11 @@
 
 // Cadastro manual da ficha (uma por álbum), feito no PC: Tab passa de campo em campo.
 // CEP completa o endereço (e traz o DDD); o DDD também é sugerido pela cidade/UF.
-// Escola → data da visita (agenda) → faixa e o quadro de preços da faixa na hora (igual à tabela da parede).
+// Data da visita → faixa e o quadro de preços da faixa na hora (igual à tabela da parede).
+// Sem escola (06/10/2026: não é necessária): a ficha nova grava "—"; a ficha antiga mantém a escola que tinha.
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import type { Registro, Valor } from '@/lib/erp/types'
-import { colecao } from '@/lib/erp/metrics'
-import { dataBR } from '@/lib/erp/format'
 import { salvarFichaRebolo } from '@/lib/erp/store'
 import {
   buscarCep,
@@ -16,6 +15,7 @@ import {
   formatarCep,
   formatarTelefone,
   mesesDesde,
+  SEM_ESCOLA,
   soDigitos,
   sugerirDDD,
   UFS,
@@ -34,7 +34,7 @@ const vazio = (base?: Partial<Form>): Form => ({ ...(Object.fromEntries(CAMPOS.m
 const TELEFONES = ['whatsapp1', 'whatsapp2', 'whatsapp3', 'telefone'] as const
 
 export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registro; ficha?: Registro | null; onFechar: () => void }) {
-  const { s, tabela, fichas } = useRebolo()
+  const { tabela, fichas } = useRebolo()
   const [f, setF] = useState<Form>(() => (ficha ? (Object.fromEntries(CAMPOS.map((c) => [c, String(ficha[c] ?? '')])) as Form) : vazio()))
   const [erro, setErro] = useState('')
   const [aviso, setAviso] = useState('')
@@ -43,24 +43,6 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
   const set = (k: Campo, v: string) => setF((x) => ({ ...x, [k]: v }))
   const doPacote = fichas.filter((x) => x.pacoteId === pacote.id)
   const capacidade = pacote.tipo === 'Avulso' ? 1 : 10
-
-  // Escolas: cadastro central + agenda (com a data em que foram fotografadas)
-  const visitas = useMemo(() => {
-    const m = new Map<string, { data: string; cidade: string; uf: string }>()
-    for (const v of colecao(s, 'agenda_visitas')) {
-      if (!['Fotografada', 'Fechamento enviado'].includes(String(v.status))) continue
-      const nome = String(v.escola || '')
-      const atual = m.get(nome)
-      if (nome && (!atual || String(v.data) > atual.data)) m.set(nome, { data: String(v.data), cidade: String(v.cidade || ''), uf: String(v.uf || '') })
-    }
-    return m
-  }, [s])
-  const escolas = useMemo(() => [...new Set([...visitas.keys(), ...colecao(s, 'escolas').map((e) => String(e.nome))])].sort(), [s, visitas])
-
-  const escolherEscola = (nome: string) => {
-    const v = visitas.get(nome)
-    setF((x) => ({ ...x, escola: nome, dataVisita: v?.data ?? x.dataVisita }))
-  }
 
   const faixa = f.dataVisita ? faixaDaFicha(f.dataVisita, tabela) : null
   const ddd = dddCep || sugerirDDD(f.uf, f.cidade) || ''
@@ -93,14 +75,16 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
   }
 
   const salvar = async (proxima: boolean) => {
-    if (!f.escola.trim() || !f.dataVisita || !f.numeroFicha.trim() || !f.aluno.trim()) return setErro('Preencha escola, data da visita, nº da ficha e nome do aluno.')
+    if (!f.dataVisita || !f.numeroFicha.trim() || !f.aluno.trim()) return setErro('Preencha a data da visita, o nº da ficha e o nome do aluno.')
     if (soDigitos(f.whatsapp1).length < 10) return setErro('Informe o WhatsApp 1 com DDD.')
-    const repetida = fichas.find((x) => String(x.numeroFicha).trim() === f.numeroFicha.trim() && x.escola === f.escola && x.id !== ficha?.id)
-    if (repetida) return setErro(`A ficha ${f.numeroFicha} desta escola já está cadastrada.`)
+    // repetida = mesmo nº de ficha e mesmo aluno
+    const repetida = fichas.find((x) => String(x.numeroFicha).trim() === f.numeroFicha.trim() && String(x.aluno).trim().toUpperCase() === f.aluno.trim().toUpperCase() && x.id !== ficha?.id)
+    if (repetida) return setErro(`A ficha ${f.numeroFicha} de ${f.aluno.trim().toUpperCase()} já está cadastrada.`)
     setErro('')
     setSalvando(true)
     const dados: Record<string, Valor> = Object.fromEntries(CAMPOS.map((c) => [c, f[c].trim()]))
     dados.aluno = f.aluno.trim().toUpperCase()
+    dados.escola = f.escola.trim() || SEM_ESCOLA
     dados.qtdFotos = Number(f.qtdFotos) || 0
     dados.pacoteId = String(pacote.id)
     const e = await salvarFichaRebolo(dados, ficha?.id)
@@ -108,7 +92,7 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
     if (e) return setErro(e)
     if (proxima && !ficha && doPacote.length + 1 < capacidade) {
       // próxima ficha do mesmo pacote: mantém escola e data da visita
-      setF(vazio({ escola: f.escola, dataVisita: f.dataVisita }))
+      setF(vazio({ dataVisita: f.dataVisita }))
       setDddCep('')
       setAviso(`Ficha ${f.numeroFicha} salva. Próxima: ${doPacote.length + 2} de ${capacidade}.`)
       return
@@ -140,19 +124,9 @@ export default function FichaForm({ pacote, ficha, onFechar }: { pacote: Registr
       {faixa && <QuadroFaixa tabela={tabela} faixa={faixa} meses={mesesDesde(f.dataVisita)} />}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="space-y-1.5 md:col-span-2">
-          <label className={labelCls}>Escola *</label>
-          <input list="escolas-rebolo" value={f.escola} onChange={(e) => escolherEscola(e.target.value)} className={inputCls} placeholder="Digite ou escolha" autoFocus />
-          <datalist id="escolas-rebolo">
-            {escolas.map((e) => (
-              <option key={e} value={e} />
-            ))}
-          </datalist>
-        </div>
         <div className="space-y-1.5">
           <label className={labelCls}>Data da visita *</label>
-          <input type="date" value={f.dataVisita} onChange={(e) => set('dataVisita', e.target.value)} className={inputCls} />
-          {visitas.get(f.escola) && <p className="text-[10px] text-zinc-400">Da agenda: fotografada em {dataBR(visitas.get(f.escola)!.data)}</p>}
+          <input type="date" value={f.dataVisita} onChange={(e) => set('dataVisita', e.target.value)} className={inputCls} autoFocus />
         </div>
         {campo('numeroFicha', 'Nº da ficha *', { inputMode: 'numeric' })}
         {campo('aluno', 'Nome do aluno *', {}, 'md:col-span-2')}

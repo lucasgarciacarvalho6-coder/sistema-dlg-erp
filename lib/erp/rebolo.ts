@@ -185,6 +185,14 @@ export const TOM_SITUACAO: Record<string, 'emerald' | 'red' | 'yellow' | 'zinc'>
   Cancelada: 'red',
 }
 
+// Escola da ficha: o cadastro não pede mais a escola (06/10/2026: cada álbum tem só a sua data da visita).
+// O banco exige o campo: a ficha nova grava "—" e as telas não mostram (as fichas antigas mantêm a escola).
+export const SEM_ESCOLA = '—'
+export const escolaFicha = (f: Registro | undefined) => {
+  const e = String(f?.escola ?? '').trim()
+  return e === SEM_ESCOLA ? '' : e
+}
+
 export const pacoteFinalizado = (fichas: Registro[]) => fichas.length > 0 && fichas.every((f) => FINALIZADAS.includes(String(f.situacao)))
 export const rotuloPacote = (p: Registro | undefined) => (p ? `P${p.numero}` : '—')
 

@@ -7,6 +7,7 @@ import { useMemo, useRef, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { anexarContratoRebolo, avisar, cancelarVendaRebolo, enviarVendaRebolo, urlArquivoContrato, usePode } from '@/lib/erp/store'
 import { imprimirContratoRebolo } from '@/lib/erp/impressao-rebolo'
+import { escolaFicha } from '@/lib/erp/rebolo'
 import { lerJSON } from '@/lib/erp/operacional'
 import { brl, dataBR } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
@@ -131,7 +132,7 @@ export default function VendasReboloPage() {
                       <Badge texto={`Ficha ${v.numeroFicha}`} tom="zinc" />
                     </div>
                     <p className="text-xs text-zinc-400 mt-1">
-                      {String(v.modelo)} • {String(v.escola)} • {nome(v.cobradorId)} • {dataBR(String(v.data))}
+                      {[String(v.modelo), escolaFicha(v), nome(v.cobradorId), dataBR(String(v.data))].filter(Boolean).join(' • ')}
                     </p>
                     <p className="text-sm text-white mt-1">
                       <strong>{brl(Number(v.valor) || 0)}</strong> • {String(v.formaPagamento)} • {String(v.formaParcelamento || '')}
