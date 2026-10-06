@@ -7,13 +7,17 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { hoje } from '@/lib/erp/format'
-import { EM_ABERTO, escolaFicha, SITUACOES_FICHA } from '@/lib/erp/rebolo'
-import { EmptyState, Modal, PageHeader, Panel } from '@/components/erp/ui'
+import { EM_ABERTO, escolaFicha, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
+import { EmptyState, Modal, PageHeader, Panel, TONS } from '@/components/erp/ui'
 import Atendimento from '@/components/rebolo/Atendimento'
 import { dataHoraCurta, FaixaBadge, PacoteBadge, SituacaoBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
 
 const HOJE = 'Contatos de hoje'
 type Aba = typeof HOJE | (typeof SITUACOES_FICHA)[number]
+// cores das abas (pedido de 06/10/2026), as mesmas dos selos: aguardando/andamento = amarelo • vendida = verde •
+// descarte e cancelada = vermelho • "Contatos de hoje" = azul. A aba escolhida fica preenchida com a cor.
+const ESTILO_HOJE = { texto: 'text-blue-400', suave: 'bg-blue-600/15', borda: 'border-blue-500/40', solido: 'bg-blue-500' }
+const estiloAba = (a: Aba) => (a === HOJE ? ESTILO_HOJE : TONS[TOM_SITUACAO[a] ?? 'zinc'])
 
 // prioridade na fila do dia (menor = primeiro)
 function prioridade(f: Registro) {
@@ -61,15 +65,19 @@ export default function ContatosReboloPage() {
         descricao="Entre em contato com cada família do seu pacote. Sem resposta: tente de novo. Não vendeu: descarte com o motivo. Fechou: registre a venda."
       />
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {abas.map((a) => {
           const ativo = aba === a
+          const t = estiloAba(a)
           return (
             <button
               key={a}
               onClick={() => setAba(a)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${ativo ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' : 'border-white/[0.06] text-zinc-400 hover:text-white'}`}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl text-[11px] font-bold border transition-all ${t.texto} ${
+                ativo ? `${t.suave} ${t.borda} ring-1 ring-inset ring-current/20` : 'border-white/[0.06] hover:bg-white/[0.03]'
+              }`}
             >
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.solido}`}></span>
               {a} <span className="opacity-70">({contar(a)})</span>
             </button>
           )
