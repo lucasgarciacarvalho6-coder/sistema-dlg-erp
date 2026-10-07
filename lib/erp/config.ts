@@ -243,6 +243,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       titulo: 'Financeiro',
       itens: [
         { label: 'Dashboard Financeiro', href: '/financeiro', icone: 'dashboard' },
+        { label: 'Clientes', href: '/financeiro/clientes', icone: 'users' },
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
         { label: 'Conferência de Vendas', href: '/financeiro/conferencia', icone: 'check' },
@@ -258,6 +259,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       titulo: 'Cobrança',
       itens: [
         { label: 'Dashboard de Cobrança', href: '/cobranca', icone: 'dashboard' },
+        { label: 'Clientes', href: '/cobranca/clientes', icone: 'users' },
         { label: 'Contas a Receber', href: '/cobranca/titulos', icone: 'wallet' },
         { label: 'Inadimplência', href: '/cobranca/inadimplencia', icone: 'alert' },
         { label: 'Acordos', href: '/cobranca/acordos', icone: 'handshake' },

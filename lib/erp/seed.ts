@@ -1,7 +1,7 @@
 // Dados de demonstração. Gerados uma única vez por navegador (localStorage).
 // Configurações → "Restaurar dados de demonstração" recria tudo.
 
-import type { Colaborador, ErpState, Setor } from './types'
+import type { Colaborador, ErpState, Registro, Setor } from './types'
 import { SETORES } from './config'
 import { addDias, hoje, isoData, uid } from './format'
 import { MATRIZ_PADRAO } from './permissions'
@@ -32,7 +32,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 16 // v16: estoque de álbuns e cargas dos vendedores de books (Financeiro › Estoque e Cargas)
+export const VERSAO_DADOS = 17 // v17: cadastro de clientes da Cobrança/Financeiro (fictícios)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -102,6 +102,67 @@ export function estadoVazio(): ErpState {
     auditoria: [],
     notificacoes: [],
   }
+}
+
+// Clientes fictícios da Cobrança/Financeiro: CPFs válidos gerados, alguns sem documento ou com dígito errado,
+// e algumas empresas (CNPJ), para testar a pesquisa e o filtro "documento a corrigir"
+function clientesDemo(r: () => number): Omit<Registro, 'id' | 'criadoEm'>[] {
+  const nomes = ['MARIA', 'JOSE', 'ANA', 'JOAO', 'FRANCISCA', 'ANTONIO', 'ADRIANA', 'CARLOS', 'JULIANA', 'PAULO', 'LUCIANA', 'MARCOS', 'PATRICIA', 'RAFAEL', 'CAMILA']
+  const sobrenomes = ['DA SILVA', 'DOS SANTOS', 'PEREIRA', 'ALVES', 'FERREIRA', 'RODRIGUES', 'GOMES', 'RIBEIRO', 'MARTINS', 'CARVALHO', 'SOUZA', 'OLIVEIRA']
+  const cidades: [string, string, string][] = [
+    ['Lavras', 'MG', '35'], ['São João del-Rei', 'MG', '32'], ['Campo Belo', 'MG', '35'], ['Nepomuceno', 'MG', '35'], ['Perdões', 'MG', '35'],
+    ['Campo Grande', 'MS', '67'], ['Dourados', 'MS', '67'], ['Cuiabá', 'MT', '65'], ['Rondonópolis', 'MT', '66'], ['Maringá', 'PR', '44'], ['Goiânia', 'GO', '62'],
+  ]
+  const digito = (base: number[], pesoInicial: number) => {
+    const s = base.reduce((a, n, i) => a + n * (pesoInicial - i), 0)
+    return ((s * 10) % 11) % 10
+  }
+  const cpf = () => {
+    const b = Array.from({ length: 9 }, () => Math.floor(r() * 10))
+    const d1 = digito(b, 10)
+    const d2 = digito([...b, d1], 11)
+    return [...b, d1, d2].join('')
+  }
+  const cnpj = () => {
+    const b = [...Array.from({ length: 8 }, () => Math.floor(r() * 10)), 0, 0, 0, 1]
+    const pesos = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    const dv = (n: number[]) => {
+      const s = n.reduce((a, x, i) => a + x * pesos[i + 13 - n.length], 0)
+      return s % 11 < 2 ? 0 : 11 - (s % 11)
+    }
+    const d1 = dv(b)
+    return [...b, d1, dv([...b, d1])].join('')
+  }
+  const origens = ['Conta Azul', 'Conta Azul', 'Conta Azul', 'Rebolo', 'Vendedor externo', 'Cadastro manual']
+  return Array.from({ length: 140 }, (_, i) => {
+    const [cidade, uf, ddd] = cidades[i % cidades.length]
+    const empresa = i % 17 === 0
+    const semDoc = i % 13 === 5
+    let documento = empresa ? cnpj() : cpf()
+    if (i % 23 === 7) documento = documento.slice(0, -1) + ((Number(documento.at(-1)) + 1) % 10) // dígito errado
+    const tel = `(${ddd}) 9${String(Math.floor(r() * 9000) + 1000)}-${String(Math.floor(r() * 9000) + 1000)}`
+    return {
+      nome: empresa ? `ESCOLA ${sobrenomes[i % sobrenomes.length].replace(/^D[AO]S? /, '')} LTDA` : `${nomes[i % nomes.length]} ${sobrenomes[Math.floor(i / nomes.length) % sobrenomes.length]} ${sobrenomes[(i * 7) % sobrenomes.length]}`,
+      documento: semDoc ? '' : documento,
+      tipoPessoa: empresa ? 'Jurídica' : 'Física',
+      whatsapp: tel,
+      telefone1: i % 4 === 0 ? `(${ddd}) 3${String(Math.floor(r() * 900) + 100)}-${String(Math.floor(r() * 9000) + 1000)}` : '',
+      telefone2: '',
+      telefone3: '',
+      email: i % 3 === 0 ? `cliente${i}@email.com` : '',
+      cep: '',
+      rua: i % 2 === 0 ? `Rua ${sobrenomes[i % sobrenomes.length].replace(/^D[AO]S? /, '')}` : '',
+      numero: i % 2 === 0 ? String(10 + i) : '',
+      complemento: '',
+      bairro: i % 2 === 0 ? 'Centro' : '',
+      cidade,
+      uf,
+      origem: origens[i % origens.length],
+      codigoContaAzul: '',
+      codigoSistemaAntigo: '',
+      observacao: '',
+    }
+  })
 }
 
 export function gerarSeed(): ErpState {
@@ -800,5 +861,6 @@ export function gerarSeed(): ErpState {
     link: '',
     lidaPor: [],
   })
+  s.colecoes.clientes = clientesDemo(gerador(20261007)).map((c, i) => ({ ...c, id: `cli-${i + 1}`, criadoEm: criado }) as Registro)
   return s
 }
