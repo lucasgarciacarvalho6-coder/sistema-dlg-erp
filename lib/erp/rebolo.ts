@@ -65,8 +65,33 @@ export const REGRAS_REBOLO = [
   { chave: 'rebolo_comissao_boleto', label: 'Comissão da vendedora • Boleto (%)', padrao: 3 },
 ] as const
 
+// Custos do Lucro/Prejuízo de cada vendedora (planilha "REBOLO - BASE PRINCIPAL", 07/10/2026):
+// vendido − reserva do boleto − frete − taxa do cartão − taxa do boleto − álbum − saquinho − comissão − salário com encargos.
+// O frete e a taxa do cartão reais o Rebolo lança no envio; o salário, o Financeiro (holerite). Sem o real, vale a estimativa.
+export const CUSTOS_REBOLO = [
+  { chave: 'rebolo_reserva_boleto', label: 'Reserva de inadimplência do boleto (% da venda)', padrao: 35 },
+  { chave: 'rebolo_custo_album', label: 'Custo do álbum (R$ por álbum)', padrao: 200 },
+  { chave: 'rebolo_custo_saquinho', label: 'Saquinho (R$ por álbum)', padrao: 5 },
+  { chave: 'rebolo_taxa_boleto', label: 'Taxa do boleto (R$ por venda)', padrao: 0 },
+  { chave: 'rebolo_frete_estimado', label: 'Frete estimado (R$, até lançar o real)', padrao: 101.2 },
+  { chave: 'rebolo_taxa_cartao_estimada', label: 'Taxa do cartão estimada (%, até lançar a real)', padrao: 18 },
+  { chave: 'rebolo_salario_estimado', label: 'Salário estimado (R$, até o Financeiro lançar)', padrao: 1925 },
+  { chave: 'rebolo_encargos', label: 'Encargos sobre o salário (%)', padrao: 35 },
+] as const
+
+export interface CustosRebolo {
+  reservaBoleto: number // %
+  custoAlbum: number
+  custoSaquinho: number
+  taxaBoleto: number
+  freteEstimado: number
+  taxaCartaoEstimada: number // %
+  salarioEstimado: number
+  encargos: number // %
+}
+
 export function valoresPadraoRebolo(): Record<string, number> {
-  const v: Record<string, number> = Object.fromEntries(REGRAS_REBOLO.map((r) => [r.chave, r.padrao]))
+  const v: Record<string, number> = Object.fromEntries([...REGRAS_REBOLO, ...CUSTOS_REBOLO].map((r) => [r.chave, r.padrao]))
   for (const f of FAIXAS) {
     for (const p of PRODUTOS_REBOLO) FORMAS_REBOLO.forEach((forma, i) => (v[chavePreco(f, p.id, forma.id)] = PRECOS_PADRAO[f][p.id][i]))
     for (const o of OPCOES_COMPLETO) v[chaveOpcao(f, o.id)] = OPCOES_PADRAO[f][o.id]
@@ -85,6 +110,7 @@ export interface TabelaRebolo {
   opcao: (f: Faixa, o: OpcaoCompleto) => number // R$ da opção do Completo (0 = a faixa não tem)
   comissao: (forma: FormaRebolo) => number // % da vendedora
   parcelas: (f: Faixa, forma: 'cartao' | 'boleto') => number
+  custos: CustosRebolo
   valores: Record<string, number>
 }
 
@@ -99,6 +125,16 @@ export function tabelaDeValores(v: Record<string, number>): TabelaRebolo {
     opcao: (f, o) => Math.max(0, v[chaveOpcao(f, o)] ?? 0),
     comissao: (forma) => Math.max(0, v[chaveComissao(forma)] ?? 0),
     parcelas: (f, forma) => v[chaveParcelas(f, forma)] ?? 1,
+    custos: {
+      reservaBoleto: Math.max(0, v.rebolo_reserva_boleto ?? 0),
+      custoAlbum: Math.max(0, v.rebolo_custo_album ?? 0),
+      custoSaquinho: Math.max(0, v.rebolo_custo_saquinho ?? 0),
+      taxaBoleto: Math.max(0, v.rebolo_taxa_boleto ?? 0),
+      freteEstimado: Math.max(0, v.rebolo_frete_estimado ?? 0),
+      taxaCartaoEstimada: Math.max(0, v.rebolo_taxa_cartao_estimada ?? 0),
+      salarioEstimado: Math.max(0, v.rebolo_salario_estimado ?? 0),
+      encargos: Math.max(0, v.rebolo_encargos ?? 0),
+    },
     valores: v,
   }
 }
@@ -199,6 +235,13 @@ export const TOM_SITUACAO: Record<string, 'emerald' | 'red' | 'yellow' | 'zinc'>
   Descarte: 'red',
   Cancelada: 'red',
 }
+
+// ---- Envio pelo Correio (SQL 037): situação da entrega, com as cores dos selos ----
+export const SITUACOES_ENTREGA = ['Pendente', 'Cliente recebeu', 'Não recebeu'] as const
+export type SituacaoEntrega = (typeof SITUACOES_ENTREGA)[number]
+export const TOM_ENTREGA: Record<string, 'emerald' | 'red' | 'yellow'> = { Pendente: 'yellow', 'Cliente recebeu': 'emerald', 'Não recebeu': 'red' }
+// a página dos Correios não recebe o código pelo endereço: a tela copia o código e abre a página
+export const LINK_RASTREIO_CORREIOS = 'https://rastreamento.correios.com.br/app/index.php'
 
 // Escola da ficha: o cadastro não pede mais a escola (06/10/2026: cada álbum tem só a sua data da visita).
 // O banco exige o campo: a ficha nova grava "—" e as telas não mostram (as fichas antigas mantêm a escola).

@@ -1437,8 +1437,37 @@ export const editarVendaRebolo = (vendaId: string, e: F.EdicaoVendaRebolo) =>
     'Venda atualizada.',
   )
 
-export const registrarEnvioRebolo = (fichaId: string, rastreio: string) =>
-  acaoRebolo('registrar_envio_rebolo', { p_ficha: fichaId, p_rastreio: rastreio }, (d, ctx) => F.registrarEnvioRebolo(d, fichaId, rastreio, ctx), 'Envio registrado.')
+// Acompanhamento do envio (SQL 037): rastreio, custo da postagem, previsão, situação da entrega, boleto enviado e taxa do cartão
+export const salvarEnvioRebolo = (fichaId: string, x: F.DadosEnvioRebolo) =>
+  acaoRebolo(
+    'salvar_envio_rebolo',
+    {
+      p_ficha: fichaId,
+      p_rastreio: x.rastreio,
+      p_custo_postagem: x.custoPostagem,
+      p_previsao: x.previsaoEntrega || null,
+      p_situacao: x.situacaoEntrega || 'Pendente',
+      p_boleto_enviado: x.boletoEnviado,
+      p_taxa_cartao: x.taxaCartao,
+    },
+    (d, ctx) => F.salvarEnvioRebolo(d, fichaId, x, ctx),
+    'Envio salvo.',
+  )
+
+// Custo mensal da vendedora do rebolo (salário do holerite; o Financeiro lança). Salário vazio = apaga (volta para a estimativa).
+export async function salvarCustoReboloMes(vendedoraId: string, mes: string, salario: number | null, observacao: string): Promise<string | null> {
+  if (MODO === 'supabase') {
+    const tabela = sb().from('rebolo_custos_mes')
+    if (salario === null) return gravar(() => tabela.delete().eq('vendedora_id', vendedoraId).eq('mes', mes))
+    return gravar(() => tabela.upsert({ vendedora_id: vendedoraId, mes, salario, observacao: observacao.trim() || null }, { onConflict: 'vendedora_id,mes' }))
+  }
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = F.salvarCustoReboloMes(d, vendedoraId, mes, salario, observacao.trim(), ctx)
+  })
+  if (erro) avisar(erro)
+  return erro
+}
 
 // Contrato assinado (PDF ou foto) enviado pelo computador. Caminho: contratos/rebolo/<usuário>/<id>-nome
 export async function anexarContratoRebolo(arquivo: File): Promise<{ caminho: string } | { erro: string }> {

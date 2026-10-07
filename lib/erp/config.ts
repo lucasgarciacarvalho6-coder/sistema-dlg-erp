@@ -248,6 +248,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
         { label: 'Conferência de Vendas', href: '/financeiro/conferencia', icone: 'check' },
         { label: 'Vendas de Books', href: '/financeiro/vendas-books', icone: 'book' },
+        { label: 'Custo do Rebolo', href: '/financeiro/custos-rebolo', icone: 'users' },
         { label: 'Estoque e Cargas', href: '/financeiro/estoque', icone: 'box' },
         { label: 'Fluxo de Caixa', href: '/financeiro/fluxo-caixa', icone: 'chart' },
         { label: 'Histórico', href: '/financeiro/historico', icone: 'log' },

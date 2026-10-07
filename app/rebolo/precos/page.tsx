@@ -13,6 +13,7 @@ import {
   chaveOpcao,
   chaveParcelas,
   chavePreco,
+  CUSTOS_REBOLO,
   FAIXAS,
   FORMAS_REBOLO,
   OPCOES_COMPLETO,
@@ -152,6 +153,23 @@ export default function PrecosReboloPage() {
         </div>
         {!editavel && <p className="text-xs text-zinc-500 mt-4">Somente leitura. ADM e Gerência alteram a tabela.</p>}
       </Panel>
+
+      {/* custos do Lucro/Prejuízo de cada vendedora (Visão TV): só quem edita a tabela vê */}
+      {editavel && (
+        <Panel titulo="Custos do Lucro/Prejuízo das vendedoras" subtitulo="Lucro = vendido − reserva do boleto − frete − taxa do cartão − taxa do boleto − álbum − saquinho − comissão − salário com encargos">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {CUSTOS_REBOLO.map((r) => (
+              <label key={r.chave} className="block">
+                <span className={labelCls}>{r.label}</span>
+                <input type="number" min="0" step="0.01" inputMode="decimal" value={v[r.chave] ?? r.padrao} onChange={(e) => set(r.chave, e.target.value)} className={campo} />
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-500 mt-4">
+            O frete e a taxa do cartão reais o Rebolo lança em Envios; o salário do holerite, o Financeiro (Custo do Rebolo). Enquanto não lançam, vale a estimativa daqui.
+          </p>
+        </Panel>
+      )}
     </div>
   )
 }

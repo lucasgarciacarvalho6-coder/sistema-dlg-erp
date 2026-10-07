@@ -49,6 +49,8 @@ export const COLUNAS: Record<string, string[]> = {
   // contatos, situação, desconto e envio mudam só pelas funções do banco (registrar_contato_rebolo etc.)
   rebolo_contatos: [],
   rebolo_numeracao: [], // próximo número do pacote de cada vendedora: muda só pelo banco (SQL 034)
+  // custo mensal de cada vendedora (salário do holerite): só o Financeiro vê e lança (SQL 037); o envio fica na ficha
+  rebolo_custos_mes: ['vendedora_id', 'mes', 'salario', 'observacao'],
   // ---- Produção (setor 'edicao'): editores são só um cadastro; os lotes mudam pelas funções do banco (SQL 020) ----
   editores: ['nome', 'telefone', 'observacao', 'status'],
   producao_lotes: [],

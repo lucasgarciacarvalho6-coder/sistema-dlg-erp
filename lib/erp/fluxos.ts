@@ -1444,13 +1444,53 @@ export function editarVendaRebolo(d: ErpState, vendaId: string, e: EdicaoVendaRe
   return null
 }
 
-export function registrarEnvioRebolo(d: ErpState, fichaId: string, rastreio: string, ctx: Contexto): string | null {
-  const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
-  if (!f || f.situacao !== 'Vendida') return 'Só vendas aprovadas podem ser enviadas.'
-  if (!rastreio.trim()) return 'Informe o código de rastreio.'
-  f.rastreio = rastreio.trim().toUpperCase()
-  f.enviadoEm = agora()
-  auditar(d, ctx, 'EDITAR', `Álbum enviado (rastreio ${f.rastreio}): ficha ${f.numeroFicha}`, 'rebolo')
+// Acompanhamento do envio (SQL 037): registrar ou corrigir. Quem lança: a dona da ficha ou a supervisão do rebolo.
+// O boleto enviado só vale na venda no boleto e a taxa do cartão só na venda no cartão.
+export interface DadosEnvioRebolo {
+  rastreio: string
+  custoPostagem: number | null
+  previsaoEntrega: string
+  situacaoEntrega: string
+  boletoEnviado: boolean
+  taxaCartao: number | null
+}
+export function salvarEnvioRebolo(d: ErpState, fichaId: string, x: DadosEnvioRebolo, ctx: Contexto): string | null {
+  const f = col(d, 'rebolo_fichas').find((y) => y.id === fichaId)
+  if (!f) return 'Ficha não encontrada.'
+  const eu = d.colaboradores.find((c) => c.id === ctx.autorId)
+  const supervisao = !!eu && (eu.perfil === 'ADM' || eu.perfil === 'GERENTE' || (eu.setor === 'rebolo' && /^supervisor/i.test(eu.funcao)))
+  if (f.vendedoraId !== ctx.autorId && !supervisao) return 'Esta ficha é de outra vendedora.'
+  if (f.situacao !== 'Vendida') return 'Só vendas aprovadas podem ser enviadas.'
+  if (!x.rastreio.trim()) return 'Informe o código de rastreio.'
+  const situacao = x.situacaoEntrega || 'Pendente'
+  if (!['Pendente', 'Cliente recebeu', 'Não recebeu'].includes(situacao)) return 'Situação da entrega inválida.'
+  if ((x.custoPostagem ?? 0) < 0 || (x.taxaCartao ?? 0) < 0) return 'Os valores não podem ser negativos.'
+  const forma = String(col(d, 'vendas_ebooks').find((v) => v.id === f.vendaId)?.formaPagamento ?? '')
+  const antes = String(f.situacaoEntrega || 'Pendente')
+  f.rastreio = x.rastreio.trim().toUpperCase()
+  f.enviadoEm = f.enviadoEm || agora()
+  f.custoPostagem = x.custoPostagem ?? ''
+  f.previsaoEntrega = x.previsaoEntrega
+  f.entregaEm = situacao === 'Pendente' ? '' : situacao === antes ? f.entregaEm || agora() : agora()
+  f.situacaoEntrega = situacao
+  f.boletoEnviadoEm = /^boleto/i.test(forma) && x.boletoEnviado ? f.boletoEnviadoEm || agora() : ''
+  f.taxaCartao = /^cart/i.test(forma) ? (x.taxaCartao ?? '') : ''
+  auditar(d, ctx, 'EDITAR', `Envio do álbum (rastreio ${f.rastreio}, ${situacao}): ficha ${f.numeroFicha}`, 'rebolo')
+  return null
+}
+
+// Custo mensal da vendedora (SQL 037): o salário do holerite que o Financeiro lança; vazio apaga (volta para a estimativa)
+export function salvarCustoReboloMes(d: ErpState, vendedoraId: string, mes: string, salario: number | null, observacao: string, ctx: Contexto): string | null {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) return 'Mês inválido.'
+  if (salario !== null && salario < 0) return 'O salário não pode ser negativo.'
+  const lista = col(d, 'rebolo_custos_mes')
+  const atual = lista.find((c) => c.vendedoraId === vendedoraId && c.mes === mes)
+  const nome = d.colaboradores.find((c) => c.id === vendedoraId)?.nome ?? 'vendedora'
+  if (salario === null) {
+    if (atual) d.colecoes.rebolo_custos_mes = lista.filter((c) => c !== atual)
+  } else if (atual) Object.assign(atual, { salario, observacao })
+  else inserir(d, 'rebolo_custos_mes', { vendedoraId, mes, salario, observacao })
+  auditar(d, ctx, salario === null ? 'EXCLUIR' : 'EDITAR', `Custo de ${nome} em ${mes}: ${salario === null ? 'apagado (volta para a estimativa)' : `salário R$ ${salario}`}`, 'financeiro')
   return null
 }
 

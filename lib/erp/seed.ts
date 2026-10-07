@@ -32,7 +32,7 @@ import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 
-export const VERSAO_DADOS = 17 // v17: cadastro de clientes da Cobrança/Financeiro (fictícios)
+export const VERSAO_DADOS = 18 // v18: envio do rebolo (custo da postagem, entrega) e custo mensal das vendedoras
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -733,6 +733,7 @@ export function gerarSeed(): ErpState {
       bairro: 'Centro', cidade, uf, pontoReferencia: '', whatsapp1: `(${ddd}) 9${9900 + i}-${String(1000 + i * 37).slice(-4)}`, whatsapp2: '', whatsapp3: '', telefone: '',
       nomePai: '', nomeMae: resp, horario: i % 2 ? 'Tarde' : 'Manhã', observacao: '', situacao: 'Aguardando contato', tentativas: 0, motivoDescarte: '',
       agendadoPara: '', ultimoContato: '', vendaId: '', descontoValor: '', descontoStatus: '', descontoMotivo: '', rastreio: '', enviadoEm: '',
+      custoPostagem: '', previsaoEntrega: '', situacaoEntrega: '', entregaEm: '', boletoEnviadoEm: '', taxaCartao: '',
     })
   }
   // P245: pacote anterior da Bianca, já finalizado (vendas enviadas e descartes)
@@ -741,7 +742,7 @@ export function gerarSeed(): ErpState {
     const f = criarFicha(p245.id, 'u-re1', 20 + i, aluno, `Responsável de ${aluno.split(' ')[0]}`, 13, 'PROJETO ESPAÇO CRIANÇA')
     f.situacao = i === 0 ? 'Vendida' : 'Descarte'
     f.motivoDescarte = i === 0 ? '' : 'Sem condição financeira'
-    if (i === 0) Object.assign(f, { rastreio: 'AA123456789BR', enviadoEm: addDias(hojeISO, -2) })
+    if (i === 0) Object.assign(f, { rastreio: 'AA123456789BR', enviadoEm: addDias(hojeISO, -2), custoPostagem: 101.2, previsaoEntrega: addDias(hojeISO, 3), situacaoEntrega: 'Pendente' })
   })
   // P246: pacote aberto da Bianca com as 10 fichas em várias etapas
   const p246 = criarPacote('u-re1', 246, 'Padrão')
@@ -775,6 +776,17 @@ export function gerarSeed(): ErpState {
   ;['Gabriel Moura', 'Sophia Lima', 'Arthur Alves'].forEach((aluno, i) => criarFicha(p247.id, 'u-re2', 30 + i, aluno, `Responsável de ${aluno.split(' ')[0]}`, 4 + i * 8, 'COLÉGIO DOM ATHAMAZIO MERKLE'))
   const p248 = criarPacote('u-re3', 248, 'Avulso')
   criarFicha(p248.id, 'u-re3', 40, 'Valentina Rocha', 'Patrícia Rocha', 22, 'SANTA TEREZINHA C M E I')
+  // custo mensal das vendedoras (salário do holerite que o Financeiro lança): o mês passado das três e este mês só da Bianca
+  const mesPassado = (() => {
+    const d = new Date(`${hojeISO}T12:00:00`)
+    d.setDate(1)
+    d.setMonth(d.getMonth() - 1)
+    return isoData(d).slice(0, 7)
+  })()
+  inserir(s, 'rebolo_custos_mes', { vendedoraId: 'u-re1', mes: mesPassado, salario: 1925, observacao: '' })
+  inserir(s, 'rebolo_custos_mes', { vendedoraId: 'u-re2', mes: mesPassado, salario: 1925, observacao: '' })
+  inserir(s, 'rebolo_custos_mes', { vendedoraId: 'u-re3', mes: mesPassado, salario: 1100, observacao: 'Mês incompleto (entrou no dia 12)' })
+  inserir(s, 'rebolo_custos_mes', { vendedoraId: 'u-re1', mes: hojeISO.slice(0, 7), salario: 1925, observacao: '' })
   inserir(s, 'aprovacoes', {
     tipo: 'Desconto rebolo', setorOrigem: 'rebolo', descricao: 'Exemplo de pedido de desconto (demonstração)', valor: 0, refColecao: 'rebolo_fichas', refId: '',
     solicitante: 'Tainá Moreira', status: 'Rejeitado', decididoPor: 'Mariana Duarte', decididoEm: addDias(hojeISO, -5),
