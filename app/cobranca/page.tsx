@@ -2,72 +2,60 @@
 
 import Link from 'next/link'
 import SectorDashboard from '@/components/erp/SectorDashboard'
-import { Badge, Panel, StatCard } from '@/components/erp/ui'
+import { Panel, StatCard } from '@/components/erp/ui'
 import { useErp } from '@/lib/erp/store'
 import { colecao, tituloAtrasado } from '@/lib/erp/metrics'
-import { brl, dataBR, hoje, mesAtual, pct } from '@/lib/erp/format'
+import { brl, dataBR, pct } from '@/lib/erp/format'
+import { agruparPorPessoa, diasAtraso } from '@/lib/erp/contas-receber'
 
+// A Cobrança só recebe a inadimplência para renegociar (07/10/2026): receber e dar baixa é do Financeiro.
 export default function CobrancaDashboardPage() {
   const s = useErp()
-  const vendas = colecao(s, 'vendas_ebooks')
   const titulos = colecao(s, 'titulos')
   const acordos = colecao(s, 'acordos')
-  const vendidosMes = vendas.filter((v) => String(v.data).startsWith(mesAtual()))
   const emAberto = titulos.filter((t) => t.status === 'Aberto' || t.status === 'Em acordo')
   const atrasados = titulos.filter(tituloAtrasado)
   const valor = (l: typeof titulos) => l.reduce((a, t) => a + Number(t.valor || 0), 0)
   const taxa = valor(emAberto) ? (valor(atrasados) / valor(emAberto)) * 100 : 0
-  const vencendo = titulos.filter((t) => t.status === 'Aberto' && String(t.vencimento) >= hoje()).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento))).slice(0, 6)
+  const atrasoMedio = atrasados.length ? Math.round(atrasados.reduce((a, t) => a + diasAtraso(String(t.vencimento)), 0) / atrasados.length) : 0
+  const pessoas = agruparPorPessoa(atrasados, () => '').sort((a, b) => b.diasAtraso - a.diasAtraso || b.emAtraso - a.emAtraso)
 
   return (
     <SectorDashboard
       setor="cobranca"
       titulo="Dashboard de Cobrança"
-      descricao="Recebimentos, inadimplência, acordos e metas de cada cobrador. A venda de books aos pais agora é feita pelo setor Vendas Rebolo."
+      descricao="Inadimplência, acordos e metas de cada cobrador. Receber e dar baixa nos boletos é do Financeiro."
       tituloEquipe="Cobradores • metas diárias e mensais"
       antesDaEquipe={
         <div className="space-y-6">
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
-            <StatCard label="Books vendidos (mês)" valor={vendidosMes.length} detalhe={brl(vendidosMes.reduce((a, v) => a + Number(v.valor || 0), 0))} />
-            <StatCard label="A receber" valor={brl(valor(emAberto))} detalhe={`${emAberto.length} parcela(s) em aberto`} />
-            <StatCard tom={atrasados.length ? 'red' : 'zinc'} label="Taxa de inadimplência" valor={pct(taxa)} detalhe={`${atrasados.length} título(s) • ${brl(valor(atrasados))}`} />
+            <StatCard tom={pessoas.length ? 'red' : 'zinc'} label="Clientes em atraso" valor={pessoas.length} detalhe={`${atrasados.length} boleto(s) vencido(s)`} />
+            <StatCard tom={atrasados.length ? 'red' : 'zinc'} label="Valor em atraso" valor={brl(valor(atrasados))} detalhe={`Atraso médio de ${atrasoMedio} dias`} />
+            <StatCard tom={atrasados.length ? 'red' : 'zinc'} label="Taxa de inadimplência" valor={pct(taxa)} detalhe="do valor a receber" />
             <StatCard label="Acordos gerados" valor={acordos.length} detalhe={`${acordos.filter((a) => a.status === 'Ativo').length} ativos • ${acordos.filter((a) => a.status === 'Aguardando aprovação').length} aguardando`} />
           </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Panel titulo="Clientes em atraso" semPadding acoes={<Link href="/cobranca/inadimplencia" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">Negociar →</Link>}>
-              {atrasados.length === 0 ? (
-                <p className="p-6 text-xs text-zinc-500">Nenhum título em atraso. 🎉</p>
-              ) : (
-                <div className="divide-y divide-white/[0.03]">
-                  {atrasados.slice(0, 6).map((t) => (
-                    <div key={t.id} className="px-6 py-3.5 flex justify-between items-center gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-white truncate">{String(t.cliente)}</p>
-                        <p className="text-[11px] text-zinc-500">{String(t.escola)} • parcela {String(t.parcela)} • venceu {dataBR(String(t.vencimento))}</p>
-                      </div>
-                      <span className="text-sm font-black text-red-400">{brl(Number(t.valor))}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Panel>
-            <Panel titulo="Próximos vencimentos" semPadding acoes={<Link href="/cobranca/titulos" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">Contas a receber →</Link>}>
+          <Panel titulo="Clientes em atraso" semPadding acoes={<Link href="/cobranca/inadimplencia" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">Negociar →</Link>}>
+            {pessoas.length === 0 ? (
+              <p className="p-6 text-xs text-zinc-500">Nenhum cliente em atraso. 🎉</p>
+            ) : (
               <div className="divide-y divide-white/[0.03]">
-                {vencendo.map((t) => (
-                  <div key={t.id} className="px-6 py-3.5 flex justify-between items-center gap-3">
+                {pessoas.slice(0, 8).map((p) => (
+                  <div key={p.chave} className="px-6 py-3.5 flex justify-between items-center gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{String(t.cliente)}</p>
-                      <p className="text-[11px] text-zinc-500">{String(t.escola)} • parcela {String(t.parcela)}</p>
+                      <p className="text-sm font-bold text-white truncate">{p.nome}</p>
+                      <p className="text-[11px] text-zinc-500">
+                        {[p.escolas.join(', '), `${p.vencidas} boleto(s) vencido(s)`, `venceu ${dataBR(p.maisAntigo)}`].filter(Boolean).join(' • ')}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-white">{brl(Number(t.valor))}</p>
-                      <Badge texto={dataBR(String(t.vencimento))} tom={String(t.vencimento) === hoje() ? 'yellow' : 'zinc'} />
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black text-red-400">{brl(p.emAtraso)}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{p.diasAtraso} dias</p>
                     </div>
                   </div>
                 ))}
               </div>
-            </Panel>
-          </div>
+            )}
+          </Panel>
         </div>
       }
     />

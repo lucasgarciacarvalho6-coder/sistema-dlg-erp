@@ -23,6 +23,7 @@ import { lerJSON } from './operacional'
 import { chaveCustoVariavel } from './operacoes-financeiro'
 import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, type FotografoDaEscola } from './producao'
 import type { AtividadeEquipe } from './gerente'
+import { regrasCobranca, tipoEscritorioDoGrupo, validarRegrasCobranca } from './cobranca-config'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -1453,6 +1454,67 @@ export const salvarEnvioRebolo = (fichaId: string, x: F.DadosEnvioRebolo) =>
     (d, ctx) => F.salvarEnvioRebolo(d, fichaId, x, ctx),
     'Envio salvo.',
   )
+
+// ---------------- Cobrança › Configurações (SQL 039): só ADM e Gerência alteram ----------------
+
+// várias regras de uma vez (tudo ou nada); o banco guarda cada mudança no histórico
+export async function salvarRegrasCobranca(novos: Record<string, number>): Promise<string | null> {
+  const atuais = regrasCobranca(carregar())
+  const erro = validarRegrasCobranca({ ...atuais, ...novos })
+  if (erro) {
+    avisar(erro)
+    return erro
+  }
+  if (MODO === 'supabase') return gravar(() => sb().rpc('salvar_regras_cobranca', { p_valores: novos }), 'Regras da cobrança salvas.')
+  let falha: string | null = null
+  mutar((d, ctx) => {
+    falha = F.salvarRegrasCobranca(d, novos, atuais, ctx)
+  })
+  avisar(falha ?? 'Regras da cobrança salvas.', falha ? 'erro' : 'ok')
+  return falha
+}
+
+export async function salvarCategoriaCobranca(x: F.DadosCategoriaCobranca, id?: string): Promise<string | null> {
+  const erro = F.conferirCategoriaCobranca(carregar(), x, id)
+  if (erro) {
+    avisar(erro)
+    return erro
+  }
+  const dados = {
+    nome: x.nome.replace(/\s+/g, ' ').trim(),
+    grupo: x.grupo,
+    contaInadimplencia: x.contaInadimplencia,
+    podeSpc: x.podeSpc,
+    escritorioId: tipoEscritorioDoGrupo(x.grupo) ? x.escritorioId : '',
+    nomesAntigos: JSON.stringify(F.nomesAntigosLimpos(x.nomesAntigos)),
+    ativa: x.ativa,
+    observacao: x.observacao.trim(),
+  }
+  const falha = id ? await atualizarRegistro('cobranca_categorias', id, dados, 'cobranca') : await criarRegistro('cobranca_categorias', dados, 'cobranca')
+  if (!falha) avisar(id ? 'Categoria salva.' : 'Categoria criada.', 'ok')
+  return falha
+}
+
+export interface DadosEscritorioCobranca {
+  nome: string
+  tipo: string
+  contato: string
+  telefone: string
+  email: string
+  observacao: string
+  ativo: boolean
+}
+export async function salvarEscritorioCobranca(x: DadosEscritorioCobranca, id?: string): Promise<string | null> {
+  const erro = F.conferirEscritorioCobranca(carregar(), x.nome, id)
+  if (erro) {
+    avisar(erro)
+    return erro
+  }
+  const dados = { ...x, nome: x.nome.replace(/\s+/g, ' ').trim(), contato: x.contato.trim(), telefone: x.telefone.trim(), email: x.email.trim().toLowerCase(), observacao: x.observacao.trim() }
+  const falha = id ? await atualizarRegistro('cobranca_escritorios', id, dados, 'cobranca') : await criarRegistro('cobranca_escritorios', dados, 'cobranca')
+  if (!falha) avisar(id ? 'Escritório salvo.' : 'Escritório cadastrado.', 'ok')
+  return falha
+}
 
 // Custo mensal da vendedora do rebolo (salário do holerite; o Financeiro lança). Salário vazio = apaga (volta para a estimativa).
 export async function salvarCustoReboloMes(vendedoraId: string, mes: string, salario: number | null, observacao: string): Promise<string | null> {

@@ -10,7 +10,8 @@ import { Avatar, Badge, EmptyState, Modal, PageHeader, Panel, StatCard, TONS, bt
 
 // vendedores externos são cadastrados em ADM › Vendedores externos.
 // Não existe setor "Vendas" interno na DLG (a venda interna é o Vendas Rebolo): fica fora do cadastro.
-const SETORES_IDS = SETORES_ERP.filter((x) => x !== 'vendas')
+// Também não existe Gerência (07/10/2026): os donos usam contas ADM e fazem tudo (recebem, pagam, aceitam acordo).
+const SETORES_IDS: Setor[] = SETORES_ERP.filter((x) => x !== 'vendas' && x !== 'gerencia')
 
 type Form = {
   nome: string
@@ -290,7 +291,8 @@ export default function ColaboradoresPage() {
               }}
               className={`${inputCls} appearance-none`}
             >
-              {SETORES_IDS.map((x) => (
+              {/* quem já estava num setor fora da lista continua aparecendo certo ao editar */}
+              {(SETORES_IDS.includes(form.setor) ? SETORES_IDS : [...SETORES_IDS, form.setor]).map((x) => (
                 <option key={x} value={x}>{SETORES[x].nome}</option>
               ))}
             </select>
@@ -312,7 +314,7 @@ export default function ColaboradoresPage() {
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { v: false, t: '✅ Tem meta', d: 'Aparece nos cards de meta, no ranking e soma na meta do setor.' },
-                  { v: true, t: '⛔ Sem meta', d: 'Ex.: Financeiro e Gerência. Fica fora dos cards e do ranking; o que lançar continua contando no setor.' },
+                  { v: true, t: '⛔ Sem meta', d: 'Ex.: Financeiro. Fica fora dos cards e do ranking; o que lançar continua contando no setor.' },
                 ].map((o) => (
                   <button
                     key={String(o.v)}

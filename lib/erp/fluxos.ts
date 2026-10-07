@@ -11,6 +11,8 @@ import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 import { chaveEscola } from './escolas'
 import { proximoPacote } from './rebolo'
+import { REGRAS_COBRANCA, rotuloRegra, tipoEscritorioDoGrupo, validarRegrasCobranca } from './cobranca-config'
+import { textoBusca } from './documento'
 
 export interface Contexto {
   autorId: string
@@ -258,7 +260,7 @@ export function baixarTitulo(d: ErpState, id: string, ctx: Contexto, data = hoje
       data,
     })
   }
-  auditar(d, ctx, 'EDITAR', `Baixa do título ${t.parcela} de ${t.cliente}`, 'cobranca')
+  auditar(d, ctx, 'EDITAR', `Baixa do título ${t.parcela} de ${t.cliente}`, ctx.autorSetor) // como no banco: o setor de quem deu a baixa
 }
 
 export function negociarTitulo(d: ErpState, id: string, parcelas: number, ctx: Contexto) {
@@ -1476,6 +1478,71 @@ export function salvarEnvioRebolo(d: ErpState, fichaId: string, x: DadosEnvioReb
   f.boletoEnviadoEm = /^boleto/i.test(forma) && x.boletoEnviado ? f.boletoEnviadoEm || agora() : ''
   f.taxaCartao = /^cart/i.test(forma) ? (x.taxaCartao ?? '') : ''
   auditar(d, ctx, 'EDITAR', `Envio do álbum (rastreio ${f.rastreio}, ${situacao}): ficha ${f.numeroFicha}`, 'rebolo')
+  return null
+}
+
+// ---------------- Cobrança › Configurações (mesmas regras do SQL 039) ----------------
+const limparNome = (t: unknown) => String(t ?? '').replace(/\s+/g, ' ').trim()
+
+// várias regras de uma vez (tudo ou nada); cada mudança vai para o histórico
+export function salvarRegrasCobranca(d: ErpState, novos: Record<string, number>, atuais: Record<string, number>, ctx: Contexto): string | null {
+  for (const k of Object.keys(novos)) if (!REGRAS_COBRANCA.some((r) => r.chave === k)) return `Regra desconhecida: ${k}`
+  const final = { ...atuais, ...novos }
+  const erro = validarRegrasCobranca(final)
+  if (erro) return erro
+  const lista = col(d, 'cobranca_regras')
+  for (const [chave, valor] of Object.entries(novos)) {
+    const r = lista.find((x) => x.chave === chave)
+    const antes = r ? Number(r.valor) : null
+    if (antes === valor) continue
+    if (r) Object.assign(r, { valor, atualizadoPor: ctx.autorId })
+    else inserir(d, 'cobranca_regras', { chave, valor, atualizadoPor: ctx.autorId })
+    inserir(d, 'cobranca_regras_historico', { chave, valorAntigo: antes ?? '', valorNovo: valor, alteradoPor: ctx.autorId, alteradoPorNome: ctx.autorNome })
+    auditar(d, ctx, 'EDITAR', `Regra da cobrança: ${rotuloRegra(chave)} ${antes ?? '—'} → ${valor}`, 'cobranca')
+  }
+  return null
+}
+
+export interface DadosCategoriaCobranca {
+  nome: string
+  grupo: string
+  contaInadimplencia: boolean
+  podeSpc: boolean
+  escritorioId: string
+  nomesAntigos: string[]
+  ativa: boolean
+  observacao: string
+}
+// confere como o banco: nome único (sem acento/maiúscula), nome antigo em uma categoria só, escritório só em Terceirizada/Advogado
+export function conferirCategoriaCobranca(d: ErpState, x: DadosCategoriaCobranca, id?: string): string | null {
+  const nome = limparNome(x.nome)
+  if (!nome) return 'Informe o nome da categoria.'
+  const outras = col(d, 'cobranca_categorias').filter((c) => c.id !== id)
+  if (outras.some((c) => textoBusca(c.nome) === textoBusca(nome))) return 'Já existe uma categoria com esse nome.'
+  if (x.escritorioId && !tipoEscritorioDoGrupo(x.grupo)) return 'Só categorias de Terceirizada ou Advogado têm escritório.'
+  for (const n of x.nomesAntigos.map(limparNome).filter(Boolean)) {
+    const dona = outras.find((c) => lerLista(c.nomesAntigos).some((a) => textoBusca(a) === textoBusca(n)))
+    if (dona) return `O nome antigo "${n}" já está na categoria "${dona.nome}".`
+  }
+  return null
+}
+const lerLista = (v: unknown): string[] => {
+  try {
+    const l = typeof v === 'string' ? JSON.parse(v || '[]') : v
+    return Array.isArray(l) ? l.map(String) : []
+  } catch {
+    return []
+  }
+}
+export const nomesAntigosLimpos = (lista: string[]) => {
+  const vistos = new Set<string>()
+  return lista.map(limparNome).filter((n) => n && !vistos.has(textoBusca(n)) && vistos.add(textoBusca(n))).sort()
+}
+
+export function conferirEscritorioCobranca(d: ErpState, nome: string, id?: string): string | null {
+  const n = limparNome(nome)
+  if (!n) return 'Informe o nome do escritório.'
+  if (col(d, 'cobranca_escritorios').some((e) => e.id !== id && textoBusca(e.nome) === textoBusca(n))) return 'Já existe um escritório com esse nome.'
   return null
 }
 

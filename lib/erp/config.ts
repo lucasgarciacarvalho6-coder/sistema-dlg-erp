@@ -84,7 +84,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
   financeiro: {
     id: 'financeiro',
     nome: 'Financeiro',
-    descricao: 'Contas, pagamentos operacionais e fluxo de caixa',
+    descricao: 'Recebimentos, contas, pagamentos operacionais e fluxo de caixa',
     home: '/financeiro',
     tom: 'zinc',
     indicadores: [{ id: 'contas_processadas', label: 'Pagamentos processados', unidade: 'qtd', metaPadrao: { diaria: 5, mensal: 110 } }],
@@ -93,7 +93,7 @@ export const SETORES: Record<Setor, ConfigSetor> = {
   cobranca: {
     id: 'cobranca',
     nome: 'Cobrança',
-    descricao: 'Venda de books aos pais e recebimentos',
+    descricao: 'Inadimplência e renegociação de dívidas',
     home: '/cobranca',
     tom: 'zinc',
     // a venda de books aos pais passou para o setor Vendas Rebolo
@@ -244,6 +244,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       itens: [
         { label: 'Dashboard Financeiro', href: '/financeiro', icone: 'dashboard' },
         { label: 'Clientes', href: '/financeiro/clientes', icone: 'users' },
+        { label: 'Contas a Receber', href: '/financeiro/contas-receber', icone: 'download' },
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
         { label: 'Conferência de Vendas', href: '/financeiro/conferencia', icone: 'check' },
@@ -261,9 +262,9 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
       itens: [
         { label: 'Dashboard de Cobrança', href: '/cobranca', icone: 'dashboard' },
         { label: 'Clientes', href: '/cobranca/clientes', icone: 'users' },
-        { label: 'Contas a Receber', href: '/cobranca/titulos', icone: 'wallet' },
         { label: 'Inadimplência', href: '/cobranca/inadimplencia', icone: 'alert' },
         { label: 'Acordos', href: '/cobranca/acordos', icone: 'handshake' },
+        { label: 'Configurações', href: '/cobranca/configuracoes', icone: 'key' },
         { label: 'Histórico', href: '/cobranca/historico', icone: 'log' },
       ],
     },

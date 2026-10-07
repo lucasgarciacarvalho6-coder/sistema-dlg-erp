@@ -31,8 +31,9 @@ import {
 import { calcularFechamentoEscola } from './operacional'
 import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
+import { REGRAS_COBRANCA } from './cobranca-config'
 
-export const VERSAO_DADOS = 18 // v18: envio do rebolo (custo da postagem, entrega) e custo mensal das vendedoras
+export const VERSAO_DADOS = 19 // v19: configurações da cobrança (regras, categorias e escritórios de exemplo)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -874,5 +875,24 @@ export function gerarSeed(): ErpState {
     lidaPor: [],
   })
   s.colecoes.clientes = clientesDemo(gerador(20261007)).map((c, i) => ({ ...c, id: `cli-${i + 1}`, criadoEm: criado }) as Registro)
+  // Cobrança › Configurações (demo do SQL 039): as regras com os valores do manual + categorias e escritórios de EXEMPLO
+  // (os reais entram pelo arquivo de importação, fora do Git)
+  s.colecoes.cobranca_regras = REGRAS_COBRANCA.map((r, i) => ({ id: `rg-${i + 1}`, chave: r.chave, valor: r.padrao, atualizadoPor: '', criadoEm: criado }) as Registro)
+  s.colecoes.cobranca_regras_historico = []
+  s.colecoes.cobranca_escritorios = [
+    { id: 'esc-1', nome: 'Cobranças Alfa (exemplo)', tipo: 'Terceirizada', contato: 'Atendimento', telefone: '(44) 3000-0000', email: 'contato@exemplo.com', observacao: '', ativo: true, criadoEm: criado },
+    { id: 'esc-2', nome: 'Advocacia Exemplo', tipo: 'Advogado', contato: 'Escritório', telefone: '', email: '', observacao: 'Cobrança judicial', ativo: true, criadoEm: criado },
+  ] as Registro[]
+  const cat = (id: string, nome: string, grupo: string, inad: boolean, spc: boolean, antigos: string[], escritorioId = '') =>
+    ({ id, nome, grupo, contaInadimplencia: inad, podeSpc: spc, escritorioId, nomesAntigos: JSON.stringify(antigos), ativa: true, observacao: '', criadoEm: criado }) as Registro
+  s.colecoes.cobranca_categorias = [
+    cat('cat-1', 'Receita de Recordação Escolar', 'Cobrança DLG', true, true, ['RECEITA DE RECORDAÇÃO ESCOLAR', 'RECEITA RECORDAÇÃO ESCOLAR']),
+    cat('cat-3', 'Receita de Vendas Online (Rebolo)', 'Cobrança DLG', true, true, ['RECEITA DE VENDAS ONLINE (REBOLO)']),
+    cat('cat-4', 'Registro SPC', 'Registro SPC', true, true, ['REGISTRO SPC', 'SPC']),
+    cat('cat-5', 'Cobranças Alfa – Terceirizada (exemplo)', 'Terceirizada', false, false, ['COBRANÇAS ALFA - TERCEIRIZADA'], 'esc-1'),
+    cat('cat-6', 'Advocacia Exemplo', 'Advogado', false, false, ['ADVOCACIA EXEMPLO'], 'esc-2'),
+    cat('cat-7', 'Clientes enviados para fundo perdido', 'Fundo perdido', false, false, ['CLIENTES ENVIADOS PARA FUNDO PERDIDO']),
+    cat('cat-8', 'Receita de empréstimos bancários', 'Fora da cobrança', false, false, ['RECEITA DE EMPRÉSTIMOS BANCÁRIOS']),
+  ]
   return s
 }

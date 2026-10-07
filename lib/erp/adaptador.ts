@@ -51,6 +51,11 @@ export const COLUNAS: Record<string, string[]> = {
   rebolo_numeracao: [], // próximo número do pacote de cada vendedora: muda só pelo banco (SQL 034)
   // custo mensal de cada vendedora (salário do holerite): só o Financeiro vê e lança (SQL 037); o envio fica na ficha
   rebolo_custos_mes: ['vendedora_id', 'mes', 'salario', 'observacao'],
+  // ---- Cobrança › Configurações (SQL 039): as regras mudam pela função salvar_regras_cobranca; o histórico, pelo banco ----
+  cobranca_regras: [],
+  cobranca_regras_historico: [],
+  cobranca_escritorios: ['nome', 'tipo', 'contato', 'telefone', 'email', 'observacao', 'ativo'],
+  cobranca_categorias: ['nome', 'grupo', 'conta_inadimplencia', 'pode_spc', 'escritorio_id', 'nomes_antigos', 'ativa', 'observacao'],
   // ---- Produção (setor 'edicao'): editores são só um cadastro; os lotes mudam pelas funções do banco (SQL 020) ----
   editores: ['nome', 'telefone', 'observacao', 'status'],
   producao_lotes: [],
@@ -74,6 +79,7 @@ const COLUNAS_JSON: Record<string, string[]> = {
   documentos_externos: ['paginas'],
   vendas_ebooks: ['referencias', 'anexos'],
   veiculos: ['gasto_fixo_mes'],
+  cobranca_categorias: ['nomes_antigos'], // text[] no banco: o front guarda como lista JSON
 }
 
 export const TABELAS_COLECAO = Object.keys(COLUNAS)
