@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import type { Colaborador, ErpState, Setor } from '@/lib/erp/types'
@@ -160,19 +160,90 @@ const chip = (ativo: boolean) =>
     ativo ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' : 'text-zinc-500 hover:text-white hover:bg-white/[0.02] border-transparent'
   }`
 
-// Abas por setor: Todos (n) • Operacional (n) • Produção (n)...
-function AbasSetor({ todos, filtro, onFiltro }: { todos: Item[]; filtro: Setor | ''; onFiltro: (f: Setor | '') => void }) {
+// Setores marcados nas abas (pedido de 07/10/2026): caixas de marcar, vários setores ao mesmo tempo
+// (ex.: Vendas Rebolo + Produção + Revelação). Vale na página e na tela cheia; cada navegador lembra a escolha.
+// Lista vazia = todos.
+const CHAVE_SETORES = 'dlg-erp:tv-setores'
+const ouvintesSetores = new Set<() => void>()
+let setoresSalvos: string | null = null
+
+function lerSetores(): string {
+  if (setoresSalvos === null) {
+    try {
+      setoresSalvos = localStorage.getItem(CHAVE_SETORES) ?? ''
+    } catch {
+      setoresSalvos = ''
+    }
+  }
+  return setoresSalvos
+}
+
+function salvarSetores(lista: Setor[]) {
+  setoresSalvos = lista.join(',')
+  try {
+    localStorage.setItem(CHAVE_SETORES, setoresSalvos)
+  } catch {
+    // navegação privada / armazenamento bloqueado: vale só nesta visita
+  }
+  ouvintesSetores.forEach((o) => o())
+}
+
+function assinarSetores(cb: () => void) {
+  ouvintesSetores.add(cb)
+  // outra aba trocou a escolha → acompanha
+  const aoMudar = (e: StorageEvent) => {
+    if (e.key === CHAVE_SETORES) {
+      setoresSalvos = e.newValue ?? ''
+      cb()
+    }
+  }
+  window.addEventListener('storage', aoMudar)
+  return () => {
+    ouvintesSetores.delete(cb)
+    window.removeEventListener('storage', aoMudar)
+  }
+}
+
+// os setores marcados que têm gente na equipe; todos marcados (ou nenhum) = [] (todos)
+function useSetoresMarcados(todos: Item[]): Setor[] {
+  const bruto = useSyncExternalStore(assinarSetores, lerSetores, () => '')
+  return useMemo(() => {
+    const disponiveis = SETORES_PRODUTIVOS.filter((x) => todos.some((t) => t.c.setor === x))
+    const marcados = disponiveis.filter((x) => bruto.split(',').includes(x))
+    return marcados.length === disponiveis.length ? [] : marcados
+  }, [bruto, todos])
+}
+
+const nomesSetores = (marcados: Setor[]) => (marcados.length ? marcados.map((x) => SETORES[x].nome).join(' + ') : 'Todos os setores')
+
+function CaixaMarcar({ marcada }: { marcada: boolean }) {
+  return (
+    <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded border ${marcada ? 'bg-blue-500 border-blue-500 text-white' : 'border-zinc-500'}`}>
+      {marcada && (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" className="w-2.5 h-2.5">
+          <path d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+    </span>
+  )
+}
+
+// Abas por setor: ☐ Todos (n) • ☐ Operacional (n) • ☐ Produção (n)... Com "Todos", clicar num setor começa a escolha só com ele;
+// clicar nos outros vai somando; desmarcar o último volta para Todos.
+function AbasSetor({ todos, marcados }: { todos: Item[]; marcados: Setor[] }) {
+  const alternar = (x: Setor) => salvarSetores(marcados.includes(x) ? marcados.filter((y) => y !== x) : [...marcados, x])
   return (
     <div className="flex overflow-x-auto custom-scrollbar gap-1">
-      <button onClick={() => onFiltro('')} className={chip(filtro === '')}>
-        Todos ({todos.length})
+      <button role="checkbox" aria-checked={marcados.length === 0} onClick={() => salvarSetores([])} className={`${chip(marcados.length === 0)} inline-flex items-center gap-2`}>
+        <CaixaMarcar marcada={marcados.length === 0} /> Todos ({todos.length})
       </button>
       {SETORES_PRODUTIVOS.map((x) => {
         const qtd = todos.filter((t) => t.c.setor === x).length
         if (!qtd) return null
+        const marcada = marcados.includes(x)
         return (
-          <button key={x} onClick={() => onFiltro(x)} className={chip(filtro === x)}>
-            {SETORES[x].nome} ({qtd})
+          <button key={x} role="checkbox" aria-checked={marcada} onClick={() => alternar(x)} className={`${chip(marcada)} inline-flex items-center gap-2`}>
+            <CaixaMarcar marcada={marcada} /> {SETORES[x].nome} ({qtd})
           </button>
         )
       })}
@@ -180,12 +251,12 @@ function AbasSetor({ todos, filtro, onFiltro }: { todos: Item[]; filtro: Setor |
   )
 }
 
-// Tela cheia da Equipe: os cards na tela toda (sem rolar), com as abas para ver só um setor. Esc sai.
-// Os cards têm tamanho fixo (calculado pela equipe toda): ao filtrar, não esticam.
-function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState; mes: string; todos: Item[]; filtroInicial: Setor | ''; onSair: () => void }) {
+// Tela cheia da Equipe: os cards na tela toda (sem rolar), com as caixas para escolher os setores. Esc sai.
+// Todos (e só Operacional): os cards têm o tamanho calculado pela equipe toda; outra escolha ajusta os cards à tela.
+function TelaCheiaEquipe({ s, mes, todos, onSair }: { s: ErpState; mes: string; todos: Item[]; onSair: () => void }) {
   const raiz = useRef<HTMLDivElement>(null)
   const sairRef = useRef(onSair)
-  const [filtro, setFiltro] = useState<Setor | ''>(filtroInicial)
+  const marcados = useSetoresMarcados(todos)
   useEffect(() => {
     sairRef.current = onSair
   }, [onSair])
@@ -204,7 +275,8 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined)
     }
   }, [])
-  const lista = filtro ? todos.filter((x) => x.c.setor === filtro) : todos
+  const lista = marcados.length ? todos.filter((x) => marcados.includes(x.c.setor)) : todos
+  const tamanhoDaEquipe = marcados.length === 0 || (marcados.length === 1 && marcados[0] === 'operacional')
   return createPortal(
     <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white flex flex-col gap-5 px-8 py-6 2xl:px-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -220,12 +292,12 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
               <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-400">Ao vivo</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight mt-0.5">
-              Equipe • metas individuais <span className="text-zinc-600 font-bold text-lg">• {filtro ? SETORES[filtro].nome : 'Todos os setores'} • {nomeMes(mes)}</span>
+              Equipe • metas individuais <span className="text-zinc-600 font-bold text-lg">• {nomesSetores(marcados)} • {nomeMes(mes)}</span>
             </h1>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <AbasSetor todos={todos} filtro={filtro} onFiltro={setFiltro} />
+          <AbasSetor todos={todos} marcados={marcados} />
           <button onClick={onSair} title="Sair (Esc)" className="p-3 rounded-full bg-white/[0.05] hover:bg-red-500/20 text-zinc-400 hover:text-white transition-all">
             <Icon nome="x" className="w-5 h-5" />
           </button>
@@ -233,16 +305,16 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
       </div>
       <FaixaGerente s={s} />
       <div className="flex-1 min-h-0">
-        {/* Todos e Operacional: o tamanho dos cards é o da equipe toda (como sempre). As abas dos outros setores
-            ajustam os cards à quantidade da aba e ocupam a tela (pedido de 06/10/2026). */}
+        {/* Todos e só Operacional: o tamanho dos cards é o da equipe toda (como sempre). Os outros setores marcados
+            ajustam os cards à quantidade escolhida e ocupam a tela (pedido de 06/10/2026). */}
         <GradeTV
-          key={filtro || 'todos'}
+          key={marcados.join(',') || 'todos'}
           s={s}
           mes={mes}
           pessoas={lista.map(({ c }) => c)}
-          base={!filtro || filtro === 'operacional' ? todos.map(({ c }) => c) : undefined}
-          producao={!filtro || filtro === 'edicao'}
-          proporcional={!!filtro && filtro !== 'operacional'}
+          base={tamanhoDaEquipe ? todos.map(({ c }) => c) : undefined}
+          producao={marcados.length === 0 || marcados.includes('edicao')}
+          proporcional={!tamanhoDaEquipe}
           ajustar
         />
       </div>
@@ -253,7 +325,6 @@ function TelaCheiaEquipe({ s, mes, todos, filtroInicial, onSair }: { s: ErpState
 
 // Grade com todos os colaboradores das áreas produtivas, filtrável por setor
 export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
-  const [filtro, setFiltro] = useState<Setor | ''>('')
   const [aberto, setAberto] = useState<Colaborador | null>(null) // painel completo ao clicar no card
   const [telaCheia, setTelaCheia] = useState(false)
 
@@ -264,7 +335,8 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
         .sort((a, b) => b.pct - a.pct),
     [s, mes],
   )
-  const lista = filtro ? todos.filter((x) => x.c.setor === filtro) : todos
+  const marcados = useSetoresMarcados(todos)
+  const lista = marcados.length ? todos.filter((x) => marcados.includes(x.c.setor)) : todos
 
   if (todos.length === 0) {
     return (
@@ -288,7 +360,7 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
           <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">ranking por % da meta mensal</span>
         </div>
         <div className="flex items-center gap-3 min-w-0">
-          <AbasSetor todos={todos} filtro={filtro} onFiltro={setFiltro} />
+          <AbasSetor todos={todos} marcados={marcados} />
           <button
             onClick={() => setTelaCheia(true)}
             title="Ver os cards em tela cheia (Esc sai)"
@@ -298,9 +370,9 @@ export default function EquipeCards({ s, mes }: { s: ErpState; mes: string }) {
           </button>
         </div>
       </div>
-      {telaCheia && <TelaCheiaEquipe s={s} mes={mes} todos={todos} filtroInicial={filtro} onSair={() => setTelaCheia(false)} />}
+      {telaCheia && <TelaCheiaEquipe s={s} mes={mes} todos={todos} onSair={() => setTelaCheia(false)} />}
       {/* Cards da TV: Operações é o card maior (com os mini-cards), depois as etapas da Produção; cada pessoa com a cor da situação */}
-      <GradeTV s={s} mes={mes} pessoas={lista.map(({ c }) => c)} producao={!filtro || filtro === 'edicao'} onAbrir={(c) => setAberto(c)} />
+      <GradeTV s={s} mes={mes} pessoas={lista.map(({ c }) => c)} producao={marcados.length === 0 || marcados.includes('edicao')} onAbrir={(c) => setAberto(c)} />
 
       <Modal
         aberto={!!aberto && aberto.setor !== 'operacional'}

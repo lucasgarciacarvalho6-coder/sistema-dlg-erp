@@ -1,37 +1,23 @@
 'use client'
 
-// Fila de contatos do rebolo. "Contatos de hoje" ordena quem ligar primeiro:
-// agendados vencidos/de hoje → tentar de novo → aguardando contato → em negociação.
+// Fila de contatos do rebolo, uma aba por situação (a tela abre em "Aguardando contato").
 // Sem resposta volta para "Tentar de novo"; não vendeu → Descarte (o álbum fica congelado).
+// A aba "Contatos de hoje" saiu a pedido do usuário (07/10/2026).
 
 import { useMemo, useState } from 'react'
-import type { Registro } from '@/lib/erp/types'
-import { hoje } from '@/lib/erp/format'
 import { EM_ABERTO, escolaFicha, SITUACOES_FICHA, TOM_SITUACAO } from '@/lib/erp/rebolo'
 import { EmptyState, Modal, PageHeader, Panel, TONS } from '@/components/erp/ui'
 import Atendimento from '@/components/rebolo/Atendimento'
-import { dataHoraCurta, FaixaBadge, PacoteBadge, SituacaoBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
+import { dataHoraCurta, FaixaBadge, PacoteBadge, Telefones, useRebolo } from '@/components/rebolo/comum'
 
-const HOJE = 'Contatos de hoje'
-type Aba = typeof HOJE | (typeof SITUACOES_FICHA)[number]
+type Aba = (typeof SITUACOES_FICHA)[number]
 // cores das abas (pedido de 06/10/2026), as mesmas dos selos: aguardando/andamento = amarelo • vendida = verde •
-// descarte e cancelada = vermelho • "Contatos de hoje" = azul. A aba escolhida fica preenchida com a cor.
-const ESTILO_HOJE = { texto: 'text-blue-400', suave: 'bg-blue-600/15', borda: 'border-blue-500/40', solido: 'bg-blue-500' }
-const estiloAba = (a: Aba) => (a === HOJE ? ESTILO_HOJE : TONS[TOM_SITUACAO[a] ?? 'zinc'])
-
-// prioridade na fila do dia (menor = primeiro)
-function prioridade(f: Registro) {
-  const agenda = String(f.agendadoPara || '')
-  if (f.situacao === 'Agendado') return agenda.slice(0, 10) <= hoje() ? 0 : 9
-  if (f.situacao === 'Tentar de novo') return 1
-  if (f.situacao === 'Aguardando contato') return 2
-  if (f.situacao === 'Em negociação') return 3
-  return 9
-}
+// descarte e cancelada = vermelho. A aba escolhida fica preenchida com a cor.
+const estiloAba = (a: Aba) => TONS[TOM_SITUACAO[a] ?? 'zinc']
 
 export default function ContatosReboloPage() {
   const { eu, supervisao, fichas, vendedoras, nome, pacoteDe, tabela } = useRebolo()
-  const [aba, setAba] = useState<Aba>(HOJE)
+  const [aba, setAba] = useState<Aba>('Aguardando contato')
   const [busca, setBusca] = useState('')
   const [vendedora, setVendedora] = useState(supervisao ? '' : (eu?.id ?? ''))
   const [atendendo, setAtendendo] = useState<string | null>(null)
@@ -40,22 +26,17 @@ export default function ContatosReboloPage() {
     () => fichas.filter((f) => (supervisao ? !vendedora || f.vendedoraId === vendedora : f.vendedoraId === eu?.id)),
     [fichas, supervisao, vendedora, eu],
   )
-  const contar = (a: Aba) => (a === HOJE ? visiveis.filter((f) => prioridade(f) < 9).length : visiveis.filter((f) => f.situacao === a).length)
+  const contar = (a: Aba) => visiveis.filter((f) => f.situacao === a).length
 
   const lista = useMemo(() => {
     const t = busca.trim().toLowerCase()
-    const base = aba === HOJE ? visiveis.filter((f) => prioridade(f) < 9) : visiveis.filter((f) => f.situacao === aba)
-    return base
+    return visiveis
+      .filter((f) => f.situacao === aba)
       .filter((f) => !t || `${f.aluno} ${f.nomeMae} ${f.nomePai} ${f.numeroFicha} ${f.cidade} ${f.whatsapp1}`.toLowerCase().includes(t))
-      .sort((a, b) =>
-        aba === HOJE
-          ? prioridade(a) - prioridade(b) || String(a.agendadoPara || a.ultimoContato || '').localeCompare(String(b.agendadoPara || b.ultimoContato || ''))
-          : String(b.ultimoContato || b.criadoEm).localeCompare(String(a.ultimoContato || a.criadoEm)),
-      )
+      .sort((a, b) => String(b.ultimoContato || b.criadoEm).localeCompare(String(a.ultimoContato || a.criadoEm)))
   }, [visiveis, aba, busca])
 
   const ficha = fichas.find((f) => f.id === atendendo) ?? null
-  const abas: Aba[] = [HOJE, ...SITUACOES_FICHA]
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -65,19 +46,20 @@ export default function ContatosReboloPage() {
         descricao="Entre em contato com cada família do seu pacote. Sem resposta: tente de novo. Não vendeu: descarte com o motivo. Fechou: registre a venda."
       />
 
-      <div className="flex flex-wrap gap-1.5">
-        {abas.map((a) => {
+      {/* letra maior para identificar melhor (pedido de 07/10/2026) */}
+      <div className="flex flex-wrap gap-2">
+        {SITUACOES_FICHA.map((a) => {
           const ativo = aba === a
           const t = estiloAba(a)
           return (
             <button
               key={a}
               onClick={() => setAba(a)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl text-[11px] font-bold border transition-all ${t.texto} ${
+              className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-[13px] font-bold border transition-all ${t.texto} ${
                 ativo ? `${t.suave} ${t.borda} ring-1 ring-inset ring-current/20` : 'border-white/[0.06] hover:bg-white/[0.03]'
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.solido}`}></span>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${t.solido}`}></span>
               {a} <span className="opacity-70">({contar(a)})</span>
             </button>
           )
@@ -86,8 +68,7 @@ export default function ContatosReboloPage() {
 
       <Panel
         semPadding
-        titulo={aba === HOJE ? 'Quem contatar agora' : aba}
-        subtitulo={aba === HOJE ? 'Agendados de hoje, tentativas, novos e negociações em andamento' : undefined}
+        titulo={aba}
         acoes={
           <div className="flex flex-wrap items-center gap-2">
             {supervisao && (
@@ -103,7 +84,7 @@ export default function ContatosReboloPage() {
         }
       >
         {lista.length === 0 ? (
-          <EmptyState titulo="Nada por aqui" descricao={aba === HOJE ? 'Sem contatos pendentes. Cadastre as fichas do próximo pacote.' : 'Nenhuma ficha nesta situação.'} />
+          <EmptyState titulo="Nada por aqui" descricao="Nenhuma ficha nesta situação." />
         ) : (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-sm text-zinc-300">
@@ -132,9 +113,7 @@ export default function ContatosReboloPage() {
                       <p className="text-sm font-black text-white leading-tight">{String(f.aluno)}</p>
                       <p className="text-[11px] text-zinc-400 mt-0.5">
                         {[`Ficha ${String(f.numeroFicha)}`, f.nomeMae ? `Mãe: ${String(f.nomeMae)}` : f.nomePai ? `Pai: ${String(f.nomePai)}` : ''].filter(Boolean).join(' • ')}
-                      </p>
-                      {aba === HOJE && <div className="mt-1"><SituacaoBadge situacao={f.situacao} /></div>}
-                    </td>
+                      </p>                    </td>
                     <td className="px-5 py-3.5"><FaixaBadge ficha={f} tabela={tabela} /></td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <PacoteBadge pacote={pacoteDe(f)} />
