@@ -20,6 +20,7 @@ import { diasDeMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
 import { brl, formatar, hoje, iniciais, nomeMes, num } from '@/lib/erp/format'
 import { custoPorAluno, financeiroOperacoes } from '@/lib/erp/operacoes-financeiro'
 import { META_BONUS, bonusAlbuns, lotesProducao, proximoBonus } from '@/lib/erp/producao'
+import { lucroReboloAno, lucroReboloMes, mesAnteriorDe, ROTULOS_CUSTOS, variacaoLucro, type CustosLucroRebolo, type LucroRebolo } from '@/lib/erp/rebolo-lucro'
 import { Avatar } from './ui'
 import { STATUS } from './status'
 import { corDoDia } from './PainelMeta'
@@ -114,9 +115,134 @@ function ChipBonus({ albuns }: { albuns: number }) {
   )
 }
 
+// ---------------- Lucro/Prejuízo da vendedora do Rebolo (pedido de 07/10/2026) ----------------
+// Pizza do mês: com lucro, o vendido dividido nos custos (tons de cinza: card neutro) e o lucro (verde);
+// com prejuízo, o quanto as vendas cobriram dos custos (cinza) e o que faltou (vermelho).
+// Embaixo das barrinhas dos dias, o lucro/prejuízo de cada mês do ano (verde lucro, vermelho prejuízo).
+const CORES_CUSTOS: Record<keyof CustosLucroRebolo, string> = {
+  album: '#d4d4d8',
+  reserva: '#71717a',
+  frete: '#a1a1aa',
+  taxas: '#52525b',
+  comissao: '#e4e4e7',
+  salario: '#3f3f46',
+}
+type Fatia = { valor: number; cor: string; rotulo: string }
+
+function Pizza({ partes }: { partes: Fatia[] }) {
+  const validas = partes.filter((p) => p.valor > 0)
+  const total = validas.reduce((a, p) => a + p.valor, 0)
+  if (total <= 0) return <svg viewBox="0 0 100 100" className="w-full h-full"><circle cx="50" cy="50" r="48" fill="rgba(127,127,127,0.25)" /></svg>
+  // ângulos acumulados (começa no topo, sentido horário)
+  const angulos = validas.reduce<number[]>((acc, p) => [...acc, acc[acc.length - 1] + (p.valor / total) * 2 * Math.PI], [-Math.PI / 2])
+  const ponto = (a: number) => `${(50 + 48 * Math.cos(a)).toFixed(2)},${(50 + 48 * Math.sin(a)).toFixed(2)}`
+  return (
+    <svg viewBox="0 0 100 100" className="w-full h-full" role="img" aria-label={validas.map((p) => `${p.rotulo} ${brl(p.valor)}`).join(', ')}>
+      {validas.map((p, i) => {
+        const a0 = angulos[i]
+        const a1 = angulos[i + 1]
+        const titulo = <title>{`${p.rotulo}: ${brl(p.valor)} (${UMA_CASA.format((p.valor / total) * 100)}%)`}</title>
+        if (validas.length === 1) return <circle key={i} cx="50" cy="50" r="48" fill={p.cor}>{titulo}</circle>
+        return (
+          <path key={i} d={`M50,50 L${ponto(a0)} A48,48 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${ponto(a1)} Z`} fill={p.cor} stroke="rgba(0,0,0,0.35)" strokeWidth="0.6">
+            {titulo}
+          </path>
+        )
+      })}
+    </svg>
+  )
+}
+
+function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: LucroRebolo | null; compacto: boolean }) {
+  const comLucro = l.lucro >= 0 && l.vendido > 0
+  const chaves = Object.keys(l.custos) as (keyof CustosLucroRebolo)[]
+  const partes: Fatia[] = comLucro
+    ? [...chaves.map((k) => ({ valor: l.custos[k], cor: CORES_CUSTOS[k], rotulo: ROTULOS_CUSTOS[k] })), { valor: l.lucro, cor: VERDE, rotulo: 'Lucro' }]
+    : [{ valor: l.vendido, cor: '#71717a', rotulo: 'Coberto pelas vendas' }, { valor: -l.lucro, cor: VERMELHO, rotulo: 'Prejuízo' }]
+  const v = variacaoLucro(l.lucro, anterior?.lucro)
+  const estimado = [l.estimado.salario && 'salário', l.estimado.fretes > 0 && `${l.estimado.fretes} frete(s)`, l.estimado.taxas > 0 && `${l.estimado.taxas} taxa(s) do cartão`].filter(Boolean)
+  return (
+    <div className="shrink-0 flex items-center gap-[2.5cqmin] min-w-0">
+      <div className={`shrink-0 ${compacto ? 'w-[clamp(26px,14cqmin,80px)] h-[clamp(26px,14cqmin,80px)]' : 'w-[clamp(34px,19cqmin,120px)] h-[clamp(34px,19cqmin,120px)]'}`}>
+        <Pizza partes={partes} />
+      </div>
+      <div className="min-w-0 flex-1 leading-tight">
+        <p className="font-bold uppercase tracking-widest text-zinc-400 truncate text-[clamp(7px,2.6cqmin,12px)]">Lucro/Prejuízo do mês</p>
+        <p className="font-black tracking-tight whitespace-nowrap text-[clamp(13px,7cqmin,38px)]" style={{ color: l.lucro >= 0 ? VERDE : VERMELHO }}>
+          {brl(l.lucro)}
+        </p>
+        <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.8cqmin,13px)]">
+          {v !== null && (
+            <span style={{ color: v >= 0 ? VERDE : VERMELHO }}>
+              {v >= 0 ? '↑' : '↓'} {UMA_CASA.format(Math.abs(v))}% •{' '}
+            </span>
+          )}
+          mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
+        </p>
+        {!compacto && (
+          <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
+            Vendido {reais(l.vendido)} • custos {reais(l.totalCustos)}
+          </p>
+        )}
+        {!compacto && estimado.length > 0 && (
+          <p className="text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]" title="Ainda não lançados: o cálculo usa a estimativa da Tabela de Preços do Rebolo">
+            ≈ estimado: {estimado.join(', ')}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const curtoRS = (v: number) => {
+  const a = Math.abs(v)
+  const t = a >= 1000 ? `${UMA_CASA.format(a / 1000)}k` : num(Math.round(a))
+  return v < 0 ? `−${t}` : t
+}
+
+// barras do ano: acima da linha do zero = lucro (verde), abaixo = prejuízo (vermelho); "—" antes de começar
+function LucroMesesTV({ meses, ano, destaque, compacto }: { meses: (LucroRebolo | null)[]; ano: string; destaque: number; compacto: boolean }) {
+  const vals = meses.map((m) => (m ? m.lucro : null))
+  const maxPos = Math.max(0, ...vals.map((v) => v ?? 0))
+  const maxNeg = Math.max(0, ...vals.map((v) => -(v ?? 0)))
+  const cima = maxPos + maxNeg > 0 ? maxPos / (maxPos + maxNeg) : 0.5
+  const nomes = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+  return (
+    <div className="shrink-0">
+      <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]">Lucro/Prejuízo por mês</p>
+      <div className={`${compacto ? 'h-[clamp(16px,9cqmin,60px)]' : 'h-[clamp(26px,14cqmin,90px)]'} flex gap-[2px] mt-[0.6cqmin]`}>
+        {vals.map((v, i) => (
+          <div key={i} className="flex-1 min-w-0 h-full flex flex-col" title={`${nomeMes(`${ano}-${String(i + 1).padStart(2, '0')}`)}: ${v === null ? 'sem conta' : brl(v)}`}>
+            <div className="flex flex-col justify-end" style={{ height: `${cima * 100}%` }}>
+              {v !== null && v > 0 && <div className={`w-full rounded-t-[2px] ${i === destaque ? 'ring-1 ring-white/80' : ''}`} style={{ height: `${Math.max(4, (v / maxPos) * 100)}%`, backgroundColor: VERDE }}></div>}
+            </div>
+            <div className={v === null ? 'h-[2px] bg-white/[0.08]' : 'h-px bg-white/[0.25]'}></div>
+            <div className="flex flex-col justify-start" style={{ height: `${(1 - cima) * 100}%` }}>
+              {v !== null && v < 0 && <div className={`w-full rounded-b-[2px] ${i === destaque ? 'ring-1 ring-white/80' : ''}`} style={{ height: `${Math.max(4, (-v / maxNeg) * 100)}%`, backgroundColor: VERMELHO }}></div>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-[2px] mt-[1px]">
+        {nomes.map((n, i) => (
+          <span key={i} className={`flex-1 min-w-0 text-center font-bold leading-tight text-[clamp(6px,2.2cqmin,10px)] ${i === destaque ? 'text-white' : 'text-zinc-500'}`} title={vals[i] === null ? '' : curtoRS(vals[i]!)}>
+            {n}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ---------------- Card da pessoa ----------------
-export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborador; mes: string; onAbrir?: () => void }) {
+// compacto = card pequeno na TV: na vendedora do Rebolo, as barrinhas dos dias perdem os números e a pizza diminui
+// (o gráfico dos meses fica)
+export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpState; c: Colaborador; mes: string; onAbrir?: () => void; compacto?: boolean }) {
   const cfg = SETORES[c.setor]
+  // vendedora do Rebolo: Lucro/Prejuízo do mês (pizza) e do ano (barras)
+  const lucro = c.setor === 'rebolo' ? lucroReboloMes(s, c.id, mes) : null
+  const lucroAnterior = lucro ? lucroReboloMes(s, c.id, mesAnteriorDe(mes)) : null
+  const lucroAno = lucro ? lucroReboloAno(s, c.id, mes.slice(0, 4)) : null
   const ind = cfg.indicadores[0]
   const r = resumo(s, c.setor, ind.id, mes, c.id)
   const d = diasDeMeta(s, c.setor, ind.id, c.id, mes)
@@ -184,8 +310,12 @@ export function CardPessoaTV({ s, c, mes, onAbrir }: { s: ErpState; c: Colaborad
           {c.setor === 'edicao' && <ChipBonus albuns={r.mes} />}
         </div>
 
+        {lucro && <LucroPizzaTV l={lucro} anterior={lucroAnterior} compacto={compacto} />}
+
         {/* dias úteis */}
-        <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+        <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={lucro && compacto ? undefined : doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+
+        {lucroAno && <LucroMesesTV meses={lucroAno} ano={mes.slice(0, 4)} destaque={Number(mes.slice(5, 7)) - 1} compacto={compacto} />}
       </div>
     </div>
   )
@@ -551,7 +681,7 @@ export function GradeTV({
 
   const pessoasCards = outros.map((c) => (
     <div key={c.id} className="min-h-0 min-w-0">
-      <CardPessoaTV s={s} c={c} mes={mes} onAbrir={onAbrir ? () => onAbrir(c) : undefined} />
+      <CardPessoaTV s={s} c={c} mes={mes} onAbrir={onAbrir ? () => onAbrir(c) : undefined} compacto={!ajustar || layout.h < 420} />
     </div>
   ))
 
@@ -582,9 +712,11 @@ export function GradeTV({
       </div>
     )
 
-  // página: Operações é o card maior dentro da grade
+  // página: Operações é o card maior dentro da grade. Com vendedora do Rebolo (pizza + meses do Lucro/Prejuízo),
+  // os cards ficam um pouco mais altos para as barrinhas dos dias caberem.
+  const alturaPagina = outros.some((c) => c.setor === 'rebolo') ? 410 : 330
   return (
-    <div ref={ref} className="grid" style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridAutoRows: 330, gridAutoFlow: 'dense', gap: GAP }}>
+    <div ref={ref} className="grid" style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridAutoRows: alturaPagina, gridAutoFlow: 'dense', gap: GAP }}>
       {ops && (
         <div className="min-h-0 min-w-0" style={{ gridColumn: `span ${layout.opsCols}`, gridRow: `span ${layout.opsRows}` }}>
           <CardOperacoesTV s={s} c={ops} mes={mes} />
