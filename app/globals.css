@@ -176,3 +176,14 @@ input[type='date']::-webkit-calendar-picker-indicator {
   background: var(--color-painel);
   font-family: inherit;
 }
+
+/* Visão TV: cada card é um "container" de tamanho — as letras e os gráficos em cqmin/cqw acompanham o card.
+   Fica em CLASSE (e não no style do elemento) para o complemento das TVs com navegador antigo enxergar
+   (container-query-polyfill: só lê CSS de arquivo/<style>, nunca o style do elemento). */
+.cq-tamanho {
+  container-type: size;
+}
+/* letra calculada no código: --f-cqw (um número) vezes 1cqw, entre --f-min e --f-max */
+.cq-fonte {
+  font-size: clamp(var(--f-min, 7px), calc(var(--f-cqw) * 1cqw), var(--f-max, 14px));
+}

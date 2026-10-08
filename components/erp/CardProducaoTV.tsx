@@ -6,13 +6,13 @@
 // e AMARELA com escola parada na etapa além do prazo (2, 3 ou 5 dias úteis). No fim, a linha "Atrasadas".
 // O card é um "container" de tamanho: letras e barras acompanham o espaço que a tela dá para ele.
 
-import { useMemo, type CSSProperties } from 'react'
+import { useMemo } from 'react'
 import type { ErpState } from '@/lib/erp/types'
 import { hoje, num } from '@/lib/erp/format'
 import { painelEtapas, type LinhaPainel } from '@/lib/erp/producao'
 import { STATUS } from './status'
 
-const tamanho: CSSProperties = { containerType: 'size' }
+// o card é um "container" de tamanho pela classe cq-tamanho (globals.css), que o complemento das TVs antigas enxerga
 const VERDE = STATUS.bom.cor
 const AMARELO = STATUS.atencao.cor
 const VERMELHO = STATUS.critico.cor
@@ -42,7 +42,7 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
   const atrasadas = linhas.reduce((a, l) => a + l.atrasadas, 0)
   const paradas = linhas.reduce((a, l) => a + l.paradas, 0)
   return (
-    <div style={tamanho} className="h-full w-full min-h-0">
+    <div className="cq-tamanho h-full w-full min-h-0">
       <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2.4cqmin] flex flex-col gap-[1.2cqmin] overflow-hidden">
         {/* cabeçalho: situação (o que o gerente precisa ver) + total que ainda não chegou na caixa */}
         <div className="flex items-start justify-between gap-[2cqmin] min-w-0">

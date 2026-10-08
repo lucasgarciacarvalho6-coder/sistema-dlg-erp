@@ -34,8 +34,10 @@ const AZUL = '#3b82f6'
 const UMA_CASA = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }) // 12,5
 const reais = (v: number) => brl(v).replace(/\s/g, ' ').replace(/,00$/, '') // TV: sem os centavos redondos
 
-// o card inteiro vira um "container" de tamanho: fontes e gráficos em cqmin acompanham o espaço
-const tamanho: CSSProperties = { containerType: 'size' }
+// o card inteiro vira um "container" de tamanho (classe cq-tamanho, no globals.css): fontes e gráficos em cqmin
+// acompanham o espaço. A letra calculada aqui vai em variáveis + classe cq-fonte (o complemento das TVs com
+// navegador antigo só enxerga o que está no CSS, não o style do elemento).
+const fonteCq = (min: number, cqw: number, max: number) => ({ '--f-min': `${min}px`, '--f-cqw': cqw.toFixed(2), '--f-max': `${max}px` }) as CSSProperties
 
 const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: '✕ Abaixo' } as const
 
@@ -46,15 +48,15 @@ const ROTULO_SITUACAO = { bom: '✓ No ritmo', atencao: '! Atenção', critico: 
 function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }: { dias: string[]; valores: (number | null)[]; cor: (v: number, i: number) => string; rotulo?: (v: number) => string; destaque?: string; diasGrandes?: boolean }) {
   const max = Math.max(1, ...valores.map((v) => v ?? 0))
   const n = Math.max(1, dias.length)
-  const fonteDias = diasGrandes ? { fontSize: `clamp(8px, ${(88 / n / 1.35).toFixed(2)}cqw, 16px)` } : undefined
+  const fonteDias = diasGrandes ? fonteCq(8, 88 / n / 1.35, 16) : undefined
   // largura do maior número em "em" (vírgula e ponto são estreitos), para a letra ficar o maior possível sem encavalar
   const largura = (t: string) => [...t].reduce((a, ch) => a + (ch === ',' || ch === '.' ? 0.3 : 0.62), 0.1)
   const maior = Math.max(1.3, ...valores.map((v) => (rotulo && v !== null ? largura(rotulo(v)) : 0)))
-  const fonteNumeros = { fontSize: `clamp(7px, ${(84 / n / maior).toFixed(2)}cqw, 14px)` }
+  const fonteNumeros = fonteCq(7, 84 / n / maior, 14)
   const espaco = rotulo ? '1.3em' : '0px' // lugar do número em cima da barra mais alta
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex-1 min-h-0 flex items-end gap-[2px]" style={rotulo ? fonteNumeros : undefined}>
+      <div className={`flex-1 min-h-0 flex items-end gap-[2px] ${rotulo ? 'cq-fonte' : ''}`} style={rotulo ? fonteNumeros : undefined}>
         {valores.map((v, i) => (
           <div key={dias[i]} className="flex-1 h-full flex flex-col justify-end items-center min-w-0" title={`${dias[i].slice(8)}/${dias[i].slice(5, 7)}${v === null ? '' : `: ${rotulo ? rotulo(v) : num(v)}`}`}>
             {rotulo && v !== null && (
@@ -67,7 +69,7 @@ function BarrasTV({ dias, valores, cor, rotulo, destaque, diasGrandes = false }:
           </div>
         ))}
       </div>
-      <div className={`flex gap-[2px] ${diasGrandes ? 'mt-[2px] pt-[2px] border-t border-white/[0.08]' : 'mt-[1px]'}`} style={fonteDias}>
+      <div className={`flex gap-[2px] ${diasGrandes ? 'cq-fonte mt-[2px] pt-[2px] border-t border-white/[0.08]' : 'mt-[1px]'}`} style={fonteDias}>
         {dias.map((d, i) => (
           <span key={d} className={`flex-1 text-center font-bold min-w-0 leading-tight ${diasGrandes ? '' : 'text-[clamp(6px,2.2cqmin,10px)]'} ${d === destaque ? 'text-white' : diasGrandes ? 'text-zinc-400' : 'text-zinc-500'}`}>
             {diasGrandes || i % 2 === 0 || d === destaque ? Number(d.slice(8)) : ''}
@@ -214,13 +216,13 @@ function LucroMesesTV({ meses, ano, destaque }: { meses: (LucroRebolo | null)[];
   // a letra acompanha a largura do card: o maior valor cabe na largura da barra sem encostar no vizinho
   const largura = (t: string) => [...t].reduce((a, ch) => a + (ch === ',' || ch === '.' ? 0.3 : 0.62), 0.1)
   const maior = Math.max(1.3, ...rotulos.map(largura))
-  const fonte = { fontSize: `clamp(7px, ${(86 / 12 / maior).toFixed(2)}cqw, 13px)` }
+  const fonte = fonteCq(7, 86 / 12 / maior, 13)
   // o número fica sempre EM CIMA: do lucro, na ponta da barra verde; do prejuízo, logo acima da linha do zero (em vermelho)
   const folga = { paddingTop: '1.2em' }
   return (
     <div className="flex-[1.5] min-h-0 flex flex-col overflow-hidden">
       <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]">Lucro/Prejuízo por mês</p>
-      <div className="flex-1 min-h-[24px] flex gap-[2px] mt-[0.4cqmin]" style={{ ...fonte, ...folga }}>
+      <div className="cq-fonte flex-1 min-h-[24px] flex gap-[2px] mt-[0.4cqmin]" style={{ ...fonte, ...folga }}>
         {vals.map((v, i) => (
           <div key={i} className="flex-1 min-w-0 h-full flex flex-col" title={`${nomeMes(`${ano}-${String(i + 1).padStart(2, '0')}`)}: ${v === null ? 'sem conta' : brl(v)}`}>
             <div className="flex flex-col justify-end" style={{ height: `${cima * 100}%` }}>
@@ -314,7 +316,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
     </>
   )
   return (
-    <div style={tamanho} className="h-full w-full min-h-0">
+    <div className="cq-tamanho h-full w-full min-h-0">
       <div
         role={onAbrir ? 'button' : undefined}
         tabIndex={onAbrir ? 0 : undefined}
@@ -367,7 +369,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
 // ---------------- Card de Operações (maior, com 3 mini-cards) ----------------
 function MiniTV({ titulo, children, estilo }: { titulo: ReactNode; children: ReactNode; estilo?: CSSProperties }) {
   return (
-    <div style={{ ...tamanho, ...estilo }} className="h-full min-h-0 min-w-0">
+    <div style={estilo} className="cq-tamanho h-full min-h-0 min-w-0">
       <div className="h-full rounded-2xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
         <p className="font-black uppercase tracking-[0.15em] text-zinc-300 text-[clamp(8px,3.4cqmin,14px)] truncate">{titulo}</p>
         {children}
@@ -399,9 +401,9 @@ function BarrasCusto({ rotulos, qtd, extra, custos, corBarra, corCusto, abaixo, 
   const mais = (i: number) => extra?.[i] ?? 0
   const max = Math.max(1, ...qtd.map((v, i) => (v ?? 0) + mais(i)))
   const maior = Math.max(2, ...qtd.map((v, i) => ((v ?? 0) + mais(i) ? num((v ?? 0) + mais(i)).length : 0)), ...custos.map((v) => (v ? String(Math.round(v)).length : 0)))
-  const fonte = `clamp(7px, ${(88 / n / (maior * 0.62)).toFixed(2)}cqw, ${fonteMax}px)`
+  const fonte = fonteCq(7, 88 / n / (maior * 0.62), fonteMax)
   return (
-    <div className="flex-1 min-h-0 flex flex-col" style={{ fontSize: fonte }}>
+    <div className="cq-fonte flex-1 min-h-0 flex flex-col" style={fonte}>
       <div className="flex-1 min-h-0 flex items-end gap-[3px]">
         {qtd.map((v, i) => {
           const p = mais(i)
@@ -523,7 +525,7 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
   const corAno = custo.mensal.fichas > 0 && custo.anual.fichas > 0 ? (custo.mensal.media > custo.anual.media * 1.03 ? VERMELHO : custo.mensal.media < custo.anual.media * 0.97 ? VERDE : AZUL) : AZUL
   const a = x.agenda
   return (
-    <div style={tamanho} className="h-full w-full min-h-0">
+    <div className="cq-tamanho h-full w-full min-h-0">
       <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
         <div className="flex items-center gap-[1.6cqmin] min-w-0">
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-[clamp(28px,8cqmin,60px)] h-[clamp(28px,8cqmin,60px)]" arredondado="rounded-full" textoCls="text-[clamp(10px,2.6cqmin,18px)]" />
