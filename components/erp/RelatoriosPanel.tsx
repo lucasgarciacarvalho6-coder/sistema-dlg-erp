@@ -3,18 +3,21 @@
 import type { ErpState, Modulo, Registro, Setor } from '@/lib/erp/types'
 import { SETORES } from '@/lib/erp/config'
 import { useErp, usePode } from '@/lib/erp/store'
-import { colecao, nomeColaborador, statusTitulo } from '@/lib/erp/metrics'
-import { dataBR } from '@/lib/erp/format'
+import { colecao, nomeColaborador } from '@/lib/erp/metrics'
+import { brl, dataBR } from '@/lib/erp/format'
+import { FILTRO_INADIMPLENCIA, FILTRO_RECEBER, buscarContasReceber, buscarInadimplentes, todasAsPaginas } from '@/lib/erp/cobrancas'
 import { exportarCSV, exportarExcel, exportarPDF, type Coluna } from '@/lib/erp/export'
 import Icon from './Icon'
 import { PageHeader, Panel } from './ui'
 
+type Tabela = { colunas: Coluna[]; linhas: Record<string, unknown>[] }
 interface Relatorio {
   id: string
   titulo: string
   descricao: string
   modulo: Modulo
-  gerar: (s: ErpState) => { colunas: Coluna[]; linhas: Record<string, unknown>[] }
+  gerar?: (s: ErpState) => Tabela
+  buscar?: () => Promise<Tabela> // a carteira de cobranças não vem na carga geral: busca no servidor na hora de baixar
 }
 
 const deColecao = (nome: string, colunas: Coluna[], mapa?: (r: Registro, s: ErpState) => Record<string, unknown>) => (s: ErpState) => ({
@@ -72,18 +75,46 @@ const RELATORIOS: Relatorio[] = [
   { id: 'prod-operacional', titulo: 'Produção Operacional', descricao: 'Fichas fotografadas por equipe', modulo: 'operacional', gerar: producaoSetor('operacional') },
   { id: 'prod-producao', titulo: 'Revelação (álbuns revelados)', descricao: 'Álbuns revelados por pessoa (lançados pelo app)', modulo: 'producao', gerar: producaoSetor('producao') },
   {
-    id: 'titulos',
+    id: 'contas-receber',
     titulo: 'Contas a receber',
-    descricao: 'Relatório de cobrança • títulos e parcelas',
+    descricao: 'Financeiro • uma linha por cliente, com a conta (CA Beatriz / CA Diogo)',
+    modulo: 'financeiro',
+    buscar: async () => ({
+      colunas: [
+        { chave: 'cliente', label: 'Cliente' },
+        { chave: 'contas', label: 'Conta' },
+        { chave: 'parcelas', label: 'Parcelas pagas' },
+        { chave: 'emAberto', label: 'Em aberto' },
+        { chave: 'vencido', label: 'Em atraso' },
+        { chave: 'vencePrimeiro', label: 'Próximo vencimento' },
+        { chave: 'situacao', label: 'Situação' },
+      ],
+      linhas: (await todasAsPaginas((p, n) => buscarContasReceber(FILTRO_RECEBER, p, n))).map((c) => ({
+        cliente: c.cliente, contas: c.contas.join(', '), parcelas: `${c.parcelasPagas} de ${c.parcelas}`, emAberto: brl(c.emAberto), vencido: brl(c.vencido),
+        vencePrimeiro: c.vencePrimeiro ? dataBR(c.vencePrimeiro) : '', situacao: c.situacao,
+      })),
+    }),
+  },
+  {
+    id: 'inadimplencia',
+    titulo: 'Inadimplência',
+    descricao: 'Cobrança • quem está com boleto vencido, com juros e multa',
     modulo: 'cobranca',
-    gerar: deColecao('titulos', [
-      { chave: 'cliente', label: 'Responsável' },
-      { chave: 'escola', label: 'Escola' },
-      { chave: 'parcela', label: 'Parcela' },
-      { chave: 'valor', label: 'Valor' },
-      { chave: 'vencimento', label: 'Vencimento' },
-      { chave: 'situacao', label: 'Situação' },
-    ], (r) => ({ vencimento: dataBR(String(r.vencimento)), situacao: statusTitulo(r) })),
+    buscar: async () => ({
+      colunas: [
+        { chave: 'cliente', label: 'Cliente' },
+        { chave: 'contas', label: 'Conta' },
+        { chave: 'carteiras', label: 'Carteira' },
+        { chave: 'parcelasVencidas', label: 'Boletos vencidos' },
+        { chave: 'vencido', label: 'Em atraso' },
+        { chave: 'atualizado', label: 'Com juros e multa' },
+        { chave: 'diasAtraso', label: 'Dias de atraso' },
+      ],
+      linhas: (await todasAsPaginas((p, n) => buscarInadimplentes(FILTRO_INADIMPLENCIA, p, n))).map((c) => ({
+        cliente: c.cliente, contas: c.contas.join(', '), carteiras: c.carteiras.join(', '), parcelasVencidas: c.parcelasVencidas, vencido: brl(c.vencido),
+        atualizado: brl(c.atualizado), diasAtraso: c.diasAtraso,
+      })),
+    }),
   },
   { id: 'prod-cobranca', titulo: 'Produção da Cobrança', descricao: 'E-books vendidos e valores recebidos', modulo: 'cobranca', gerar: producaoSetor('cobranca') },
   {
@@ -170,8 +201,8 @@ export default function RelatoriosPanel({ modulo }: { modulo: string }) {
   const podeFazer = usePode()
   const disponiveis = RELATORIOS.filter((r) => podeFazer(r.modulo, 'visualizar'))
 
-  const baixar = (r: Relatorio, formato: 'csv' | 'xls' | 'pdf') => {
-    const { colunas, linhas } = r.gerar(s)
+  const baixar = async (r: Relatorio, formato: 'csv' | 'xls' | 'pdf') => {
+    const { colunas, linhas } = r.buscar ? await r.buscar() : r.gerar!(s)
     const nome = `relatorio-${r.id}`
     if (formato === 'csv') exportarCSV(nome, colunas, linhas)
     else if (formato === 'xls') exportarExcel(nome, colunas, linhas)
@@ -183,7 +214,7 @@ export default function RelatoriosPanel({ modulo }: { modulo: string }) {
       <PageHeader modulo={modulo} titulo="Relatórios" descricao="Exporte os dados de cada área em PDF, Excel ou CSV. Você só vê os relatórios dos módulos que o seu perfil acessa." />
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {disponiveis.map((r) => {
-          const qtd = r.gerar(s).linhas.length
+          const qtd = r.gerar ? r.gerar(s).linhas.length : null
           const exporta = podeFazer(r.modulo, 'exportar')
           return (
             <Panel key={r.id}>
@@ -194,7 +225,7 @@ export default function RelatoriosPanel({ modulo }: { modulo: string }) {
                 <div className="min-w-0">
                   <h3 className="text-base font-bold text-white">{r.titulo}</h3>
                   <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">{r.descricao}</p>
-                  <p className="text-xs text-zinc-400 font-bold mt-2">{qtd} registro(s)</p>
+                  <p className="text-xs text-zinc-400 font-bold mt-2">{qtd === null ? 'Busca no servidor ao baixar' : `${qtd} registro(s)`}</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 mt-5">
@@ -202,7 +233,7 @@ export default function RelatoriosPanel({ modulo }: { modulo: string }) {
                   <button
                     key={f}
                     disabled={!exporta || qtd === 0}
-                    onClick={() => baixar(r, f)}
+                    onClick={() => void baixar(r, f)}
                     className="py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-white/[0.05] bg-white/[0.03] text-zinc-300 hover:bg-blue-500/10 hover:text-blue-400 hover:border-blue-500/30 transition-all disabled:opacity-30 disabled:pointer-events-none"
                   >
                     {f === 'xls' ? 'Excel' : f.toUpperCase()}

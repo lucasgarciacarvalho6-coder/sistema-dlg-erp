@@ -21,8 +21,8 @@ export const COLUNAS: Record<string, string[]> = {
     'entrada', 'forma_parcelamento', 'anexos', 'assinatura', 'assinatura_em', 'assinatura_lat', 'assinatura_lng', 'conferencia', 'conferencia_motivo',
     // venda do rebolo (ligada à ficha)
     'uf', 'ficha_rebolo_id'],
-  titulos: ['cliente', 'aluno', 'escola', 'telefone', 'parcela', 'valor', 'vencimento', 'status', 'cobrador_id', 'forma_pagamento'],
-  acordos: ['cliente', 'escola', 'telefone', 'titulo_id', 'valor_original', 'valor_acordo', 'parcelas', 'primeiro_vencimento', 'status'],
+  // títulos: substituídos pela carteira de cobranças (SQL 041/042), que é buscada no servidor e não entra na carga geral
+  acordos: ['cliente', 'escola', 'telefone', 'titulo_id', 'cobranca_id', 'valor_original', 'valor_acordo', 'parcelas', 'primeiro_vencimento', 'status'],
   contas_pagar: ['descricao', 'fornecedor', 'categoria', 'valor', 'vencimento', 'favorecido', 'pix_chave', 'pix_banco'],
   comissoes: ['escola', 'referencia', 'base_calculo', 'percentual', 'valor', 'vencimento'],
   aprovacoes: [],

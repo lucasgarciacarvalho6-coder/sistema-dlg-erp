@@ -1,176 +1,145 @@
 'use client'
 
-// Financeiro › Contas a Receber agrupada por pessoa (07/10/2026). Todo recebimento é do Financeiro; a Cobrança só vê
-// a inadimplência. A lista mostra um nome por linha, com o total em aberto e em atraso. Clicando no nome abre a ficha
-// com as informações e todos os boletos; a baixa é dada lá.
-// "Dar baixa" registra o recebimento e alimenta a meta de valor recebido do cobrador e o faturamento no painel do ADM.
+// Financeiro › Contas a Receber (carteira nova, SQLs 041/042). Todo recebimento é do Financeiro; a Cobrança só vê
+// a inadimplência. Um nome por linha (busca no servidor, 50 por vez); clicando no nome abre a ficha com as cobranças
+// da pessoa — cada uma com a conta (CA Beatriz / CA Diogo), as parcelas e os recebimentos. A baixa é dada lá:
+// pode ser parcial; o que passar do saldo é juros/multa; "quitar" fecha a parcela e o que faltar vira desconto.
+// O recebimento entra na meta de valor recebido do cobrador. Estornar e excluir: só o ADM.
 
-import { useMemo, useState } from 'react'
-import type { Registro } from '@/lib/erp/types'
-import { atualizarRegistro, baixarTitulo, criarRegistro, excluirRegistro, useErp, usePode } from '@/lib/erp/store'
-import { colecao, equipe, statusTitulo, tituloAtrasado } from '@/lib/erp/metrics'
+import { useEffect, useMemo, useState } from 'react'
+import { useErp, usePode, registrarRecebimento, estornarRecebimento, editarParcela, mudarSituacaoParcela, lancarCobranca, editarCobranca, excluirCobranca } from '@/lib/erp/store'
+import { colecao, equipe } from '@/lib/erp/metrics'
 import { brl, dataBR, hoje, mesAtual } from '@/lib/erp/format'
 import { exportarCSV } from '@/lib/erp/export'
-import {
-  ORDEM_SITUACAO,
-  TOM_SITUACAO,
-  agruparPorPessoa,
-  blocosPorVenda,
-  chaveNome,
-  chavePessoa,
-  ordemParcela,
-  ordenarPessoas,
-  pessoaNaBusca,
-  valorDe,
-  type Pessoa,
-  type SituacaoPessoa,
-} from '@/lib/erp/contas-receber'
+import { formatarDocumento } from '@/lib/erp/documento'
+import { buscarClientes, FILTRO_VAZIO, type Cliente } from '@/lib/erp/clientes'
+import { CONTAS_COBRANCA, CONTA_PADRAO, FORMAS_RECEBIMENTO, ORDEM_SITUACAO, TOM_SITUACAO, type CobrancaV, type PagamentoV, type ParcelaV } from '@/lib/erp/carteira'
+import { FILTRO_RECEBER, POR_PAGINA_CARTEIRA, buscarContasReceber, todasAsPaginas, useContasReceber, useFichaCarteira, useIndicadores, type FiltroReceber } from '@/lib/erp/cobrancas'
 import Icon from '@/components/erp/Icon'
-import { BuscaPessoas, CabecalhoVenda, DadosPessoa, Filtro, NomePessoa, Total } from '@/components/erp/ContasPessoa'
+import {
+  BuscaPessoas,
+  CabecalhoCobranca,
+  DadosCliente,
+  Filtro,
+  NomeCliente,
+  Paginacao,
+  SelecaoConta,
+  SeloConta,
+  Total,
+  dataOuTraco,
+  rotuloParcela,
+  situacaoParcela,
+  useAtrasado,
+} from '@/components/erp/ContasPessoa'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, btnBranco, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 
-const CAMPOS_FORM: { chave: string; label: string; tipo: 'texto' | 'moeda' | 'data' | 'cobrador'; obrigatorio?: boolean }[] = [
-  { chave: 'cliente', label: 'Responsável', tipo: 'texto', obrigatorio: true },
-  { chave: 'aluno', label: 'Aluno', tipo: 'texto' },
-  { chave: 'escola', label: 'Escola', tipo: 'texto' },
-  { chave: 'telefone', label: 'Telefone', tipo: 'texto' },
-  { chave: 'parcela', label: 'Parcela', tipo: 'texto' },
-  { chave: 'valor', label: 'Valor', tipo: 'moeda', obrigatorio: true },
-  { chave: 'vencimento', label: 'Vencimento', tipo: 'data', obrigatorio: true },
-  { chave: 'cobradorId', label: 'Cobrador', tipo: 'cobrador' },
-]
+const btnAcao = 'px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap transition-all text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20'
+const btnIcone = 'p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05] transition-all'
+const numero = (v: string) => Number(String(v).replace(',', '.')) || 0
+
+type Receber = { parcela: ParcelaV; cobranca: CobrancaV }
 
 export default function ContasReceber() {
-  const s = useErp()
   const podeFazer = usePode()
+  const [filtro, setFiltro] = useState<FiltroReceber>(FILTRO_RECEBER)
   const [busca, setBusca] = useState('')
-  const [filtro, setFiltro] = useState<SituacaoPessoa | ''>('')
-  const [aberta, setAberta] = useState<string | null>(null) // chave da pessoa com a ficha aberta
-  const [form, setForm] = useState<{ titulo: Registro | null; valores: Record<string, string> } | null>(null)
-  const [erroForm, setErroForm] = useState<string | null>(null)
-  const [salvando, setSalvando] = useState(false)
-  const [baixa, setBaixa] = useState<Registro | null>(null)
-  const [excluir, setExcluir] = useState<Registro | null>(null)
+  const termo = useAtrasado(busca)
+  const [pagina, setPagina] = useState(0)
+  const [aberta, setAberta] = useState<{ id: string; nome: string } | null>(null)
+  const [receber, setReceber] = useState<Receber | null>(null)
+  const [editar, setEditar] = useState<ParcelaV | null>(null)
+  const [estornar, setEstornar] = useState<PagamentoV | null>(null)
+  const [cancelar, setCancelar] = useState<ParcelaV | null>(null)
+  const [editarCob, setEditarCob] = useState<CobrancaV | null>(null)
+  const [excluirCob, setExcluirCob] = useState<CobrancaV | null>(null)
+  const [lancar, setLancar] = useState(false)
 
   const pCriar = podeFazer('financeiro', 'criar')
   const pEditar = podeFazer('financeiro', 'editar')
   const pExcluir = podeFazer('financeiro', 'excluir')
   const pExportar = podeFazer('financeiro', 'exportar')
 
-  const titulos = colecao(s, 'titulos')
-  const cobradores = equipe(s, 'cobranca')
-  const nomeCobrador = (id: string) => s.colaboradores.find((c) => c.id === id)?.nome ?? ''
+  const f = useMemo(() => ({ ...filtro, termo }), [filtro, termo])
+  const { linhas, total, erro, carregando } = useContasReceber(f, pagina)
+  const ind = useIndicadores(mesAtual())
+  const { ficha, carregando: carregandoFicha } = useFichaCarteira(aberta?.id ?? null)
 
-  const pessoas = useMemo(
-    () => agruparPorPessoa(colecao(s, 'titulos'), (id) => s.colaboradores.find((c) => c.id === id)?.nome ?? '').sort(ordenarPessoas),
-    [s],
-  )
-  const contagem = useMemo(() => {
-    const c = new Map<SituacaoPessoa, number>()
-    for (const p of pessoas) c.set(p.situacao, (c.get(p.situacao) ?? 0) + 1)
-    return c
-  }, [pessoas])
-  const visiveis = useMemo(() => pessoas.filter((p) => (!filtro || p.situacao === filtro) && pessoaNaBusca(p, busca)), [pessoas, busca, filtro])
-  const pessoa = aberta ? pessoas.find((p) => p.chave === aberta) : undefined
-
-  const soma = (f: (t: Registro) => boolean) => brl(titulos.filter(f).reduce((a, t) => a + valorDe(t), 0))
-
-  const abrirForm = (titulo: Registro | null) => {
-    const valores: Record<string, string> = {}
-    for (const c of CAMPOS_FORM) {
-      const v = titulo?.[c.chave]
-      valores[c.chave] = v === null || v === undefined ? '' : String(v)
-    }
-    if (!titulo) {
-      valores.parcela = '1/1'
-      valores.vencimento = hoje()
-      valores.cobradorId = cobradores[0]?.id ?? ''
-    }
-    setErroForm(null)
-    setForm({ titulo, valores })
+  const mudar = (x: Partial<FiltroReceber>) => {
+    setFiltro({ ...filtro, ...x })
+    setPagina(0)
   }
+  const todosClientes = ORDEM_SITUACAO.reduce((a, st) => a + (ind.clientesSituacao[st] ?? 0), 0)
 
-  const salvar = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form) return
-    const dados: Record<string, string | number> = {}
-    for (const c of CAMPOS_FORM) {
-      const v = (form.valores[c.chave] ?? '').trim()
-      dados[c.chave] = c.tipo === 'moeda' ? Number(v.replace(',', '.')) || 0 : v
-    }
-    setSalvando(true)
-    const erro = form.titulo
-      ? await atualizarRegistro('titulos', form.titulo.id, dados, 'financeiro')
-      : await criarRegistro('titulos', { ...dados, status: 'Aberto' }, 'financeiro')
-    setSalvando(false)
-    setErroForm(erro)
-    if (erro) return
-    // o nome mudou na edição: a ficha acompanha a pessoa nova (ou fecha, se era a única parcela)
-    if (form.titulo && aberta && chavePessoa(form.titulo) !== chaveNome(dados.cliente)) setAberta(chaveNome(dados.cliente))
-    setForm(null)
-  }
-
-  const exportar = () =>
+  const exportar = async () => {
+    const todos = await todasAsPaginas((p, n) => buscarContasReceber(f, p, n))
     exportarCSV(
       'contas-a-receber',
       [
-        { chave: 'cliente', label: 'Responsável' },
-        { chave: 'aluno', label: 'Aluno' },
-        { chave: 'escola', label: 'Escola' },
+        { chave: 'cliente', label: 'Cliente' },
+        { chave: 'documento', label: 'CPF/CNPJ' },
         { chave: 'telefone', label: 'Telefone' },
-        { chave: 'parcela', label: 'Parcela' },
-        { chave: 'valor', label: 'Valor' },
-        { chave: 'vencimento', label: 'Vencimento' },
+        { chave: 'cidade', label: 'Cidade' },
+        { chave: 'contas', label: 'Conta' },
+        { chave: 'referencias', label: 'Referências' },
+        { chave: 'parcelas', label: 'Parcelas pagas' },
+        { chave: 'emAberto', label: 'Em aberto' },
+        { chave: 'vencido', label: 'Em atraso' },
+        { chave: 'atualizado', label: 'Atraso com juros e multa' },
+        { chave: 'vencePrimeiro', label: 'Próximo vencimento' },
         { chave: 'situacao', label: 'Situação' },
-        { chave: 'pagoEm', label: 'Pago em' },
-        { chave: 'cobrador', label: 'Cobrador' },
       ],
-      visiveis.flatMap((p) =>
-        [...p.titulos].sort(ordemParcela).map((t) => ({
-          cliente: String(t.cliente ?? ''),
-          aluno: String(t.aluno ?? ''),
-          escola: String(t.escola ?? ''),
-          telefone: String(t.telefone ?? ''),
-          parcela: String(t.parcela ?? ''),
-          valor: brl(valorDe(t)),
-          vencimento: dataBR(String(t.vencimento ?? '')),
-          situacao: statusTitulo(t),
-          pagoEm: t.dataPagamento ? dataBR(String(t.dataPagamento)) : '',
-          cobrador: t.cobradorId ? nomeCobrador(String(t.cobradorId)) : '',
-        })),
-      ),
+      todos.map((c) => ({
+        ...c,
+        documento: c.documento ? formatarDocumento(c.documento) : '',
+        cidade: [c.cidade, c.uf].filter(Boolean).join('/'),
+        contas: c.contas.join(', '),
+        parcelas: `${c.parcelasPagas} de ${c.parcelas}`,
+        emAberto: brl(c.emAberto),
+        vencido: brl(c.vencido),
+        atualizado: brl(c.atualizado),
+        vencePrimeiro: c.vencePrimeiro ? dataBR(c.vencePrimeiro) : '',
+      })),
     )
+  }
 
   return (
     <div className="space-y-8 animate-fade-in-up">
       <PageHeader
         modulo="Financeiro / Contas a Receber"
         titulo="Contas a Receber"
-        descricao="Um nome por linha. Clique no nome para ver as informações e os boletos da pessoa e dar a baixa ao receber."
+        descricao="Um nome por linha. Clique no nome para ver as cobranças da pessoa (com a conta CA Beatriz ou CA Diogo), as parcelas e dar a baixa ao receber."
         acoes={
           pCriar && (
-            <button onClick={() => abrirForm(null)} className={btnBranco}>
-              <Icon nome="plus" className="w-5 h-5" /> Novo título
+            <button onClick={() => setLancar(true)} className={btnBranco}>
+              <Icon nome="plus" className="w-5 h-5" /> Lançar cobrança
             </button>
           )
         }
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-        <StatCard label="Em aberto" valor={soma((t) => t.status === 'Aberto')} />
-        <StatCard label="Em atraso" valor={soma(tituloAtrasado)} tom={titulos.some(tituloAtrasado) ? 'red' : 'zinc'} />
-        <StatCard label="Vence hoje" valor={soma((t) => t.status === 'Aberto' && t.vencimento === hoje())} tom={titulos.some((t) => t.status === 'Aberto' && t.vencimento === hoje()) ? 'yellow' : 'zinc'} />
-        <StatCard label="Recebido no mês" valor={soma((t) => t.status === 'Pago' && String(t.dataPagamento).startsWith(mesAtual()))} />
+        <StatCard label="Em aberto" valor={brl(ind.emAberto)} detalhe={`${ind.parcelasAbertas} parcela(s)`} />
+        <StatCard label="Em atraso" valor={brl(ind.emAtraso)} tom={ind.emAtraso ? 'red' : 'zinc'} detalhe={`${ind.parcelasVencidas} parcela(s) • com juros e multa ${brl(ind.atualizadoAtraso)}`} />
+        <StatCard label="Vence hoje" valor={brl(ind.venceHoje)} tom={ind.venceHoje ? 'yellow' : 'zinc'} />
+        <StatCard label="Recebido no mês" valor={brl(ind.recebidoMes)} detalhe={`Hoje: ${brl(ind.recebidoHoje)}`} />
       </div>
 
       <Panel
         semPadding
-        titulo={`Pessoas • ${visiveis.length}`}
+        titulo={`Pessoas • ${total}`}
         acoes={
           <>
-            <BuscaPessoas valor={busca} onChange={setBusca} rotulo="Pesquisar contas a receber" />
+            <BuscaPessoas
+              valor={busca}
+              onChange={(v) => {
+                setBusca(v)
+                setPagina(0)
+              }}
+              rotulo="Pesquisar contas a receber"
+            />
+            <SelecaoConta valor={filtro.conta} onChange={(conta) => mudar({ conta })} />
             {pExportar && (
-              <button onClick={exportar} className={btnSecundario} title="Exportar as parcelas da lista em CSV">
+              <button onClick={() => void exportar()} className={btnSecundario} title="Exportar a lista (com o filtro) em CSV">
                 <Icon nome="download" className="w-4 h-4" /> CSV
               </button>
             )}
@@ -178,22 +147,27 @@ export default function ContasReceber() {
         }
       >
         <div className="flex flex-wrap gap-2 px-5 py-4 border-b border-white/[0.05]">
-          <Filtro ativo={filtro === ''} onClick={() => setFiltro('')}>Todos ({pessoas.length})</Filtro>
-          {ORDEM_SITUACAO.filter((st) => contagem.get(st)).map((st) => (
-            <Filtro key={st} ativo={filtro === st} onClick={() => setFiltro(filtro === st ? '' : st)}>
-              {st} ({contagem.get(st)})
+          <Filtro ativo={filtro.situacao === ''} onClick={() => mudar({ situacao: '' })}>
+            Todos ({todosClientes})
+          </Filtro>
+          {ORDEM_SITUACAO.filter((st) => ind.clientesSituacao[st]).map((st) => (
+            <Filtro key={st} ativo={filtro.situacao === st} onClick={() => mudar({ situacao: filtro.situacao === st ? '' : st })}>
+              {st} ({ind.clientesSituacao[st]})
             </Filtro>
           ))}
         </div>
 
-        {visiveis.length === 0 ? (
-          <EmptyState titulo="Ninguém encontrado" descricao={busca || filtro ? 'Mude a pesquisa ou o filtro.' : 'Não há contas a receber.'} />
+        {erro ? (
+          <p className="p-6 text-sm font-bold text-red-400">{erro}</p>
+        ) : linhas.length === 0 && !carregando ? (
+          <EmptyState titulo="Ninguém encontrado" descricao={busca || filtro.situacao || filtro.conta ? 'Mude a pesquisa ou o filtro.' : 'Não há contas a receber.'} />
         ) : (
-          <div className="overflow-x-auto custom-scrollbar">
+          <div className={`overflow-x-auto custom-scrollbar transition-opacity ${carregando ? 'opacity-50' : ''}`}>
             <table className="w-full text-left text-sm text-zinc-300">
               <thead className="text-[10px] uppercase tracking-[0.15em] bg-white/[0.02] text-zinc-500 border-b border-white/[0.05]">
                 <tr>
-                  <th className="px-5 py-3 font-bold">Responsável</th>
+                  <th className="px-5 py-3 font-bold">Cliente</th>
+                  <th className="px-5 py-3 font-bold">Conta</th>
                   <th className="px-5 py-3 font-bold">Parcelas</th>
                   <th className="px-5 py-3 font-bold text-right">Em aberto</th>
                   <th className="px-5 py-3 font-bold text-right">Em atraso</th>
@@ -203,21 +177,28 @@ export default function ContasReceber() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.02]">
-                {visiveis.map((p) => (
-                  <tr key={p.chave} className="hover:bg-white/[0.02] cursor-pointer" onClick={() => setAberta(p.chave)}>
+                {linhas.map((c) => (
+                  <tr key={c.clienteId} className="hover:bg-white/[0.02] cursor-pointer" onClick={() => setAberta({ id: c.clienteId, nome: c.cliente })}>
                     <td className="px-5 py-3">
-                      <NomePessoa p={p} />
-                    </td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      {p.pagas} de {p.titulos.length} paga(s)
-                    </td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap font-bold text-white">{p.emAberto ? brl(p.emAberto) : <span className="text-zinc-600">—</span>}</td>
-                    <td className="px-5 py-3 text-right whitespace-nowrap font-bold">{p.emAtraso ? <span className="text-red-400">{brl(p.emAtraso)}</span> : <span className="text-zinc-600">—</span>}</td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      {p.proximo ? <span className={p.proximo < hoje() ? 'text-red-400 font-bold' : ''}>{dataBR(p.proximo)}</span> : <span className="text-zinc-600">—</span>}
+                      <NomeCliente nome={c.cliente} referencias={c.referencias} />
                     </td>
                     <td className="px-5 py-3">
-                      <Badge texto={p.situacao} tom={TOM_SITUACAO[p.situacao]} />
+                      <div className="flex flex-wrap gap-1">
+                        {c.contas.map((x) => (
+                          <SeloConta key={x} conta={x} />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      {c.parcelasPagas} de {c.parcelas} paga(s)
+                    </td>
+                    <td className="px-5 py-3 text-right whitespace-nowrap font-bold text-white">{c.emAberto ? brl(c.emAberto) : <span className="text-zinc-600">—</span>}</td>
+                    <td className="px-5 py-3 text-right whitespace-nowrap font-bold">{c.vencido ? <span className="text-red-400">{brl(c.vencido)}</span> : <span className="text-zinc-600">—</span>}</td>
+                    <td className="px-5 py-3 whitespace-nowrap">
+                      {c.vencePrimeiro ? <span className={c.vencePrimeiro < hoje() ? 'text-red-400 font-bold' : ''}>{dataBR(c.vencePrimeiro)}</span> : <span className="text-zinc-600">—</span>}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge texto={c.situacao} tom={TOM_SITUACAO[c.situacao]} />
                     </td>
                     <td className="px-5 py-3 text-right">
                       <span className="text-[10px] font-bold uppercase tracking-widest text-blue-400 whitespace-nowrap">Abrir →</span>
@@ -228,118 +209,93 @@ export default function ContasReceber() {
             </table>
           </div>
         )}
+        <Paginacao pagina={pagina} porPagina={POR_PAGINA_CARTEIRA} total={total} carregando={carregando} onMudar={setPagina} />
       </Panel>
 
       <Modal
-        aberto={!!pessoa}
-        titulo={pessoa?.nome ?? ''}
-        subtitulo={pessoa ? `Contas a receber • ${pessoa.titulos.length} parcela(s)` : ''}
+        aberto={!!aberta}
+        titulo={aberta?.nome ?? ''}
+        subtitulo={ficha && aberta ? `Contas a receber • ${ficha.cobrancas.length} cobrança(s)` : 'Carregando...'}
         onFechar={() => setAberta(null)}
-        largura="max-w-4xl"
+        largura="max-w-5xl"
         rodape={<button onClick={() => setAberta(null)} className={btnSecundario}>Fechar</button>}
       >
-        {pessoa && (
-          <FichaPessoa
-            p={pessoa}
-            vendas={colecao(s, 'vendas_ebooks')}
-            pBaixa={pEditar}
+        {!ficha || (carregandoFicha && ficha.cobrancas.length === 0) ? (
+          <p className="text-sm text-zinc-500">Carregando...</p>
+        ) : ficha.cobrancas.length === 0 ? (
+          <p className="text-sm text-zinc-500">Esta pessoa não tem mais cobranças.</p>
+        ) : (
+          <FichaReceber
+            cobrancas={ficha.cobrancas}
+            parcelas={ficha.parcelas}
+            pagamentos={ficha.pagamentos}
             pEditar={pEditar}
             pExcluir={pExcluir}
-            onBaixa={setBaixa}
-            onEditar={abrirForm}
-            onExcluir={setExcluir}
+            onReceber={setReceber}
+            onEditar={setEditar}
+            onCancelar={setCancelar}
+            onReabrir={(p) => void mudarSituacaoParcela(p.id, 'Aberta')}
+            onEstornar={setEstornar}
+            onEditarCobranca={setEditarCob}
+            onExcluirCobranca={setExcluirCob}
           />
         )}
       </Modal>
 
-      <Modal
-        aberto={!!form}
-        titulo={form?.titulo ? `Editar parcela ${String(form.titulo.parcela ?? '')}` : 'Novo título'}
-        subtitulo="Financeiro / Contas a Receber"
-        onFechar={() => setForm(null)}
-        rodape={
-          <>
-            <button onClick={() => setForm(null)} className={btnSecundario}>Cancelar</button>
-            <button form="form-titulo" type="submit" disabled={salvando} className={btnPrimario}>{salvando ? 'Salvando...' : 'Salvar'}</button>
-          </>
-        }
-      >
-        {form && (
-          <form id="form-titulo" onSubmit={salvar} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {CAMPOS_FORM.map((c) => (
-              <div key={c.chave} className="space-y-2">
-                <label className={labelCls}>
-                  {c.label} {c.obrigatorio && <span className="text-blue-500">*</span>}
-                </label>
-                {c.tipo === 'cobrador' ? (
-                  <select value={form.valores[c.chave] ?? ''} onChange={(e) => setForm({ ...form, valores: { ...form.valores, [c.chave]: e.target.value } })} className={`${inputCls} appearance-none`}>
-                    <option value="">—</option>
-                    {cobradores.map((co) => (
-                      <option key={co.id} value={co.id}>{co.nome}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={c.tipo === 'data' ? 'date' : c.tipo === 'moeda' ? 'number' : 'text'}
-                    step={c.tipo === 'moeda' ? '0.01' : undefined}
-                    min={c.tipo === 'moeda' ? 0 : undefined}
-                    required={c.obrigatorio}
-                    aria-label={c.label}
-                    value={form.valores[c.chave] ?? ''}
-                    onChange={(e) => setForm({ ...form, valores: { ...form.valores, [c.chave]: e.target.value } })}
-                    className={inputCls}
-                  />
-                )}
-              </div>
-            ))}
-            {erroForm && <p className="md:col-span-2 text-xs font-bold text-red-400">{erroForm}</p>}
-          </form>
-        )}
-      </Modal>
+      {receber && <ModalReceber r={receber} onFechar={() => setReceber(null)} />}
+      {editar && <ModalEditarParcela p={editar} onFechar={() => setEditar(null)} />}
+      {estornar && <ModalEstornar g={estornar} onFechar={() => setEstornar(null)} />}
+      {editarCob && <ModalEditarCobranca c={editarCob} onFechar={() => setEditarCob(null)} />}
+      {lancar && (
+        <ModalLancar
+          onFechar={(cliente) => {
+            setLancar(false)
+            if (cliente) setAberta(cliente)
+          }}
+        />
+      )}
 
       <Modal
-        aberto={!!baixa}
-        titulo="Dar baixa"
-        subtitulo="O recebimento entra na meta do cobrador e no faturamento"
-        onFechar={() => setBaixa(null)}
+        aberto={!!cancelar}
+        titulo="Cancelar parcela"
+        subtitulo="Ela sai do que falta receber (dá para reabrir depois)"
+        onFechar={() => setCancelar(null)}
         largura="max-w-md"
         rodape={
           <>
-            <button onClick={() => setBaixa(null)} className={btnSecundario}>Cancelar</button>
+            <button onClick={() => setCancelar(null)} className={btnSecundario}>Voltar</button>
             <button
               onClick={() => {
-                if (baixa) void baixarTitulo(baixa.id)
-                setBaixa(null)
+                if (cancelar) void mudarSituacaoParcela(cancelar.id, 'Cancelada')
+                setCancelar(null)
               }}
-              className={btnPrimario}
+              className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
             >
-              Confirmar baixa
+              Cancelar parcela
             </button>
           </>
         }
       >
-        {baixa && (
+        {cancelar && (
           <p className="text-sm text-zinc-300">
-            Confirmar o recebimento da parcela <strong className="text-white">{String(baixa.parcela)}</strong> de{' '}
-            <strong className="text-white">{String(baixa.cliente)}</strong>, no valor de <strong className="text-white">{brl(valorDe(baixa))}</strong> (vencimento{' '}
-            {dataBR(String(baixa.vencimento))})?
+            Cancelar a parcela <strong className="text-white">{rotuloParcela(cancelar.numero, cancelar.total)}</strong> de <strong className="text-white">{brl(cancelar.saldo)}</strong> (vencimento {dataBR(cancelar.vencimento)})?
           </p>
         )}
       </Modal>
 
       <Modal
-        aberto={!!excluir}
-        titulo="Confirmar exclusão"
+        aberto={!!excluirCob}
+        titulo="Excluir cobrança"
         subtitulo="Esta ação ficará registrada na auditoria"
-        onFechar={() => setExcluir(null)}
+        onFechar={() => setExcluirCob(null)}
         largura="max-w-md"
         rodape={
           <>
-            <button onClick={() => setExcluir(null)} className={btnSecundario}>Cancelar</button>
+            <button onClick={() => setExcluirCob(null)} className={btnSecundario}>Voltar</button>
             <button
               onClick={() => {
-                if (excluir) void excluirRegistro('titulos', excluir.id, 'financeiro')
-                setExcluir(null)
+                if (excluirCob) void excluirCobranca(excluirCob.id)
+                setExcluirCob(null)
               }}
               className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all"
             >
@@ -348,9 +304,10 @@ export default function ContasReceber() {
           </>
         }
       >
-        {excluir && (
+        {excluirCob && (
           <p className="text-sm text-zinc-300">
-            Excluir a parcela <strong className="text-white">{String(excluir.parcela)}</strong> de <strong className="text-white">{String(excluir.cliente)}</strong> ({brl(valorDe(excluir))})? Não é possível desfazer.
+            Excluir a cobrança <strong className="text-white">{excluirCob.referencia || excluirCob.origem}</strong> ({excluirCob.parcelas} parcela(s), {brl(excluirCob.valorTotal)}) de {excluirCob.cliente}? Se tiver recebimento,
+            estorne antes. Não é possível desfazer.
           </p>
         )}
       </Modal>
@@ -358,93 +315,516 @@ export default function ContasReceber() {
   )
 }
 
-function FichaPessoa({
-  p,
-  vendas,
-  pBaixa,
+function FichaReceber({
+  cobrancas,
+  parcelas,
+  pagamentos,
   pEditar,
   pExcluir,
-  onBaixa,
+  onReceber,
   onEditar,
-  onExcluir,
+  onCancelar,
+  onReabrir,
+  onEstornar,
+  onEditarCobranca,
+  onExcluirCobranca,
 }: {
-  p: Pessoa
-  vendas: Registro[]
-  pBaixa: boolean
+  cobrancas: CobrancaV[]
+  parcelas: ParcelaV[]
+  pagamentos: PagamentoV[]
   pEditar: boolean
   pExcluir: boolean
-  onBaixa: (t: Registro) => void
-  onEditar: (t: Registro) => void
-  onExcluir: (t: Registro) => void
+  onReceber: (r: Receber) => void
+  onEditar: (p: ParcelaV) => void
+  onCancelar: (p: ParcelaV) => void
+  onReabrir: (p: ParcelaV) => void
+  onEstornar: (g: PagamentoV) => void
+  onEditarCobranca: (c: CobrancaV) => void
+  onExcluirCobranca: (c: CobrancaV) => void
 }) {
+  const soma = (fn: (c: CobrancaV) => number) => cobrancas.reduce((a, c) => a + fn(c), 0)
+  // as que ainda têm o que receber primeiro; depois as quitadas
+  const lista = [...cobrancas].sort((a, b) => Number(b.parcelasAbertas > 0) - Number(a.parcelasAbertas > 0) || a.criadoEm.localeCompare(b.criadoEm))
   return (
     <div className="space-y-6">
-      <DadosPessoa p={p} />
-
+      <DadosCliente cobrancas={cobrancas} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Total rotulo="Total" valor={brl(p.total)} />
-        <Total rotulo="Recebido" valor={brl(p.recebido)} />
-        <Total rotulo="Em aberto" valor={brl(p.emAberto)} />
-        <Total rotulo="Em atraso" valor={brl(p.emAtraso)} tom="red" />
+        <Total rotulo="Total" valor={brl(soma((c) => c.valorTotal))} />
+        <Total rotulo="Recebido" valor={brl(soma((c) => c.recebido))} />
+        <Total rotulo="Em aberto" valor={brl(soma((c) => c.emAberto))} />
+        <Total rotulo="Em atraso (com juros e multa)" valor={brl(soma((c) => c.atualizado))} tom="red" />
       </div>
 
-      {blocosPorVenda(p.titulos, vendas).map(({ vendaId, ts, venda }) => (
-        <div key={vendaId || 'avulso'} className="rounded-2xl border border-white/[0.06] overflow-hidden">
-          <CabecalhoVenda vendaId={vendaId} venda={venda} ts={ts} />
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-sm text-zinc-300">
-              <thead className="text-[10px] uppercase tracking-[0.15em] text-zinc-500 border-b border-white/[0.05]">
-                <tr>
-                  <th className="px-4 py-2.5 font-bold">Parcela</th>
-                  <th className="px-4 py-2.5 font-bold">Vencimento</th>
-                  <th className="px-4 py-2.5 font-bold text-right">Valor</th>
-                  <th className="px-4 py-2.5 font-bold">Situação</th>
-                  <th className="px-4 py-2.5 font-bold">Pago em</th>
-                  <th className="px-4 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {ts.map((t) => {
-                  const st = statusTitulo(t)
+      {lista.map((c) => {
+        const ps = parcelas.filter((p) => p.cobrancaId === c.id).sort((a, b) => a.numero - b.numero || a.vencimento.localeCompare(b.vencimento))
+        const gs = pagamentos.filter((g) => g.cobrancaId === c.id).sort((a, b) => a.data.localeCompare(b.data) || a.criadoEm.localeCompare(b.criadoEm))
+        return (
+          <div key={c.id} className="rounded-2xl border border-white/[0.06] overflow-hidden">
+            <CabecalhoCobranca
+              c={c}
+              acoes={
+                <>
+                  {pEditar && (
+                    <button onClick={() => onEditarCobranca(c)} title="Trocar conta, categoria ou cobrador" className={btnIcone}>
+                      <Icon nome="edit" className="w-4 h-4" />
+                    </button>
+                  )}
+                  {pExcluir && (
+                    <button onClick={() => onExcluirCobranca(c)} title="Excluir cobrança" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                      <Icon nome="trash" className="w-4 h-4" />
+                    </button>
+                  )}
+                </>
+              }
+            />
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-sm text-zinc-300">
+                <thead className="text-[10px] uppercase tracking-[0.15em] text-zinc-500 border-b border-white/[0.05]">
+                  <tr>
+                    <th className="px-4 py-2.5 font-bold">Parcela</th>
+                    <th className="px-4 py-2.5 font-bold">Vencimento</th>
+                    <th className="px-4 py-2.5 font-bold text-right">Valor</th>
+                    <th className="px-4 py-2.5 font-bold text-right">A receber</th>
+                    <th className="px-4 py-2.5 font-bold">Situação</th>
+                    <th className="px-4 py-2.5 font-bold">Pago em</th>
+                    <th className="px-4 py-2.5"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.02]">
+                  {ps.map((p) => {
+                    const aberta = p.situacao === 'Aberta' || p.situacao === 'Parcial'
+                    return (
+                      <tr key={p.id}>
+                        <td className="px-4 py-2.5 font-bold text-white whitespace-nowrap">{rotuloParcela(p.numero, p.total)}</td>
+                        <td className={`px-4 py-2.5 whitespace-nowrap ${p.vencida ? 'text-red-400 font-bold' : ''}`}>{dataBR(p.vencimento)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">{brl(p.valor)}</td>
+                        <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                          {aberta ? (
+                            <>
+                              <span className="font-bold text-white">{brl(p.atualizado)}</span>
+                              {p.vencida && <p className="text-[10px] text-zinc-500">saldo {brl(p.saldo)} + multa {brl(p.multaDevida)} + juros {brl(p.juros)}</p>}
+                              {!p.vencida && p.baixado > 0 && <p className="text-[10px] text-zinc-500">já recebido {brl(p.baixado)}</p>}
+                            </>
+                          ) : (
+                            <span className="text-zinc-600">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <Badge texto={situacaoParcela(p)} />
+                        </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">{dataOuTraco(p.pagoEm)}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex justify-end items-center gap-1.5">
+                            {pEditar && aberta && (
+                              <button onClick={() => onReceber({ parcela: p, cobranca: c })} className={btnAcao}>
+                                Receber
+                              </button>
+                            )}
+                            {pEditar && p.situacao !== 'Paga' && (
+                              <button onClick={() => onEditar(p)} title="Editar parcela (valor, vencimento, multa)" className={btnIcone}>
+                                <Icon nome="edit" className="w-4 h-4" />
+                              </button>
+                            )}
+                            {pEditar && aberta && p.baixado === 0 && (
+                              <button onClick={() => onCancelar(p)} title="Cancelar parcela" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
+                                <Icon nome="x" className="w-4 h-4" />
+                              </button>
+                            )}
+                            {pEditar && p.situacao === 'Cancelada' && (
+                              <button onClick={() => onReabrir(p)} className={btnAcao}>
+                                Reabrir
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {gs.length > 0 && (
+              <div className="border-t border-white/[0.05] px-4 py-3 space-y-2">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Recebimentos</p>
+                {gs.map((g) => {
+                  const p = ps.find((x) => x.id === g.parcelaId)
+                  const partes = [g.encargos ? `juros/multa ${brl(g.encargos)}` : '', g.desconto ? `desconto ${brl(g.desconto)}` : '', g.observacao].filter(Boolean).join(' • ')
                   return (
-                    <tr key={t.id}>
-                      <td className="px-4 py-2.5 font-bold text-white whitespace-nowrap">{String(t.parcela ?? '—')}</td>
-                      <td className={`px-4 py-2.5 whitespace-nowrap ${st === 'Atrasado' ? 'text-red-400 font-bold' : ''}`}>{dataBR(String(t.vencimento ?? ''))}</td>
-                      <td className="px-4 py-2.5 text-right whitespace-nowrap font-bold text-white">{brl(valorDe(t))}</td>
-                      <td className="px-4 py-2.5">
-                        <Badge texto={st} />
-                      </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap">{t.dataPagamento ? dataBR(String(t.dataPagamento)) : <span className="text-zinc-600">—</span>}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex justify-end items-center gap-1.5">
-                          {pBaixa && t.status === 'Aberto' && (
-                            <button
-                              onClick={() => onBaixa(t)}
-                              className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap transition-all text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20"
-                            >
-                              Dar baixa
-                            </button>
-                          )}
-                          {pEditar && (
-                            <button onClick={() => onEditar(t)} title="Editar parcela" className="p-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05] transition-all">
-                              <Icon nome="edit" className="w-4 h-4" />
-                            </button>
-                          )}
-                          {pExcluir && (
-                            <button onClick={() => onExcluir(t)} title="Excluir parcela" className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
-                              <Icon nome="trash" className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    <div key={g.id} className={`flex flex-wrap items-center justify-between gap-2 text-xs ${g.estornadoEm ? 'opacity-50' : ''}`}>
+                      <span className="text-zinc-300">
+                        <strong className={`text-white ${g.estornadoEm ? 'line-through' : ''}`}>{brl(g.valor)}</strong> em {dataBR(g.data)} • {g.forma} • parcela {p ? rotuloParcela(p.numero, p.total) : '—'}
+                        {partes && <span className="text-zinc-500"> • {partes}</span>}
+                        <span className="text-zinc-500"> • por {g.registradoPorNome || '—'}</span>
+                        {g.estornadoEm && <span className="text-red-400 font-bold"> • estornado: {g.estornoMotivo}</span>}
+                      </span>
+                      {pExcluir && !g.estornadoEm && (
+                        <button onClick={() => onEstornar(g)} className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">
+                          Estornar
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
+
+function ModalReceber({ r, onFechar }: { r: Receber; onFechar: () => void }) {
+  const p = r.parcela
+  const [valor, setValor] = useState(String(p.atualizado.toFixed(2)))
+  const [data, setData] = useState(hoje())
+  const [forma, setForma] = useState('Boleto')
+  const [obs, setObs] = useState('')
+  const [quitar, setQuitar] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const v = numero(valor)
+  const resumo =
+    v >= p.saldo
+      ? `Fecha a parcela.${v > p.saldo ? ` ${brl(v - p.saldo)} ficam como juros e multa.` : ''}`
+      : quitar
+        ? `Fecha a parcela com desconto de ${brl(p.saldo - v)}.`
+        : `Recebimento parcial: fica faltando ${brl(p.saldo - v)} nesta parcela.`
+  const salvar = async () => {
+    setSalvando(true)
+    const erro = await registrarRecebimento(p.id, v, data, forma, obs, quitar)
+    setSalvando(false)
+    if (!erro) onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo={`Receber parcela ${rotuloParcela(p.numero, p.total)}`}
+      subtitulo={`${r.cobranca.cliente} • ${r.cobranca.conta}`}
+      onFechar={onFechar}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Cancelar</button>
+          <button onClick={() => void salvar()} disabled={salvando || v <= 0} className={btnPrimario}>{salvando ? 'Salvando...' : 'Confirmar recebimento'}</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+        <Total rotulo="Saldo" valor={brl(p.saldo)} />
+        <Total rotulo="Multa" valor={brl(p.multaDevida)} />
+        <Total rotulo="Juros" valor={brl(p.juros)} />
+        <Total rotulo="Atualizado" valor={brl(p.atualizado)} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className={labelCls}>Valor recebido *</label>
+          <input type="number" step="0.01" min={0} value={valor} onChange={(e) => setValor(e.target.value)} aria-label="Valor recebido" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Data do recebimento *</label>
+          <input type="date" value={data} max={hoje()} onChange={(e) => setData(e.target.value)} aria-label="Data do recebimento" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Forma</label>
+          <select value={forma} onChange={(e) => setForma(e.target.value)} aria-label="Forma" className={`${inputCls} appearance-none`}>
+            {FORMAS_RECEBIMENTO.map((x) => (
+              <option key={x} value={x}>{x}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Observação</label>
+          <input value={obs} onChange={(e) => setObs(e.target.value)} aria-label="Observação" className={inputCls} />
+        </div>
+      </div>
+      {v > 0 && v < p.saldo && (
+        <label className="flex items-start gap-3 text-sm text-zinc-300 cursor-pointer">
+          <input type="checkbox" checked={quitar} onChange={(e) => setQuitar(e.target.checked)} className="mt-1" aria-label="Quitar com desconto" />
+          <span>Quitar a parcela com este valor (o que faltar fica como desconto)</span>
+        </label>
+      )}
+      <p className="text-xs font-bold text-zinc-400">{v > 0 ? resumo : 'Informe o valor recebido.'} O valor entra na meta do cobrador.</p>
+    </Modal>
+  )
+}
+
+function ModalEditarParcela({ p, onFechar }: { p: ParcelaV; onFechar: () => void }) {
+  const [valor, setValor] = useState(String(p.valor))
+  const [vencimento, setVencimento] = useState(p.vencimento)
+  const [multa, setMulta] = useState(String(p.multa))
+  const [salvando, setSalvando] = useState(false)
+  const salvar = async () => {
+    setSalvando(true)
+    const erro = await editarParcela(p.id, { valor: numero(valor), vencimento, multa: numero(multa) })
+    setSalvando(false)
+    if (!erro) onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo={`Editar parcela ${rotuloParcela(p.numero, p.total)}`}
+      subtitulo="Financeiro / Contas a Receber"
+      onFechar={onFechar}
+      largura="max-w-lg"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Cancelar</button>
+          <button onClick={() => void salvar()} disabled={salvando} className={btnPrimario}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <label className={labelCls}>Valor *</label>
+          <input type="number" step="0.01" min={0} value={valor} onChange={(e) => setValor(e.target.value)} aria-label="Valor" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Vencimento *</label>
+          <input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} aria-label="Vencimento" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Multa (R$)</label>
+          <input type="number" step="0.01" min={0} value={multa} onChange={(e) => setMulta(e.target.value)} aria-label="Multa" className={inputCls} />
+        </div>
+      </div>
+      {p.baixado > 0 && <p className="text-xs text-zinc-500">Já recebido nesta parcela: {brl(p.baixado)} (o valor não pode ficar menor que isso).</p>}
+    </Modal>
+  )
+}
+
+function ModalEstornar({ g, onFechar }: { g: PagamentoV; onFechar: () => void }) {
+  const [motivo, setMotivo] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const salvar = async () => {
+    setSalvando(true)
+    const erro = await estornarRecebimento(g.id, motivo)
+    setSalvando(false)
+    if (!erro) onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo="Estornar recebimento"
+      subtitulo="A parcela volta a ficar em aberto e o valor sai da meta do cobrador"
+      onFechar={onFechar}
+      largura="max-w-md"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Voltar</button>
+          <button
+            onClick={() => void salvar()}
+            disabled={salvando || !motivo.trim()}
+            className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all disabled:opacity-40"
+          >
+            Estornar
+          </button>
+        </>
+      }
+    >
+      <p className="text-sm text-zinc-300">
+        Estornar o recebimento de <strong className="text-white">{brl(g.valor)}</strong> de {dataBR(g.data)} ({g.forma})?
+      </p>
+      <div className="space-y-2">
+        <label className={labelCls}>Motivo *</label>
+        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} aria-label="Motivo do estorno" className={inputCls} placeholder="Ex.: baixa lançada na parcela errada" />
+      </div>
+    </Modal>
+  )
+}
+
+function ModalEditarCobranca({ c, onFechar }: { c: CobrancaV; onFechar: () => void }) {
+  const s = useErp()
+  const categorias = colecao(s, 'cobranca_categorias').filter((x) => x.ativa !== false || x.id === c.categoriaId)
+  const cobradores = equipe(s, 'cobranca')
+  const [x, setX] = useState({ categoriaId: c.categoriaId, cobradorId: c.cobradorId, conta: c.conta || CONTA_PADRAO, referencia: c.referencia, observacao: c.observacao })
+  const [salvando, setSalvando] = useState(false)
+  const salvar = async () => {
+    setSalvando(true)
+    const erro = await editarCobranca(c.id, x)
+    setSalvando(false)
+    if (!erro) onFechar()
+  }
+  return (
+    <Modal
+      aberto
+      titulo="Editar cobrança"
+      subtitulo={`${c.cliente} • a troca de categoria fica no histórico`}
+      onFechar={onFechar}
+      largura="max-w-xl"
+      rodape={
+        <>
+          <button onClick={onFechar} className={btnSecundario}>Cancelar</button>
+          <button onClick={() => void salvar()} disabled={salvando} className={btnPrimario}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className={labelCls}>Conta *</label>
+          <select value={x.conta} onChange={(e) => setX({ ...x, conta: e.target.value })} aria-label="Conta" className={`${inputCls} appearance-none`}>
+            {CONTAS_COBRANCA.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Cobrador</label>
+          <select value={x.cobradorId} onChange={(e) => setX({ ...x, cobradorId: e.target.value })} aria-label="Cobrador" className={`${inputCls} appearance-none`}>
+            <option value="">—</option>
+            {cobradores.map((co) => (
+              <option key={co.id} value={co.id}>{co.nome}</option>
+            ))}
+            {x.cobradorId && !cobradores.some((co) => co.id === x.cobradorId) && <option value={x.cobradorId}>{c.cobrador || 'Outro'}</option>}
+          </select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <label className={labelCls}>Categoria *</label>
+          <select value={x.categoriaId} onChange={(e) => setX({ ...x, categoriaId: e.target.value })} aria-label="Categoria" className={`${inputCls} appearance-none`}>
+            {categorias.map((k) => (
+              <option key={k.id} value={k.id}>{String(k.nome)} ({String(k.grupo)})</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <label className={labelCls}>Referência (aluno, escola...)</label>
+          <input value={x.referencia} onChange={(e) => setX({ ...x, referencia: e.target.value })} aria-label="Referência" className={inputCls} />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <label className={labelCls}>Observação</label>
+          <input value={x.observacao} onChange={(e) => setX({ ...x, observacao: e.target.value })} aria-label="Observação" className={inputCls} />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ModalLancar({ onFechar }: { onFechar: (cliente?: { id: string; nome: string }) => void }) {
+  const s = useErp()
+  const categorias = colecao(s, 'cobranca_categorias').filter((x) => x.ativa !== false)
+  const cobradores = equipe(s, 'cobranca')
+  const padrao = categorias.find((x) => x.nome === 'Receita de Recordação Escolar') ?? categorias.find((x) => x.grupo === 'Cobrança DLG') ?? categorias[0]
+  const [cliente, setCliente] = useState<Cliente | null>(null)
+  const [termo, setTermo] = useState('')
+  const termoAtrasado = useAtrasado(termo)
+  const [opcoes, setOpcoes] = useState<{ termo: string; lista: Cliente[] }>({ termo: '', lista: [] })
+  const [x, setX] = useState({ categoriaId: padrao?.id ?? '', cobradorId: '', conta: CONTA_PADRAO as string, referencia: '', valor: '', parcelas: '1', primeiroVencimento: hoje(), observacao: '' })
+  const [salvando, setSalvando] = useState(false)
+
+  // procura o cliente no cadastro (no servidor) enquanto digita
+  useEffect(() => {
+    if (cliente || termoAtrasado.trim().length < 2) return
+    let vale = true
+    void buscarClientes({ ...FILTRO_VAZIO, termo: termoAtrasado }, 0).then((r) => {
+      if (vale) setOpcoes({ termo: termoAtrasado, lista: r.linhas.slice(0, 8) })
+    })
+    return () => {
+      vale = false
+    }
+  }, [termoAtrasado, cliente])
+
+  const salvar = async () => {
+    if (!cliente) return
+    setSalvando(true)
+    const erro = await lancarCobranca({ ...x, clienteId: cliente.id, valor: numero(x.valor), parcelas: Number(x.parcelas) || 0 })
+    setSalvando(false)
+    if (!erro) onFechar({ id: cliente.id, nome: cliente.nome })
+  }
+  return (
+    <Modal
+      aberto
+      titulo="Lançar cobrança"
+      subtitulo="Financeiro / Contas a Receber • o valor é dividido em parcelas, todo mês"
+      onFechar={() => onFechar()}
+      largura="max-w-2xl"
+      rodape={
+        <>
+          <button onClick={() => onFechar()} className={btnSecundario}>Cancelar</button>
+          <button onClick={() => void salvar()} disabled={salvando || !cliente} className={btnPrimario}>{salvando ? 'Salvando...' : 'Lançar'}</button>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <label className={labelCls}>Cliente *</label>
+        {cliente ? (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] px-4 py-3">
+            <span className="text-sm text-white font-bold">
+              {cliente.nome} {cliente.documento && <span className="text-zinc-500 font-normal">• {formatarDocumento(cliente.documento)}</span>}
+            </span>
+            <button onClick={() => setCliente(null)} className="text-[10px] font-bold uppercase tracking-widest text-blue-400">Trocar</button>
+          </div>
+        ) : (
+          <>
+            <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Nome, CPF/CNPJ ou telefone do cadastro de clientes" aria-label="Procurar cliente" className={inputCls} />
+            {termoAtrasado.trim().length >= 2 && opcoes.termo === termoAtrasado && (
+              <div className="rounded-xl border border-white/[0.08] divide-y divide-white/[0.04] max-h-56 overflow-y-auto custom-scrollbar">
+                {opcoes.lista.length === 0 ? (
+                  <p className="px-4 py-3 text-xs text-zinc-500">Nenhum cliente encontrado. Cadastre em Financeiro › Clientes.</p>
+                ) : (
+                  opcoes.lista.map((c) => (
+                    <button key={c.id} onClick={() => setCliente(c)} className="w-full text-left px-4 py-2.5 hover:bg-white/[0.04] text-sm text-zinc-200">
+                      <strong className="text-white">{c.nome}</strong>
+                      <span className="text-zinc-500"> {[c.documento ? formatarDocumento(c.documento) : '', [c.cidade, c.uf].filter(Boolean).join('/')].filter(Boolean).join(' • ')}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className={labelCls}>Conta *</label>
+          <select value={x.conta} onChange={(e) => setX({ ...x, conta: e.target.value })} aria-label="Conta" className={`${inputCls} appearance-none`}>
+            {CONTAS_COBRANCA.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Categoria *</label>
+          <select value={x.categoriaId} onChange={(e) => setX({ ...x, categoriaId: e.target.value })} aria-label="Categoria" className={`${inputCls} appearance-none`}>
+            {categorias.map((k) => (
+              <option key={k.id} value={k.id}>{String(k.nome)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Valor total *</label>
+          <input type="number" step="0.01" min={0} value={x.valor} onChange={(e) => setX({ ...x, valor: e.target.value })} aria-label="Valor total" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Parcelas *</label>
+          <input type="number" min={1} max={120} value={x.parcelas} onChange={(e) => setX({ ...x, parcelas: e.target.value })} aria-label="Parcelas" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>1º vencimento *</label>
+          <input type="date" value={x.primeiroVencimento} onChange={(e) => setX({ ...x, primeiroVencimento: e.target.value })} aria-label="1º vencimento" className={inputCls} />
+        </div>
+        <div className="space-y-2">
+          <label className={labelCls}>Cobrador</label>
+          <select value={x.cobradorId} onChange={(e) => setX({ ...x, cobradorId: e.target.value })} aria-label="Cobrador" className={`${inputCls} appearance-none`}>
+            <option value="">—</option>
+            {cobradores.map((co) => (
+              <option key={co.id} value={co.id}>{co.nome}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <label className={labelCls}>Referência (aluno, escola...)</label>
+          <input value={x.referencia} onChange={(e) => setX({ ...x, referencia: e.target.value })} aria-label="Referência" className={inputCls} />
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <label className={labelCls}>Observação</label>
+          <input value={x.observacao} onChange={(e) => setX({ ...x, observacao: e.target.value })} aria-label="Observação" className={inputCls} />
+        </div>
+      </div>
+      {numero(x.valor) > 0 && Number(x.parcelas) >= 1 && (
+        <p className="text-xs font-bold text-zinc-400">
+          {x.parcelas}x de {brl(numero(x.valor) / Number(x.parcelas))}, a partir de {dataBR(x.primeiroVencimento)}.
+        </p>
+      )}
+    </Modal>
+  )
+}
+

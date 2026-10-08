@@ -36,7 +36,7 @@ const AMARELO = [
   'aguardando fotos', 'aguardando envio editor', 'analise de qualidade', 'conferencia final', 'aguardando revelacao',
   'aguardando conferencia', 'em venda',
   // Financeiro, Cobrança, Rebolo e Gerência
-  'a pagar', 'aguardando aprovacao', 'aberto', 'em aberto', 'em acordo', 'faltando', 'aguardando contrato', 'aguardando contato',
+  'a pagar', 'aguardando aprovacao', 'aberto', 'aberta', 'parcial', 'em aberto', 'em acordo', 'faltando', 'aguardando contrato', 'aguardando contato',
   'tentar de novo', 'em negociacao', 'agendado', 'venda a efetivar', 'sem sucesso',
   // Vendas
   'novo', 'contato feito', 'visita agendada', 'proposta', 'negociacao', 'em agendamento',

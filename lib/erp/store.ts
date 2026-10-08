@@ -24,6 +24,7 @@ import { chaveCustoVariavel } from './operacoes-financeiro'
 import { fotografosDaEscola, type AcaoLote, type DadosAcaoLote, type EtapaLote, type FotografoDaEscola } from './producao'
 import type { AtividadeEquipe } from './gerente'
 import { regrasCobranca, tipoEscritorioDoGrupo, validarRegrasCobranca } from './cobranca-config'
+import { carteiraMudou } from './carteira-versao'
 import { supabaseConfigurado } from '@/lib/supabase/config'
 import { sb } from '@/lib/supabase/client'
 
@@ -609,12 +610,6 @@ export async function excluirRegistro(nome: string, id: string, setor: Setor | '
 
 // ---------------- Ações de fluxo (no Supabase, os triggers fazem o resto) ----------------
 
-export function baixarTitulo(id: string) {
-  if (MODO === 'supabase') return gravar(() => sb().from('titulos').update({ status: 'Pago' }).eq('id', id), 'Baixa registrada.')
-  mutar((d, ctx) => F.baixarTitulo(d, id, ctx))
-  return Promise.resolve(null)
-}
-
 export function pagarConta(nome: 'contas_pagar' | 'comissoes', id: string) {
   if (MODO === 'supabase') return gravar(() => sb().from(nome).update({ status: 'Pago' }).eq('id', id), 'Pagamento registrado.')
   mutar((d, ctx) => F.pagarConta(d, nome, id, ctx))
@@ -638,29 +633,102 @@ export function avancarOrdem(id: string) {
   return Promise.resolve(null)
 }
 
-export function negociarTitulo(id: string, parcelas: number) {
-  if (MODO === 'supabase') {
-    const t = F.col(carregar(), 'titulos').find((x) => x.id === id)
-    if (!t) return Promise.resolve(null)
-    return gravar(
+// ---------------- Carteira de cobranças (SQL 041/042) ----------------
+// Recebimento e lançamento são do Financeiro; negociar é da Cobrança; estornar e excluir, do ADM.
+// A carteira não vem na carga geral: depois de gravar, as telas dela buscam de novo (carteiraMudou).
+
+async function gravarCarteira(op: () => Resposta, sucesso: string): Promise<string | null> {
+  const erro = await gravar(op, sucesso)
+  if (!erro) carteiraMudou()
+  return erro
+}
+
+function mutarCarteira(fn: (d: ErpState, ctx: F.Contexto) => string | null, sucesso: string): Promise<string | null> {
+  let erro: string | null = null
+  mutar((d, ctx) => {
+    erro = fn(d, ctx)
+  })
+  avisar(erro ?? sucesso, erro ? 'erro' : 'ok')
+  if (!erro) carteiraMudou()
+  return Promise.resolve(erro)
+}
+
+export function registrarRecebimento(parcelaId: string, valor: number, data: string, forma: string, observacao: string, quitar: boolean) {
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () => sb().rpc('registrar_pagamento_parcela', { p_parcela: parcelaId, p_valor: valor, p_data: data, p_forma: forma, p_observacao: observacao || null, p_quitar: quitar }),
+      'Recebimento registrado.',
+    )
+  return mutarCarteira((d, ctx) => F.registrarPagamentoParcela(d, parcelaId, valor, data, forma, observacao, quitar, ctx), 'Recebimento registrado.')
+}
+
+export function estornarRecebimento(pagamentoId: string, motivo: string) {
+  if (MODO === 'supabase') return gravarCarteira(() => sb().rpc('estornar_pagamento_parcela', { p_pagamento: pagamentoId, p_motivo: motivo }), 'Recebimento estornado.')
+  return mutarCarteira((d, ctx) => F.estornarPagamentoParcela(d, pagamentoId, motivo, ctx), 'Recebimento estornado.')
+}
+
+export function editarParcela(id: string, dados: { valor: number; vencimento: string; multa: number }) {
+  if (MODO === 'supabase') return gravarCarteira(() => sb().from('cobranca_parcelas').update(dados).eq('id', id), 'Parcela alterada.')
+  return mutarCarteira((d, ctx) => F.editarParcela(d, id, dados, ctx), 'Parcela alterada.')
+}
+
+export function mudarSituacaoParcela(id: string, situacao: 'Cancelada' | 'Aberta') {
+  const msg = situacao === 'Cancelada' ? 'Parcela cancelada.' : 'Parcela reaberta.'
+  if (MODO === 'supabase') return gravarCarteira(() => sb().from('cobranca_parcelas').update({ situacao }).eq('id', id), msg)
+  return mutarCarteira((d, ctx) => F.mudarSituacaoParcela(d, id, situacao, ctx), msg)
+}
+
+export function lancarCobranca(x: F.DadosLancarCobranca) {
+  const erro = F.conferirLancamentoCobranca(carregar(), x)
+  if (erro) {
+    avisar(erro)
+    return Promise.resolve(erro)
+  }
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () =>
+        sb().rpc('lancar_cobranca', {
+          p_cliente: x.clienteId, p_categoria: x.categoriaId, p_cobrador: x.cobradorId || null, p_referencia: x.referencia, p_valor: x.valor,
+          p_parcelas: x.parcelas, p_primeiro_vencimento: x.primeiroVencimento, p_observacao: x.observacao || null, p_conta: x.conta,
+        }),
+      'Cobrança lançada.',
+    )
+  return mutarCarteira((d, ctx) => F.lancarCobranca(d, x, ctx), 'Cobrança lançada.')
+}
+
+export function editarCobranca(id: string, x: F.DadosEditarCobranca) {
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () =>
+        sb()
+          .from('cobrancas')
+          .update({ categoria_id: x.categoriaId, cobrador_id: x.cobradorId || null, conta: x.conta, referencia: x.referencia.trim() || null, observacao: x.observacao.trim() || null })
+          .eq('id', id),
+      'Cobrança alterada.',
+    )
+  return mutarCarteira((d, ctx) => F.editarCobranca(d, id, x, ctx), 'Cobrança alterada.')
+}
+
+export function excluirCobranca(id: string) {
+  if (MODO === 'supabase') return gravarCarteira(() => sb().from('cobrancas').delete().eq('id', id), 'Cobrança excluída.')
+  return mutarCarteira((d, ctx) => F.excluirCobranca(d, id, ctx), 'Cobrança excluída.')
+}
+
+// a Cobrança negocia: as parcelas vencidas ficam "Em acordo" e o acordo vai para a aprovação do ADM
+export function negociarCobranca(c: { id: string; cliente: string; telefone: string; vencido: number; atualizado: number }, parcelas: number) {
+  const msg = 'Acordo gerado e enviado para a aprovação do ADM.'
+  if (MODO === 'supabase')
+    return gravarCarteira(
       () =>
         sb()
           .from('acordos')
           .insert({
-            cliente: t.cliente,
-            escola: t.escola || null,
-            telefone: t.telefone || null,
-            titulo_id: t.id,
-            valor_original: Number(t.valor) || 0,
-            valor_acordo: Number(t.valor) || 0,
-            parcelas,
+            cliente: c.cliente, telefone: c.telefone || null, cobranca_id: c.id, valor_original: c.vencido, valor_acordo: c.atualizado, parcelas,
             primeiro_vencimento: addDias(hoje(), 7),
           }),
-      'Acordo gerado e enviado para aprovação da Gerência.',
+      msg,
     )
-  }
-  mutar((d, ctx) => F.negociarTitulo(d, id, parcelas, ctx))
-  return Promise.resolve(null)
+  return mutarCarteira((d, ctx) => F.negociarCobranca(d, c.id, parcelas, ctx), msg)
 }
 
 // ---------------- Processo operacional (contratos de escola → agenda → fechamento) ----------------

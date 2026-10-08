@@ -11,7 +11,6 @@ import {
   atualizarVendaRebolo,
   criarCarga,
   enviarRebolo,
-  baixarTitulo,
   col,
   conferirVendaBook,
   criarLoteProducao,
@@ -21,7 +20,9 @@ import {
   inserir,
   corDaCidadeDemo,
   lancar,
-  negociarTitulo,
+  lancarCobranca,
+  negociarCobranca,
+  registrarPagamentoParcela,
   pagarConta,
   registrarContatoRebolo,
   registrarHistoricoVisita,
@@ -33,7 +34,7 @@ import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 import { REGRAS_COBRANCA } from './cobranca-config'
 
-export const VERSAO_DADOS = 19 // v19: configurações da cobrança (regras, categorias e escritórios de exemplo)
+export const VERSAO_DADOS = 20 // v20: carteira de cobranças (as vendas geram cobrança + parcelas; contas CA Beatriz / CA Diogo)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -299,7 +300,28 @@ export function gerarSeed(): ErpState {
   })
   inserir(s, 'tarefas_operacionais', { titulo: 'Revisão do Carro 01', escola: '—', cidade: '—', responsavelId: 'u-op2', prioridade: 'Média', prazo: addDias(hojeISO, 3), status: 'Pendente', contratoId: '' })
 
-  // ---- Cobrança: vendas de e-books aos pais → títulos + comissões ----
+  s.colecoes.clientes = clientesDemo(gerador(20261007)).map((c, i) => ({ ...c, id: `cli-${i + 1}`, criadoEm: criado }) as Registro)
+  // Cobrança › Configurações (demo do SQL 039): as regras com os valores do manual + categorias e escritórios de EXEMPLO
+  // (os reais entram pelo arquivo de importação, fora do Git)
+  s.colecoes.cobranca_regras = REGRAS_COBRANCA.map((r, i) => ({ id: `rg-${i + 1}`, chave: r.chave, valor: r.padrao, atualizadoPor: '', criadoEm: criado }) as Registro)
+  s.colecoes.cobranca_regras_historico = []
+  s.colecoes.cobranca_escritorios = [
+    { id: 'esc-1', nome: 'Cobranças Alfa (exemplo)', tipo: 'Terceirizada', contato: 'Atendimento', telefone: '(44) 3000-0000', email: 'contato@exemplo.com', observacao: '', ativo: true, criadoEm: criado },
+    { id: 'esc-2', nome: 'Advocacia Exemplo', tipo: 'Advogado', contato: 'Escritório', telefone: '', email: '', observacao: 'Cobrança judicial', ativo: true, criadoEm: criado },
+  ] as Registro[]
+  const cat = (id: string, nome: string, grupo: string, inad: boolean, spc: boolean, antigos: string[], escritorioId = '') =>
+    ({ id, nome, grupo, contaInadimplencia: inad, podeSpc: spc, escritorioId, nomesAntigos: JSON.stringify(antigos), ativa: true, observacao: '', criadoEm: criado }) as Registro
+  s.colecoes.cobranca_categorias = [
+    cat('cat-1', 'Receita de Recordação Escolar', 'Cobrança DLG', true, true, ['RECEITA DE RECORDAÇÃO ESCOLAR', 'RECEITA RECORDAÇÃO ESCOLAR']),
+    cat('cat-3', 'Receita de Vendas Online (Rebolo)', 'Cobrança DLG', true, true, ['RECEITA DE VENDAS ONLINE (REBOLO)']),
+    cat('cat-4', 'Registro SPC', 'Registro SPC', true, true, ['REGISTRO SPC', 'SPC']),
+    cat('cat-5', 'Cobranças Alfa – Terceirizada (exemplo)', 'Terceirizada', false, false, ['COBRANÇAS ALFA - TERCEIRIZADA'], 'esc-1'),
+    cat('cat-6', 'Advocacia Exemplo', 'Advogado', false, false, ['ADVOCACIA EXEMPLO'], 'esc-2'),
+    cat('cat-7', 'Clientes enviados para fundo perdido', 'Fundo perdido', false, false, ['CLIENTES ENVIADOS PARA FUNDO PERDIDO']),
+    cat('cat-8', 'Receita de empréstimos bancários', 'Fora da cobrança', false, false, ['RECEITA DE EMPRÉSTIMOS BANCÁRIOS']),
+  ]
+
+  // ---- Cobrança: vendas de e-books aos pais → cobrança + parcelas na carteira ----
   const pais: [string, string, string, number, number, string, number][] = [
     ['Fernanda Oliveira', 'Pedro', 'PROJETO ESPAÇO CRIANÇA', 189.9, 3, 'u-re1', -58],
     ['João Batista', 'Laura', 'PROJETO ESPAÇO CRIANÇA', 89.9, 1, 'u-re2', -40],
@@ -316,14 +338,28 @@ export function gerarSeed(): ErpState {
     APOS_CRIAR.vendas_ebooks(s, venda, ctx)
   }
   s.lancamentos = s.lancamentos.filter((l) => l.origem !== 'automatico')
-  // Paga a maior parte dos títulos vencidos, deixa alguns em atraso (inadimplência)
-  const titulos = col(s, 'titulos')
-  titulos.forEach((t, i) => {
-    if (String(t.vencimento) < hojeISO && i % 4 !== 1) baixarTitulo(s, t.id, ctx, String(t.vencimento))
+  // O Financeiro recebe a maior parte das parcelas vencidas; algumas ficam em atraso (inadimplência)
+  const ctxReceber: Contexto = { ...ctx, autorId: 'u-fi1', autorNome: 'Eduardo Nunes', autorSetor: 'financeiro' }
+  col(s, 'cobranca_parcelas').forEach((p, i) => {
+    if (p.situacao === 'Aberta' && String(p.vencimento) < hojeISO && i % 4 !== 1) registrarPagamentoParcela(s, p.id, Number(p.valor), String(p.vencimento), 'Boleto', '', false, ctxReceber)
   })
+  // Dívidas antigas (como as da migração): na CA Diogo (a conta congelada) e na CA Beatriz, em várias carteiras
+  ;(
+    [
+      ['cli-3', 'cat-1', 'CA Diogo', 'Recordação 2025 • ESCOLA MUNICIPAL SOL NASCENTE', 600, 6, -200, 'u-co1'],
+      ['cli-8', 'cat-4', 'CA Diogo', 'Recordação 2024 • CMEI PEQUENO PRÍNCIPE', 480, 4, -150, 'u-co2'],
+      ['cli-12', 'cat-1', 'CA Diogo', 'Recordação 2023 • PROJETO ESPAÇO CRIANÇA', 900, 6, -900, 'u-co1'],
+      ['cli-17', 'cat-5', 'CA Diogo', 'Recordação 2023 • COLÉGIO DOM ATHAMAZIO MERKLE', 750, 5, -1000, ''],
+      ['cli-21', 'cat-1', 'CA Beatriz', 'Recordação 2026 • SANTA TEREZINHA C M E I', 360, 3, -95, 'u-co2'],
+      ['cli-26', 'cat-1', 'CA Beatriz', 'Recordação 2026 • MARIA MAYSRE M PESSUTI EF', 300, 3, -20, 'u-co1'],
+    ] as [string, string, string, string, number, number, number, string][]
+  ).forEach(([clienteId, categoriaId, conta, referencia, valor, parcelas, dias, cobradorId]) =>
+    lancarCobranca(s, { clienteId, categoriaId, cobradorId, conta, referencia, valor, parcelas, primeiroVencimento: addDias(hojeISO, dias), observacao: '' }, ctxReceber),
+  )
   s.lancamentos = s.lancamentos.filter((l) => l.origem !== 'automatico')
-  const atrasado = titulos.find((t) => t.status === 'Aberto' && String(t.vencimento) < hojeISO)
-  if (atrasado) negociarTitulo(s, atrasado.id, 3, ctx)
+  // um acordo esperando a aprovação do ADM (a Cobrança negociou a dívida da CMEI PEQUENO PRÍNCIPE)
+  const paraNegociar = col(s, 'cobrancas').find((c) => c.clienteId === 'cli-8')
+  if (paraNegociar) negociarCobranca(s, paraNegociar.id, 3, { ...ctx, autorId: 'u-co2', autorNome: 'Renata Alves', autorSetor: 'cobranca' })
 
   // ---- Financeiro ----
   ;[
@@ -874,25 +910,5 @@ export function gerarSeed(): ErpState {
     link: '',
     lidaPor: [],
   })
-  s.colecoes.clientes = clientesDemo(gerador(20261007)).map((c, i) => ({ ...c, id: `cli-${i + 1}`, criadoEm: criado }) as Registro)
-  // Cobrança › Configurações (demo do SQL 039): as regras com os valores do manual + categorias e escritórios de EXEMPLO
-  // (os reais entram pelo arquivo de importação, fora do Git)
-  s.colecoes.cobranca_regras = REGRAS_COBRANCA.map((r, i) => ({ id: `rg-${i + 1}`, chave: r.chave, valor: r.padrao, atualizadoPor: '', criadoEm: criado }) as Registro)
-  s.colecoes.cobranca_regras_historico = []
-  s.colecoes.cobranca_escritorios = [
-    { id: 'esc-1', nome: 'Cobranças Alfa (exemplo)', tipo: 'Terceirizada', contato: 'Atendimento', telefone: '(44) 3000-0000', email: 'contato@exemplo.com', observacao: '', ativo: true, criadoEm: criado },
-    { id: 'esc-2', nome: 'Advocacia Exemplo', tipo: 'Advogado', contato: 'Escritório', telefone: '', email: '', observacao: 'Cobrança judicial', ativo: true, criadoEm: criado },
-  ] as Registro[]
-  const cat = (id: string, nome: string, grupo: string, inad: boolean, spc: boolean, antigos: string[], escritorioId = '') =>
-    ({ id, nome, grupo, contaInadimplencia: inad, podeSpc: spc, escritorioId, nomesAntigos: JSON.stringify(antigos), ativa: true, observacao: '', criadoEm: criado }) as Registro
-  s.colecoes.cobranca_categorias = [
-    cat('cat-1', 'Receita de Recordação Escolar', 'Cobrança DLG', true, true, ['RECEITA DE RECORDAÇÃO ESCOLAR', 'RECEITA RECORDAÇÃO ESCOLAR']),
-    cat('cat-3', 'Receita de Vendas Online (Rebolo)', 'Cobrança DLG', true, true, ['RECEITA DE VENDAS ONLINE (REBOLO)']),
-    cat('cat-4', 'Registro SPC', 'Registro SPC', true, true, ['REGISTRO SPC', 'SPC']),
-    cat('cat-5', 'Cobranças Alfa – Terceirizada (exemplo)', 'Terceirizada', false, false, ['COBRANÇAS ALFA - TERCEIRIZADA'], 'esc-1'),
-    cat('cat-6', 'Advocacia Exemplo', 'Advogado', false, false, ['ADVOCACIA EXEMPLO'], 'esc-2'),
-    cat('cat-7', 'Clientes enviados para fundo perdido', 'Fundo perdido', false, false, ['CLIENTES ENVIADOS PARA FUNDO PERDIDO']),
-    cat('cat-8', 'Receita de empréstimos bancários', 'Fora da cobrança', false, false, ['RECEITA DE EMPRÉSTIMOS BANCÁRIOS']),
-  ]
   return s
 }

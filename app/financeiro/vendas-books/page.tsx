@@ -7,7 +7,8 @@
 import { useMemo, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'
 import { useErp } from '@/lib/erp/store'
-import { colecao, nomeColaborador, tituloAtrasado } from '@/lib/erp/metrics'
+import { colecao, nomeColaborador } from '@/lib/erp/metrics'
+import { useResumoVendas } from '@/lib/erp/cobrancas'
 import { brl, dataBR, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import { Badge, EmptyState, PageHeader, Panel, StatCard } from '@/components/erp/ui'
 
@@ -25,7 +26,7 @@ export default function VendasBooksFinanceiroPage() {
   const [forma, setForma] = useState('')
 
   const todas = colecao(s, 'vendas_ebooks')
-  const titulos = colecao(s, 'titulos')
+  const receber = useResumoVendas(mes) // o que cada venda já recebeu, tem em aberto e em atraso (carteira, no banco)
   const vendas = useMemo(
     () =>
       todas
@@ -33,12 +34,11 @@ export default function VendasBooksFinanceiroPage() {
         .sort((a, b) => `${b.data}${b.criadoEm}`.localeCompare(`${a.data}${a.criadoEm}`)),
     [todas, mes, canal, forma],
   )
-  const titulosDe = (v: Registro) => titulos.filter((t) => t.vendaId === v.id)
   const valor = vendas.reduce((a, v) => a + Number(v.valor || 0), 0)
-  const ts = vendas.flatMap(titulosDe)
-  const recebido = ts.filter((t) => t.status === 'Pago').reduce((a, t) => a + Number(t.valor || 0), 0)
-  const aReceber = ts.filter((t) => t.status === 'Aberto' || t.status === 'Em acordo').reduce((a, t) => a + Number(t.valor || 0), 0)
-  const atrasado = ts.filter(tituloAtrasado).reduce((a, t) => a + Number(t.valor || 0), 0)
+  const rs = vendas.map((v) => receber.get(v.id)).filter((r) => !!r)
+  const recebido = rs.reduce((a, r) => a + r.recebido, 0)
+  const aReceber = rs.reduce((a, r) => a + r.emAberto, 0)
+  const atrasado = rs.reduce((a, r) => a + r.vencido, 0)
   const porForma = FORMAS.map((f) => ({ f, total: vendas.filter((v) => String(v.formaPagamento || 'Boleto') === f).reduce((a, v) => a + Number(v.valor || 0), 0) })).filter((x) => x.total > 0)
 
   const vendedor = (v: Registro) =>
@@ -116,9 +116,9 @@ export default function VendasBooksFinanceiroPage() {
               </thead>
               <tbody className="divide-y divide-white/[0.02]">
                 {vendas.map((v) => {
-                  const tv = titulosDe(v)
-                  const pagas = tv.filter((t) => t.status === 'Pago').length
-                  const atraso = tv.filter(tituloAtrasado).length
+                  const r = receber.get(v.id)
+                  const pagas = r?.parcelasPagas ?? 0
+                  const atraso = r?.parcelasVencidas ?? 0
                   return (
                     <tr key={v.id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 whitespace-nowrap text-zinc-400">{dataBR(String(v.data))}</td>
@@ -140,13 +140,13 @@ export default function VendasBooksFinanceiroPage() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap font-black text-white">{brl(Number(v.valor || 0))}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-xs">
-                        {tv.length === 0 ? (
+                        {!r || r.parcelas === 0 ? (
                           <span className="text-zinc-600">—</span>
-                        ) : pagas === tv.length ? (
+                        ) : pagas === r.parcelas ? (
                           <span className="text-zinc-300 font-bold">✓ Quitado</span>
                         ) : (
                           <span>
-                            {pagas}/{tv.length} pagas
+                            {pagas}/{r.parcelas} pagas
                             {atraso > 0 && <span className="text-red-400 font-bold"> • {atraso} em atraso</span>}
                           </span>
                         )}

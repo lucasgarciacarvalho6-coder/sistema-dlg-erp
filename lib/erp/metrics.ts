@@ -206,14 +206,6 @@ export function mesesDisponiveis(s: ErpState) {
 
 export const colecao = (s: ErpState, nome: string): Registro[] => s.colecoes[nome] ?? []
 
-export function tituloAtrasado(t: Registro) {
-  return t.status === 'Aberto' && String(t.vencimento) < hoje()
-}
-
-export function statusTitulo(t: Registro) {
-  return tituloAtrasado(t) ? 'Atrasado' : String(t.status)
-}
-
 // Fluxo de caixa diário: entradas = recebimentos da Cobrança (mesma fonte do painel ADM);
 // saídas = contas e comissões pagas
 export function fluxoCaixa(s: ErpState, mes: string) {

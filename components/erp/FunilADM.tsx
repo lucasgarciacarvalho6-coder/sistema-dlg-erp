@@ -5,7 +5,8 @@
 import Link from 'next/link'
 import type { ErpState, Tom } from '@/lib/erp/types'
 import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
-import { colecao, equipeComMeta, resumo, situacaoResumo, tituloAtrasado } from '@/lib/erp/metrics'
+import { colecao, equipeComMeta, resumo, situacaoResumo } from '@/lib/erp/metrics'
+import { useIndicadores } from '@/lib/erp/cobrancas'
 import { brl, formatar, iniciais, nomeMes, num } from '@/lib/erp/format'
 import { Avatar, TONS, ehSituacao } from './ui'
 
@@ -27,9 +28,7 @@ export function FunilDoMes({ s, mes }: { s: ErpState; mes: string }) {
   const externas = qtd(vendas.filter((v) => v.canal === 'Externo'))
   const internas = qtd(vendas.filter((v) => v.canal !== 'Externo'))
   const vendido = vendas.reduce((a, v) => a + Number(v.valor || 0), 0)
-  const titulos = colecao(s, 'titulos')
-  const recebido = titulos.filter((t) => t.status === 'Pago' && String(t.dataPagamento).startsWith(mes)).reduce((a, t) => a + Number(t.valor || 0), 0)
-  const atraso = titulos.filter(tituloAtrasado)
+  const receber = useIndicadores(mes) // carteira de cobranças (calculada no banco)
   const devolvidos = colecao(s, 'devolucoes_books')
     .filter((d) => String(d.data).startsWith(mes))
     .reduce((a, d) => a + Number(d.quantidade || 0), 0)
@@ -41,8 +40,8 @@ export function FunilDoMes({ s, mes }: { s: ErpState; mes: string }) {
     { rotulo: 'Álbuns revelados', valor: num(books), detalhe: 'lançados pela Revelação', tom: 'zinc', link: '/producao' },
     { rotulo: 'Books vendidos', valor: num(externas + internas), detalhe: `${num(externas)} na rua • ${num(internas)} internas`, tom: 'zinc', link: '/financeiro/vendas-books' },
     { rotulo: 'Valor vendido', valor: brl(vendido), tom: 'zinc', link: '/financeiro/vendas-books' },
-    { rotulo: 'Recebido', valor: brl(recebido), detalhe: 'vendas de books', tom: 'zinc', link: '/financeiro/vendas-books' },
-    { rotulo: 'Em atraso', valor: brl(atraso.reduce((a, t) => a + Number(t.valor || 0), 0)), detalhe: `${atraso.length} parcela(s) • Cobrança`, tom: atraso.length ? 'red' : 'zinc', link: '/cobranca/inadimplencia' },
+    { rotulo: 'Recebido', valor: brl(receber.recebidoMes), detalhe: 'Contas a Receber', tom: 'zinc', link: '/financeiro/contas-receber' },
+    { rotulo: 'Em atraso', valor: brl(receber.emAtraso), detalhe: `${receber.parcelasVencidas} parcela(s) • Cobrança`, tom: receber.parcelasVencidas ? 'red' : 'zinc', link: '/cobranca/inadimplencia' },
   ]
 
   return (

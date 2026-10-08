@@ -10,7 +10,9 @@ import { usePode } from '@/lib/erp/store'
 import { FILTRO_VAZIO, POR_PAGINA, lerCliente, useClientes, useContadoresClientes, type Cliente, type FiltroClientes } from '@/lib/erp/clientes'
 import { formatarDocumento, tipoDoDocumento } from '@/lib/erp/documento'
 import { linkWhatsApp, UFS } from '@/lib/erp/rebolo'
-import { num } from '@/lib/erp/format'
+import { brl, num } from '@/lib/erp/format'
+import { useFichaCarteira } from '@/lib/erp/cobrancas'
+import { SeloConta } from '@/components/erp/ContasPessoa'
 import Icon from '@/components/erp/Icon'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, btnBranco, btnSecundario } from '@/components/erp/ui'
 import ClienteForm from './ClienteForm'
@@ -269,12 +271,39 @@ function FichaCliente({ c }: { c: Cliente }) {
           </Linha>
         )}
       </div>
-      <div className="space-y-2">
-        <p className="text-sm font-black text-white">Cobranças</p>
-        <div className="rounded-2xl border border-dashed border-white/[0.1] p-5 text-sm text-zinc-500">
-          As cobranças e parcelas deste cliente aparecem aqui quando a carteira de cobranças for criada (próxima parte).
+      <CobrancasDoCliente clienteId={c.id} />
+    </div>
+  )
+}
+
+// as cobranças do cliente na carteira (conta, carteira, em aberto e em atraso); a baixa é em Financeiro › Contas a Receber
+function CobrancasDoCliente({ clienteId }: { clienteId: string }) {
+  const { ficha } = useFichaCarteira(clienteId)
+  const cobrancas = ficha?.cobrancas ?? []
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-black text-white">Cobranças</p>
+      {!ficha ? (
+        <p className="text-sm text-zinc-500">Carregando...</p>
+      ) : cobrancas.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-white/[0.1] p-5 text-sm text-zinc-500">Nenhuma cobrança para este cliente.</div>
+      ) : (
+        <div className="rounded-2xl border border-white/[0.06] divide-y divide-white/[0.04]">
+          {cobrancas.map((x) => (
+            <div key={x.id} className="px-4 py-3 space-y-1">
+              <p className="text-xs font-bold text-white">{x.referencia || x.origem}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <SeloConta conta={x.conta} />
+                <Badge texto={x.carteira} />
+                <span className="text-[11px] text-zinc-500">
+                  {x.parcelasPagas} de {x.parcelas} paga(s) • em aberto {brl(x.emAberto)}
+                  {x.vencido > 0 && <span className="text-red-400 font-bold"> • em atraso {brl(x.vencido)} há {x.diasAtraso} dias</span>}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }

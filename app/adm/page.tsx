@@ -4,7 +4,8 @@ import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { SETORES } from '@/lib/erp/config'
 import { useErp } from '@/lib/erp/store'
-import { colecao, mesesDisponiveis, resumo, somar, tituloAtrasado } from '@/lib/erp/metrics'
+import { colecao, mesesDisponiveis, resumo, somar } from '@/lib/erp/metrics'
+import { useIndicadores } from '@/lib/erp/cobrancas'
 import { brl, dataHoraBR, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { RankingGeral } from '@/components/erp/PainelSetores'
@@ -27,10 +28,7 @@ export default function AdmVisaoTVPage() {
   const rebolo = resumo(s, 'rebolo', 'valor_vendido', mes)
   const booksRebolo = resumo(s, 'rebolo', 'books_vendidos', mes)
   const books = resumo(s, 'producao', 'books', mes)
-  const titulos = colecao(s, 'titulos')
-  const abertos = titulos.filter((t) => t.status === 'Aberto' || t.status === 'Em acordo')
-  const atrasados = titulos.filter(tituloAtrasado)
-  const inadimplencia = abertos.length ? (atrasados.reduce((a, t) => a + Number(t.valor), 0) / abertos.reduce((a, t) => a + Number(t.valor), 0)) * 100 : 0
+  const receber = useIndicadores(mes) // carteira de cobranças (calculada no banco)
   const aprovacoesPendentes = colecao(s, 'aprovacoes').filter((a) => a.status === 'Pendente').length
 
   // Feed ao vivo: últimos lançamentos de todos os setores
@@ -88,8 +86,8 @@ export default function AdmVisaoTVPage() {
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard label="Contratos no mês" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} progresso={contratos.pctMes} />
         <StatCard label="Vendas Rebolo" valor={brl(rebolo.mes)} detalhe={`Meta ${brl(rebolo.meta.mensal)} • ${num(booksRebolo.mes)} books • hoje ${brl(rebolo.hoje)}`} progresso={rebolo.pctMes} />
-        {/* alerta: vermelho só quando há título em atraso */}
-        <StatCard tom={atrasados.length ? 'red' : 'zinc'} label="Inadimplência" valor={pct(inadimplencia)} detalhe={`${atrasados.length} título(s) em atraso`} />
+        {/* alerta: vermelho só quando há parcela em atraso */}
+        <StatCard tom={receber.parcelasVencidas ? 'red' : 'zinc'} label="Inadimplência" valor={pct(receber.taxaInadimplencia)} detalhe={`${receber.parcelasVencidas} parcela(s) em atraso • ${brl(receber.emAtraso)}`} />
         <Link href="/gerencia/aprovacoes" className="block">
           <StatCard tom={aprovacoesPendentes ? 'yellow' : 'zinc'} label="Aprovações pendentes" valor={aprovacoesPendentes} detalhe="Gerência • clique para ver" />
         </Link>

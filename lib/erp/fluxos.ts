@@ -13,6 +13,7 @@ import { chaveEscola } from './escolas'
 import { proximoPacote } from './rebolo'
 import { REGRAS_COBRANCA, rotuloRegra, tipoEscritorioDoGrupo, validarRegrasCobranca } from './cobranca-config'
 import { textoBusca } from './documento'
+import { calcularCarteira } from './carteira'
 
 export interface Contexto {
   autorId: string
@@ -63,7 +64,8 @@ export function lancar(
   const colab = d.colaboradores.find((c) => c.id === l.colaboradorId)
   const antes = colab ? somar(d.lancamentos, { setor: l.setor, indicador: l.indicador, colaboradorId: colab.id, data: l.data }) : 0
 
-  d.lancamentos.push({ origem: 'automatico', ...l, id: uid(), criadoEm: agora(), autorId: ctx.autorId })
+  const novo: Lancamento = { origem: 'automatico', ...l, id: uid(), criadoEm: agora(), autorId: ctx.autorId }
+  d.lancamentos.push(novo)
 
   // Meta diária batida → avisa ADM, Gerência e o próprio setor
   if (colab && l.data === hoje()) {
@@ -78,6 +80,7 @@ export function lancar(
       })
     }
   }
+  return novo.id
 }
 
 // ---------------- Automação após criar registros ----------------
@@ -150,7 +153,7 @@ export const APOS_CRIAR: Record<string, PosCriar> = {
     if (canal === 'Interno') {
       r.conferencia = r.conferencia || 'Conferida'
       contarVendaRebolo(d, r, ctx)
-      gerarTitulosVenda(d, r, ctx)
+      gerarCobrancaVenda(d, r, ctx)
       notificar(d, ctx, { setores: ['cobranca', 'financeiro', 'adm'], tipo: 'info', titulo: 'Venda interna de book', descricao: `${r.responsavel} (${r.escola}) • ${r.formaPagamento} • R$ ${valor.toFixed(2).replace('.', ',')}`, link: '/financeiro/vendas-books' })
     } else {
       r.conferencia = r.conferencia || 'Aguardando conferência'
@@ -223,7 +226,10 @@ export function decidirAprovacao(d: ErpState, id: string, aprovado: boolean, ctx
   a.decididoEm = hoje()
   const ref = col(d, String(a.refColecao)).find((x) => x.id === a.refId)
   if (ref) {
-    if (a.refColecao === 'acordos') ref.status = aprovado ? 'Ativo' : 'Rejeitado'
+    if (a.refColecao === 'acordos') {
+      ref.status = aprovado ? 'Ativo' : 'Rejeitado'
+      if (!aprovado) reabrirParcelasDoAcordo(d, ref.id) // como o gatilho do SQL 042
+    }
     if (a.refColecao === 'contas_pagar') ref.status = aprovado ? 'A pagar' : 'Rejeitada'
     if (a.refColecao === 'rebolo_fichas') ref.descontoStatus = aprovado ? 'Aprovado' : 'Rejeitado'
   }
@@ -243,44 +249,6 @@ export function decidirAprovacao(d: ErpState, id: string, aprovado: boolean, ctx
     descricao: `${a.descricao} — por ${ctx.autorNome}`,
     link: a.refColecao === 'acordos' ? '/cobranca/acordos' : a.refColecao === 'rebolo_fichas' ? '/rebolo/contatos' : '/financeiro/contas-pagar',
   })
-}
-
-export function baixarTitulo(d: ErpState, id: string, ctx: Contexto, data = hoje()) {
-  const t = col(d, 'titulos').find((x) => x.id === id)
-  if (!t || t.status === 'Pago') return
-  t.status = 'Pago'
-  t.dataPagamento = data
-  if (t.cobradorId) {
-    lancar(d, ctx, {
-      setor: 'cobranca',
-      indicador: 'valor_recebido',
-      colaboradorId: String(t.cobradorId),
-      quantidade: Number(t.valor) || 0,
-      descricao: `Baixa ${t.parcela} — ${t.cliente}`,
-      data,
-    })
-  }
-  auditar(d, ctx, 'EDITAR', `Baixa do título ${t.parcela} de ${t.cliente}`, ctx.autorSetor) // como no banco: o setor de quem deu a baixa
-}
-
-export function negociarTitulo(d: ErpState, id: string, parcelas: number, ctx: Contexto) {
-  const t = col(d, 'titulos').find((x) => x.id === id)
-  if (!t) return
-  t.status = 'Em acordo'
-  const valor = Number(t.valor) || 0
-  const acordo = inserir(d, 'acordos', {
-    cliente: t.cliente,
-    escola: t.escola,
-    telefone: t.telefone,
-    valorOriginal: valor,
-    valorAcordo: valor,
-    parcelas,
-    primeiroVencimento: addDias(hoje(), 7),
-    status: 'Aguardando aprovação',
-    tituloId: t.id,
-  })
-  APOS_CRIAR.acordos(d, acordo, ctx)
-  auditar(d, ctx, 'CRIAR', `Acordo gerado para ${t.cliente}`, 'cobranca')
 }
 
 export function pagarConta(d: ErpState, nome: 'contas_pagar' | 'comissoes', id: string, ctx: Contexto, data = hoje()) {
@@ -366,43 +334,305 @@ export function confirmarContratoEscola(d: ErpState, id: string, ctx: Contexto):
   return null
 }
 
-// ---- Títulos (parcelas) de uma venda de book — mesma regra do SQL 009 (idempotente) ----
-// entrada → pago • cartão → pago • boleto → parcelas em aberto • PIX/dinheiro → pago à vista; parcelado → em aberto
-export function gerarTitulosVenda(d: ErpState, v: Registro, ctx: Contexto) {
-  if (col(d, 'titulos').some((t) => t.vendaId === v.id)) return
+// ---- Carteira de cobranças no modo demonstração — mesmas regras dos SQLs 041 e 042 ----
+const CONTAS_VALIDAS = ['CA Beatriz', 'CA Diogo']
+const FORMAS_VALIDAS = ['Boleto', 'PIX', 'Dinheiro', 'Cartão', 'Transferência', 'Outro']
+const centavos = (v: number) => Math.round(v * 100) / 100
+const nomeComparavel = (v: unknown) => textoBusca(v).replace(/\s+/g, ' ').trim()
+const soNumeros = (v: unknown) => String(v ?? '').replace(/\D/g, '')
+const reais = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`
+
+// como o gatilho cobranca_parcela_antes: Aberta / Parcial / Paga saem do que foi baixado
+function ajustarParcela(p: Registro, pagoEm = hoje()) {
+  if (p.situacao === 'Em acordo' || p.situacao === 'Cancelada') return
+  const baixado = Number(p.baixado) || 0
+  if (baixado >= (Number(p.valor) || 0)) {
+    p.situacao = 'Paga'
+    p.pagoEm = p.pagoEm || pagoEm
+  } else {
+    p.situacao = baixado > 0 ? 'Parcial' : 'Aberta'
+    p.pagoEm = ''
+  }
+}
+
+function regraCobrancaDemo(d: ErpState, chave: string) {
+  const salva = col(d, 'cobranca_regras').find((r) => r.chave === chave)
+  return salva ? Number(salva.valor) : (REGRAS_COBRANCA.find((r) => r.chave === chave)?.padrao ?? 0)
+}
+
+function registrarHistoricoCategoria(d: ErpState, cobrancaId: string, anterior: string, nova: string, ctx: Contexto) {
+  inserir(d, 'cobranca_categorias_historico', { cobrancaId, categoriaAnteriorId: anterior, categoriaId: nova, alteradoPor: ctx.autorId, alteradoPorNome: ctx.autorNome || 'sistema' })
+}
+
+function novaCobranca(d: ErpState, dados: Record<string, string>, ctx: Contexto) {
+  const c = inserir(d, 'cobrancas', { situacao: 'Aguardando cobrança', observacao: '', referencia: '', codigoVenda: '', vendaId: '', conta: 'CA Beatriz', ...dados })
+  registrarHistoricoCategoria(d, c.id, '', String(c.categoriaId), ctx)
+  return c
+}
+
+function novaParcela(d: ErpState, dados: Record<string, string | number>) {
+  const p = inserir(d, 'cobranca_parcelas', { multa: regraCobrancaDemo(d, 'multa_padrao'), baixado: 0, situacao: 'Aberta', pagoEm: '', acordoId: '', ...dados })
+  ajustarParcela(p, String(dados.pagoEm || hoje()))
+  return p
+}
+
+// cliente da venda: pelo CPF/CNPJ; sem documento, pelo mesmo nome + telefone; senão cadastra
+function clienteDaVenda(d: ErpState, v: Registro) {
+  const clientes = col(d, 'clientes')
+  const doc = soNumeros(v.cpf)
+  const temDoc = doc.length === 11 || doc.length === 14
+  const tel = soNumeros(v.whatsapp || v.telefone)
+  let c = temDoc ? clientes.find((x) => soNumeros(x.documento) === doc) : undefined
+  if (!c && !temDoc && tel.length >= 10)
+    c = clientes.find((x) => !soNumeros(x.documento) && nomeComparavel(x.nome) === nomeComparavel(v.responsavel) && [soNumeros(x.telefone1), soNumeros(x.whatsapp)].includes(tel))
+  if (c) {
+    const completar: [string, unknown][] = [['telefone1', v.telefone], ['whatsapp', v.whatsapp], ['email', v.email], ['rua', v.endereco], ['bairro', v.bairro], ['cep', v.cep], ['cidade', v.cidade]]
+    for (const [campo, valor] of completar) if (!c[campo] && valor) c[campo] = String(valor)
+    return c.id
+  }
+  const uf = String(v.uf ?? '').trim().toUpperCase()
+  return inserir(d, 'clientes', {
+    nome: String(v.responsavel ?? '').replace(/\s+/g, ' ').trim().toUpperCase() || 'CLIENTE SEM NOME',
+    documento: temDoc ? doc : '',
+    tipoPessoa: doc.length === 14 ? 'Jurídica' : 'Física',
+    telefone1: String(v.telefone ?? ''), telefone2: '', telefone3: '', whatsapp: String(v.whatsapp ?? ''), email: String(v.email ?? ''),
+    cep: String(v.cep ?? ''), rua: String(v.endereco ?? ''), numero: '', complemento: '', bairro: String(v.bairro ?? ''), cidade: String(v.cidade ?? ''),
+    uf: /^[A-Z]{2}$/.test(uf) ? uf : '', origem: v.canal === 'Rebolo' ? 'Rebolo' : v.canal === 'Externo' ? 'Vendedor externo' : 'Cadastro manual',
+    codigoContaAzul: '', codigoSistemaAntigo: '', observacao: '',
+  }).id
+}
+
+function categoriaDaVenda(d: ErpState, canal: unknown) {
+  const ativas = col(d, 'cobranca_categorias').filter((c) => c.ativa !== false)
+  const nome = nomeComparavel(canal === 'Rebolo' ? 'Receita de Vendas Online (Rebolo)' : 'Receita de Recordação Escolar')
+  return ativas.find((c) => nomeComparavel(c.nome) === nome)?.id ?? ativas.find((c) => c.grupo === 'Cobrança DLG')?.id ?? ''
+}
+
+const formaDoRecebimento = (forma: unknown) => {
+  const f = String(forma ?? '')
+  return ['Boleto', 'PIX', 'Dinheiro'].includes(f) ? f : f.startsWith('Cartão') ? 'Cartão' : 'Outro'
+}
+
+function recebimentoDaVenda(d: ErpState, ctx: Contexto, p: Registro, cobrancaId: string, valor: number, data: string, formaVenda: unknown, cobradorMeta: string, descricao: string, observacao = '') {
+  const lancamentoId = cobradorMeta ? lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: cobradorMeta, quantidade: valor, descricao, data }) : ''
+  inserir(d, 'cobranca_pagamentos', {
+    parcelaId: p.id, cobrancaId, valor, principal: valor, encargos: 0, desconto: 0, data, forma: formaDoRecebimento(formaVenda), observacao, origem: 'Sistema',
+    lancamentoId, registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome || 'na venda', estornadoEm: '', estornadoPorNome: '', estornoMotivo: '',
+  })
+}
+
+// Venda → cobrança + parcelas (entrada e à vista/cartão pagos; boleto e PIX/dinheiro parcelado em aberto) — idempotente
+export function gerarCobrancaVenda(d: ErpState, v: Registro, ctx: Contexto) {
+  if (col(d, 'cobrancas').some((c) => c.vendaId === v.id)) return
+  const categoriaId = categoriaDaVenda(d, v.canal)
+  if (!categoriaId) return
   const data = String(v.data || hoje())
   const forma = String(v.formaPagamento || 'Boleto')
   const n = Math.max(1, Number(v.parcelas) || 1)
   const entrada = Number(v.entrada) || 0
-  const restante = Math.round(((Number(v.valor) || 0) - entrada) * 100) / 100
+  const restante = centavos((Number(v.valor) || 0) - entrada)
   const primeiro = String(v.primeiroVencimento || data)
-  const interno = v.canal !== 'Externo'
-  const base = { cliente: v.responsavel, aluno: v.aluno ?? '', escola: v.escola, telefone: v.telefone, cobradorId: v.cobradorId ?? '', vendaId: v.id, formaPagamento: forma }
-  const recebido = (valor: number, descricao: string) => {
-    if (interno) lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(v.cobradorId ?? ''), quantidade: valor, descricao, data })
-  }
+  const meta = v.canal !== 'Externo' ? String(v.cobradorId ?? '') : ''
+  const c = novaCobranca(
+    d,
+    {
+      clienteId: clienteDaVenda(d, v), vendaId: v.id, origem: 'Venda', codigoVenda: String(v.numeroFicha ?? ''), categoriaId, cobradorId: String(v.cobradorId ?? ''),
+      referencia: [v.aluno, v.escola, v.pacote].map((x) => String(x ?? '').trim()).filter(Boolean).join(' • '),
+    },
+    ctx,
+  )
   if (entrada > 0) {
-    inserir(d, 'titulos', { ...base, parcela: 'Entrada', valor: entrada, vencimento: data, status: 'Pago', dataPagamento: data })
-    recebido(entrada, `Entrada — ${v.responsavel}`)
+    const p = novaParcela(d, { cobrancaId: c.id, numero: 0, total: n, valor: entrada, vencimento: data, multa: 0, baixado: entrada, pagoEm: data })
+    recebimentoDaVenda(d, ctx, p, c.id, entrada, data, forma, meta, `Entrada — ${v.responsavel}`, 'Entrada da venda')
   }
   if (restante <= 0) return
   const aberto = forma === 'Boleto' || ((forma === 'PIX' || forma === 'Dinheiro') && (n > 1 || primeiro > data))
   if (aberto) {
-    const parcela = Math.round((restante / n) * 100) / 100
-    for (let i = 1; i <= n; i++) {
-      inserir(d, 'titulos', {
-        ...base,
-        parcela: `${i}/${n}`,
-        valor: i === n ? Math.round((restante - parcela * (n - 1)) * 100) / 100 : parcela,
-        vencimento: addMeses(primeiro, i - 1),
-        status: 'Aberto',
-        dataPagamento: '',
-      })
-    }
+    const parcela = centavos(restante / n)
+    for (let i = 1; i <= n; i++)
+      novaParcela(d, { cobrancaId: c.id, numero: i, total: n, valor: i === n ? centavos(restante - parcela * (n - 1)) : parcela, vencimento: addMeses(primeiro, i - 1) })
   } else {
-    inserir(d, 'titulos', { ...base, parcela: forma === 'Cartão de crédito' && n > 1 ? `${n}x no cartão` : '1/1', valor: restante, vencimento: data, status: 'Pago', dataPagamento: data })
-    recebido(restante, `Recebido na venda — ${v.responsavel}`)
+    const p = novaParcela(d, { cobrancaId: c.id, numero: 1, total: 1, valor: restante, vencimento: data, multa: 0, baixado: restante, pagoEm: data })
+    recebimentoDaVenda(d, ctx, p, c.id, restante, data, forma, meta, `Recebido na venda — ${v.responsavel}`, forma === 'Cartão de crédito' && n > 1 ? `${n}x no cartão` : '')
   }
+}
+
+// Recebimento pelo Financeiro (pode ser parcial). Passou do saldo: o resto é juros/multa. Com "quitar", o que faltar vira desconto.
+export function registrarPagamentoParcela(
+  d: ErpState,
+  parcelaId: string,
+  valorInformado: number,
+  data: string,
+  forma: string,
+  observacao: string,
+  quitar: boolean,
+  ctx: Contexto,
+): string | null {
+  const valor = centavos(Number(valorInformado) || 0)
+  if (valor <= 0) return 'Informe o valor recebido.'
+  if (!FORMAS_VALIDAS.includes(forma)) return 'Forma de recebimento inválida (Boleto, PIX, Dinheiro, Cartão, Transferência ou Outro).'
+  if (!data || data > hoje()) return 'Informe a data do recebimento (não pode ser no futuro).'
+  const p = col(d, 'cobranca_parcelas').find((x) => x.id === parcelaId)
+  if (!p) return 'Parcela não encontrada.'
+  if (p.situacao !== 'Aberta' && p.situacao !== 'Parcial') return `Esta parcela está ${String(p.situacao).toLowerCase()} e não recebe pagamento.`
+  const c = col(d, 'cobrancas').find((x) => x.id === p.cobrancaId)
+  const saldo = centavos((Number(p.valor) || 0) - (Number(p.baixado) || 0))
+  const principal = valor >= saldo ? saldo : valor
+  const encargos = valor >= saldo ? centavos(valor - saldo) : 0
+  const desconto = valor < saldo && quitar ? centavos(saldo - valor) : 0
+  const cliente = col(d, 'clientes').find((x) => x.id === c?.clienteId)
+  const lancamentoId = c?.cobradorId
+    ? lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(c.cobradorId), quantidade: valor, descricao: `Recebido parcela ${p.numero}/${p.total} — ${cliente?.nome ?? ''}`, data })
+    : ''
+  inserir(d, 'cobranca_pagamentos', {
+    parcelaId: p.id, cobrancaId: String(p.cobrancaId), valor, principal, encargos, desconto, data, forma, observacao: observacao.trim(), origem: 'Sistema', lancamentoId,
+    registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome, estornadoEm: '', estornadoPorNome: '', estornoMotivo: '',
+  })
+  p.baixado = centavos((Number(p.baixado) || 0) + principal + desconto)
+  p.pagoEm = Number(p.baixado) >= Number(p.valor) ? data : ''
+  ajustarParcela(p, data)
+  auditar(d, ctx, 'CRIAR', `Recebimento de ${reais(valor)} na parcela ${p.numero}/${p.total} de ${cliente?.nome ?? ''}`, ctx.autorSetor)
+  return null
+}
+
+export function estornarPagamentoParcela(d: ErpState, pagamentoId: string, motivo: string, ctx: Contexto): string | null {
+  if (!motivo.trim()) return 'Informe o motivo do estorno.'
+  const g = col(d, 'cobranca_pagamentos').find((x) => x.id === pagamentoId)
+  if (!g) return 'Recebimento não encontrado.'
+  if (g.estornadoEm) return 'Este recebimento já foi estornado.'
+  g.estornadoEm = agora()
+  g.estornoMotivo = motivo.trim()
+  g.estornadoPorNome = ctx.autorNome
+  if (g.lancamentoId) d.lancamentos = d.lancamentos.filter((l) => l.id !== g.lancamentoId)
+  g.lancamentoId = ''
+  const p = col(d, 'cobranca_parcelas').find((x) => x.id === g.parcelaId)
+  if (p) {
+    p.baixado = Math.max(0, centavos((Number(p.baixado) || 0) - (Number(g.principal) || 0) - (Number(g.desconto) || 0)))
+    if (p.situacao === 'Paga' || p.situacao === 'Parcial') p.situacao = 'Aberta'
+    p.pagoEm = ''
+    ajustarParcela(p)
+  }
+  auditar(d, ctx, 'EDITAR', `Recebimento estornado (${motivo.trim()})`, ctx.autorSetor)
+  return null
+}
+
+export function editarParcela(d: ErpState, id: string, dados: { valor: number; vencimento: string; multa: number }, ctx: Contexto): string | null {
+  const p = col(d, 'cobranca_parcelas').find((x) => x.id === id)
+  if (!p) return 'Parcela não encontrada.'
+  if (!(dados.valor >= 0) || !dados.vencimento || !(dados.multa >= 0)) return 'Confira o valor, o vencimento e a multa.'
+  if (dados.valor < (Number(p.baixado) || 0)) return 'O valor não pode ficar menor que o que já foi recebido.'
+  p.valor = centavos(dados.valor)
+  p.vencimento = dados.vencimento
+  p.multa = centavos(dados.multa)
+  ajustarParcela(p)
+  auditar(d, ctx, 'EDITAR', `Parcela ${p.numero}/${p.total} alterada`, ctx.autorSetor)
+  return null
+}
+
+export function mudarSituacaoParcela(d: ErpState, id: string, situacao: 'Cancelada' | 'Aberta', ctx: Contexto): string | null {
+  const p = col(d, 'cobranca_parcelas').find((x) => x.id === id)
+  if (!p) return 'Parcela não encontrada.'
+  p.situacao = situacao
+  if (situacao === 'Aberta') ajustarParcela(p)
+  auditar(d, ctx, 'EDITAR', `Parcela ${p.numero}/${p.total} ${situacao === 'Cancelada' ? 'cancelada' : 'reaberta'}`, ctx.autorSetor)
+  return null
+}
+
+export interface DadosLancarCobranca {
+  clienteId: string
+  categoriaId: string
+  cobradorId: string
+  conta: string
+  referencia: string
+  valor: number
+  parcelas: number
+  primeiroVencimento: string
+  observacao: string
+}
+
+export function conferirLancamentoCobranca(d: ErpState, x: DadosLancarCobranca): string | null {
+  if (!x.clienteId) return 'Escolha o cliente.'
+  if (!col(d, 'cobranca_categorias').some((c) => c.id === x.categoriaId && c.ativa !== false)) return 'Escolha a categoria.'
+  if (!CONTAS_VALIDAS.includes(x.conta)) return 'Escolha a conta (CA Beatriz ou CA Diogo).'
+  if (!(x.valor > 0)) return 'Informe o valor.'
+  if (!Number.isInteger(x.parcelas) || x.parcelas < 1 || x.parcelas > 120) return 'Informe de 1 a 120 parcelas.'
+  if (!x.primeiroVencimento) return 'Informe o 1º vencimento.'
+  return null
+}
+
+export function lancarCobranca(d: ErpState, x: DadosLancarCobranca, ctx: Contexto): string | null {
+  const erro = conferirLancamentoCobranca(d, x)
+  if (erro) return erro
+  if (!col(d, 'clientes').some((c) => c.id === x.clienteId)) return 'Escolha o cliente.'
+  const valor = centavos(x.valor)
+  const c = novaCobranca(
+    d,
+    { clienteId: x.clienteId, origem: 'Lançamento manual', categoriaId: x.categoriaId, cobradorId: x.cobradorId, conta: x.conta, referencia: x.referencia.trim(), observacao: x.observacao.trim() },
+    ctx,
+  )
+  const parcela = centavos(valor / x.parcelas)
+  for (let i = 1; i <= x.parcelas; i++)
+    novaParcela(d, { cobrancaId: c.id, numero: i, total: x.parcelas, valor: i === x.parcelas ? centavos(valor - parcela * (x.parcelas - 1)) : parcela, vencimento: addMeses(x.primeiroVencimento, i - 1) })
+  auditar(d, ctx, 'CRIAR', `Cobrança lançada: ${reais(valor)} em ${x.parcelas}x`, ctx.autorSetor)
+  return null
+}
+
+export interface DadosEditarCobranca {
+  categoriaId: string
+  cobradorId: string
+  conta: string
+  referencia: string
+  observacao: string
+}
+
+export function editarCobranca(d: ErpState, id: string, x: DadosEditarCobranca, ctx: Contexto): string | null {
+  const c = col(d, 'cobrancas').find((y) => y.id === id)
+  if (!c) return 'Cobrança não encontrada.'
+  if (!CONTAS_VALIDAS.includes(x.conta)) return 'Escolha a conta (CA Beatriz ou CA Diogo).'
+  if (!col(d, 'cobranca_categorias').some((y) => y.id === x.categoriaId)) return 'Escolha a categoria.'
+  if (c.categoriaId !== x.categoriaId) registrarHistoricoCategoria(d, c.id, String(c.categoriaId), x.categoriaId, ctx)
+  Object.assign(c, { categoriaId: x.categoriaId, cobradorId: x.cobradorId, conta: x.conta, referencia: x.referencia.trim(), observacao: x.observacao.trim() })
+  auditar(d, ctx, 'EDITAR', 'Cobrança alterada', ctx.autorSetor)
+  return null
+}
+
+export function excluirCobranca(d: ErpState, id: string, ctx: Contexto): string | null {
+  if (col(d, 'cobranca_pagamentos').some((g) => g.cobrancaId === id && !g.estornadoEm)) return 'Tem recebimento registrado: estorne os recebimentos antes de excluir.'
+  d.colecoes.cobrancas = col(d, 'cobrancas').filter((c) => c.id !== id)
+  d.colecoes.cobranca_parcelas = col(d, 'cobranca_parcelas').filter((p) => p.cobrancaId !== id)
+  d.colecoes.cobranca_pagamentos = col(d, 'cobranca_pagamentos').filter((g) => g.cobrancaId !== id)
+  d.colecoes.cobranca_categorias_historico = col(d, 'cobranca_categorias_historico').filter((h) => h.cobrancaId !== id)
+  auditar(d, ctx, 'EXCLUIR', 'Cobrança excluída', ctx.autorSetor)
+  return null
+}
+
+// Negociar: as parcelas vencidas da cobrança ficam "Em acordo" e o acordo vai para a aprovação (só se pode renegociar)
+export function negociarCobranca(d: ErpState, cobrancaId: string, parcelas: number, ctx: Contexto, hj = hoje()): string | null {
+  const c = calcularCarteira(d, hj).cobrancas.find((x) => x.id === cobrancaId)
+  if (!c) return 'Cobrança não encontrada.'
+  if (!c.podeRenegociar)
+    return `Esta cobrança ainda não pode ser renegociada: precisa de ${regraCobrancaDemo(d, 'reneg_min_boletos')} boletos vencidos e ${regraCobrancaDemo(d, 'reneg_min_dias')} dias de atraso, na Cobrança DLG.`
+  const acordo = inserir(d, 'acordos', {
+    cliente: c.cliente, escola: '', telefone: c.telefone, valorOriginal: c.vencido, valorAcordo: c.atualizado, parcelas, primeiroVencimento: addDias(hj, 7),
+    status: 'Aguardando aprovação', tituloId: '', cobrancaId,
+  })
+  for (const p of col(d, 'cobranca_parcelas'))
+    if (p.cobrancaId === cobrancaId && (p.situacao === 'Aberta' || p.situacao === 'Parcial') && String(p.vencimento) < hj) {
+      p.situacao = 'Em acordo'
+      p.acordoId = acordo.id
+    }
+  APOS_CRIAR.acordos(d, acordo, ctx)
+  auditar(d, ctx, 'CRIAR', `Acordo gerado para ${c.cliente}`, 'cobranca')
+  return null
+}
+
+function reabrirParcelasDoAcordo(d: ErpState, acordoId: string) {
+  for (const p of col(d, 'cobranca_parcelas'))
+    if (p.acordoId === acordoId && p.situacao === 'Em acordo') {
+      p.situacao = 'Aberta'
+      p.acordoId = ''
+      ajustarParcela(p)
+    }
 }
 
 // Conferência da venda externa pelo Financeiro: conferir (gera os títulos) ou devolver ao vendedor com o motivo
@@ -416,7 +646,7 @@ export function conferirVendaBook(d: ErpState, id: string, acao: 'conferir' | 'd
   v.conferidoPor = ctx.autorId
   v.conferidoEm = agora()
   if (acao === 'conferir') {
-    gerarTitulosVenda(d, v, ctx)
+    gerarCobrancaVenda(d, v, ctx)
     if (v.canal === 'Rebolo') {
       contarVendaRebolo(d, v, ctx)
       const ficha = col(d, 'rebolo_fichas').find((f) => f.id === v.fichaReboloId)
