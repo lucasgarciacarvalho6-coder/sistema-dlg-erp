@@ -280,7 +280,7 @@ export default function Inadimplencia() {
                             <td className="px-4 py-2.5 whitespace-nowrap font-black text-red-400">{p.diasAtraso}</td>
                             <td className="px-4 py-2.5 text-right whitespace-nowrap">{brl(p.saldo)}</td>
                             <td className="px-4 py-2.5 text-right whitespace-nowrap">{brl(p.multaDevida)}</td>
-                            <td className="px-4 py-2.5 text-right whitespace-nowrap">{brl(p.juros)}</td>
+                            <td className="px-4 py-2.5 text-right whitespace-nowrap">{p.cobraJuros ? brl(p.juros) : <span className="text-zinc-500 text-[11px]">sem juros (migrada)</span>}</td>
                             <td className="px-4 py-2.5 text-right whitespace-nowrap font-bold text-white">{brl(p.atualizado)}</td>
                           </tr>
                         ))}

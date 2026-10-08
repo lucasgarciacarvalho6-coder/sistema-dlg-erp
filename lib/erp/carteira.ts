@@ -32,6 +32,7 @@ export interface ParcelaV {
   situacao: string // Aberta / Parcial / Paga / Em acordo / Cancelada
   pagoEm: string
   acordoId: string
+  cobraJuros: boolean // as parcelas migradas do sistema antigo não somam juros (SQL 043)
   saldo: number
   vencida: boolean
   diasAtraso: number
@@ -213,10 +214,11 @@ export function parcelaV(p: Registro, jurosDia: number, hj = hoje()): ParcelaV {
   const dias = vencida ? diasEntre(hj, vencimento) : 0
   const saldo = centavos(n(p.valor) - n(p.baixado))
   const multaDevida = vencida ? n(p.multa) : 0
-  const juros = vencida ? centavos(dias * jurosDia) : 0
+  const cobraJuros = p.cobraJuros !== false
+  const juros = vencida && cobraJuros ? centavos(dias * jurosDia) : 0
   return {
     id: p.id, cobrancaId: t(p.cobrancaId), numero: n(p.numero), total: n(p.total) || 1, valor: n(p.valor), vencimento, multa: n(p.multa),
-    baixado: n(p.baixado), situacao, pagoEm: t(p.pagoEm), acordoId: t(p.acordoId), saldo, vencida, diasAtraso: dias, multaDevida, juros,
+    baixado: n(p.baixado), situacao, pagoEm: t(p.pagoEm), acordoId: t(p.acordoId), cobraJuros, saldo, vencida, diasAtraso: dias, multaDevida, juros,
     atualizado: centavos(saldo + multaDevida + juros),
   }
 }
@@ -258,7 +260,7 @@ export function calcularCarteira(s: ErpState, hj = hoje()): { cobrancas: Cobranc
     const soma = (l: ParcelaV[], f: (p: ParcelaV) => number) => centavos(l.reduce((a, p) => a + f(p), 0))
     const vencido = soma(vencidas, (p) => p.saldo)
     const multa = soma(vencidas, (p) => p.multa)
-    const juros = centavos(vencidas.reduce((a, p) => a + p.diasAtraso, 0) * jurosDia)
+    const juros = centavos(vencidas.filter((p) => p.cobraJuros).reduce((a, p) => a + p.diasAtraso, 0) * jurosDia)
     const aVencer = soma(abertas.filter((p) => !p.vencida), (p) => p.saldo)
     const carteira =
       abertas.length === 0

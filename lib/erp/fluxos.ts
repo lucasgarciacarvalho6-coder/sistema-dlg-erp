@@ -371,7 +371,7 @@ function novaCobranca(d: ErpState, dados: Record<string, string>, ctx: Contexto)
 }
 
 function novaParcela(d: ErpState, dados: Record<string, string | number>) {
-  const p = inserir(d, 'cobranca_parcelas', { multa: regraCobrancaDemo(d, 'multa_padrao'), baixado: 0, situacao: 'Aberta', pagoEm: '', acordoId: '', ...dados })
+  const p = inserir(d, 'cobranca_parcelas', { multa: regraCobrancaDemo(d, 'multa_padrao'), baixado: 0, situacao: 'Aberta', pagoEm: '', acordoId: '', cobraJuros: true, ...dados })
   ajustarParcela(p, String(dados.pagoEm || hoje()))
   return p
 }

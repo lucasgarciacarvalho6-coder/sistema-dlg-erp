@@ -80,7 +80,7 @@ function cobrancaDoBanco(l: Linha): CobrancaV {
 function parcelaDoBanco(l: Linha): ParcelaV {
   return {
     id: txt(l.id), cobrancaId: txt(l.cobranca_id), numero: num(l.numero), total: num(l.total) || 1, valor: num(l.valor), vencimento: txt(l.vencimento),
-    multa: num(l.multa), baixado: num(l.baixado), situacao: txt(l.situacao), pagoEm: txt(l.pago_em), acordoId: txt(l.acordo_id), saldo: num(l.saldo),
+    multa: num(l.multa), baixado: num(l.baixado), situacao: txt(l.situacao), pagoEm: txt(l.pago_em), acordoId: txt(l.acordo_id), cobraJuros: l.cobra_juros !== false, saldo: num(l.saldo),
     vencida: !!l.vencida, diasAtraso: num(l.dias_atraso), multaDevida: num(l.multa_devida), juros: num(l.juros), atualizado: num(l.atualizado),
   }
 }

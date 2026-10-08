@@ -34,7 +34,7 @@ import { ehDiaUtil } from './calendario'
 import { metaColaborador } from './metrics'
 import { REGRAS_COBRANCA } from './cobranca-config'
 
-export const VERSAO_DADOS = 20 // v20: carteira de cobranças (as vendas geram cobrança + parcelas; contas CA Beatriz / CA Diogo)
+export const VERSAO_DADOS = 21 // v21: carteira de cobranças (contas CA Beatriz / CA Diogo; as da CA Diogo como migradas, sem juros)
 export const SENHA_DEMO = '123456'
 
 // PRNG determinístico (mulberry32) para os números ficarem estáveis entre recargas
@@ -356,6 +356,14 @@ export function gerarSeed(): ErpState {
   ).forEach(([clienteId, categoriaId, conta, referencia, valor, parcelas, dias, cobradorId]) =>
     lancarCobranca(s, { clienteId, categoriaId, cobradorId, conta, referencia, valor, parcelas, primeiroVencimento: addDias(hojeISO, dias), observacao: '' }, ctxReceber),
   )
+  // as da CA Diogo fazem o papel das migradas: valores como vieram do sistema antigo, sem juros (SQL 043)
+  for (const c of col(s, 'cobrancas').filter((x) => x.conta === 'CA Diogo')) {
+    c.origem = 'Migração'
+    for (const p of col(s, 'cobranca_parcelas').filter((x) => x.cobrancaId === c.id)) {
+      p.cobraJuros = false
+      p.multa = 0
+    }
+  }
   s.lancamentos = s.lancamentos.filter((l) => l.origem !== 'automatico')
   // um acordo esperando a aprovação do ADM (a Cobrança negociou a dívida da CMEI PEQUENO PRÍNCIPE)
   const paraNegociar = col(s, 'cobrancas').find((c) => c.clienteId === 'cli-8')

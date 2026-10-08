@@ -402,7 +402,11 @@ function FichaReceber({
                           {aberta ? (
                             <>
                               <span className="font-bold text-white">{brl(p.atualizado)}</span>
-                              {p.vencida && <p className="text-[10px] text-zinc-500">saldo {brl(p.saldo)} + multa {brl(p.multaDevida)} + juros {brl(p.juros)}</p>}
+                              {p.vencida && (
+                                <p className="text-[10px] text-zinc-500">
+                                  {p.cobraJuros ? `saldo ${brl(p.saldo)} + multa ${brl(p.multaDevida)} + juros ${brl(p.juros)}` : `valor do sistema antigo (sem juros)${p.multaDevida ? ` + multa ${brl(p.multaDevida)}` : ''}`}
+                                </p>
+                              )}
                               {!p.vencida && p.baixado > 0 && <p className="text-[10px] text-zinc-500">já recebido {brl(p.baixado)}</p>}
                             </>
                           ) : (
