@@ -153,6 +153,8 @@ function Pizza({ partes }: { partes: Fatia[] }) {
   )
 }
 
+// (08/10) organizado em blocos: o título em cima, a pizza ao lado do valor; embaixo, em linhas inteiras,
+// a comparação com o mês anterior, o vendido × custos e o que ainda é estimado (nada fica cortado na coluna estreita)
 function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: LucroRebolo | null; compacto: boolean }) {
   const comLucro = l.lucro >= 0 && l.vendido > 0
   const chaves = Object.keys(l.custos) as (keyof CustosLucroRebolo)[]
@@ -162,34 +164,34 @@ function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: Luc
   const v = variacaoLucro(l.lucro, anterior?.lucro)
   const estimado = [l.estimado.salario && 'salário', l.estimado.fretes > 0 && `${l.estimado.fretes} frete(s)`, l.estimado.taxas > 0 && `${l.estimado.taxas} taxa(s) do cartão`].filter(Boolean)
   return (
-    <div className="shrink-0 flex items-center gap-[2.5cqmin] min-w-0">
-      <div className={`shrink-0 ${compacto ? 'w-[clamp(26px,14cqmin,80px)] h-[clamp(26px,14cqmin,80px)]' : 'w-[clamp(34px,19cqmin,120px)] h-[clamp(34px,19cqmin,120px)]'}`}>
-        <Pizza partes={partes} />
-      </div>
-      <div className="min-w-0 flex-1 leading-tight">
-        <p className="font-bold uppercase tracking-widest text-zinc-400 truncate text-[clamp(7px,2.6cqmin,12px)]">Lucro/Prejuízo do mês</p>
-        <p className="font-black tracking-tight whitespace-nowrap text-[clamp(13px,7cqmin,38px)]" style={{ color: l.lucro >= 0 ? VERDE : VERMELHO }}>
+    <div className="min-w-0 flex flex-col gap-[0.8cqmin] leading-tight">
+      <p className="font-bold uppercase tracking-widest text-zinc-400 truncate text-[clamp(7px,2.6cqmin,12px)]">Lucro/Prejuízo do mês</p>
+      <div className="flex items-center gap-[2cqmin] min-w-0">
+        <div className={`shrink-0 ${compacto ? 'w-[clamp(24px,10cqmin,60px)] h-[clamp(24px,10cqmin,60px)]' : 'w-[clamp(30px,12cqmin,80px)] h-[clamp(30px,12cqmin,80px)]'}`}>
+          <Pizza partes={partes} />
+        </div>
+        <p className="min-w-0 flex-1 font-black tracking-tight whitespace-nowrap text-[clamp(13px,5.8cqmin,36px)]" style={{ color: l.lucro >= 0 ? VERDE : VERMELHO }}>
           {brl(l.lucro)}
         </p>
-        <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.8cqmin,13px)]">
-          {v !== null && (
-            <span style={{ color: v >= 0 ? VERDE : VERMELHO }}>
-              {v >= 0 ? '↑' : '↓'} {UMA_CASA.format(Math.abs(v))}% •{' '}
-            </span>
-          )}
-          mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
-        </p>
-        {!compacto && (
-          <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
-            Vendido {reais(l.vendido)} • custos {reais(l.totalCustos)}
-          </p>
-        )}
-        {!compacto && estimado.length > 0 && (
-          <p className="text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]" title="Ainda não lançados: o cálculo usa a estimativa da Tabela de Preços do Rebolo">
-            ≈ estimado: {estimado.join(', ')}
-          </p>
-        )}
       </div>
+      <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.7cqmin,13px)]">
+        {v !== null && (
+          <span style={{ color: v >= 0 ? VERDE : VERMELHO }}>
+            {v >= 0 ? '↑' : '↓'} {UMA_CASA.format(Math.abs(v))}% •{' '}
+          </span>
+        )}
+        mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
+      </p>
+      {!compacto && (
+        <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
+          Vendido <span className="text-zinc-300">{reais(l.vendido)}</span> • custos <span className="text-zinc-300">{reais(l.totalCustos)}</span>
+        </p>
+      )}
+      {!compacto && estimado.length > 0 && (
+        <p className="text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]" title="Ainda não lançados: o cálculo usa a estimativa da Tabela de Preços do Rebolo">
+          ≈ estimado: {estimado.join(', ')}
+        </p>
+      )}
     </div>
   )
 }
@@ -200,23 +202,41 @@ const curtoRS = (v: number) => {
   return v < 0 ? `−${t}` : t
 }
 
-// barras do ano: acima da linha do zero = lucro (verde), abaixo = prejuízo (vermelho); "—" antes de começar
-function LucroMesesTV({ meses, ano, destaque, compacto }: { meses: (LucroRebolo | null)[]; ano: string; destaque: number; compacto: boolean }) {
+// barras do ano: acima da linha do zero = lucro (verde), abaixo = prejuízo (vermelho); "—" antes de começar.
+// (08/10) o valor de cada mês em cima da barra (do prejuízo, acima da linha do zero); ocupa a altura que sobrar no card.
+function LucroMesesTV({ meses, ano, destaque }: { meses: (LucroRebolo | null)[]; ano: string; destaque: number }) {
   const vals = meses.map((m) => (m ? m.lucro : null))
   const maxPos = Math.max(0, ...vals.map((v) => v ?? 0))
   const maxNeg = Math.max(0, ...vals.map((v) => -(v ?? 0)))
   const cima = maxPos + maxNeg > 0 ? maxPos / (maxPos + maxNeg) : 0.5
   const nomes = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+  const rotulos = vals.map((v) => (v === null ? '' : curtoRS(v)))
+  // a letra acompanha a largura do card: o maior valor cabe na largura da barra sem encostar no vizinho
+  const largura = (t: string) => [...t].reduce((a, ch) => a + (ch === ',' || ch === '.' ? 0.3 : 0.62), 0.1)
+  const maior = Math.max(1.3, ...rotulos.map(largura))
+  const fonte = { fontSize: `clamp(7px, ${(86 / 12 / maior).toFixed(2)}cqw, 13px)` }
+  // o número fica sempre EM CIMA: do lucro, na ponta da barra verde; do prejuízo, logo acima da linha do zero (em vermelho)
+  const folga = { paddingTop: '1.2em' }
   return (
-    <div className="shrink-0">
+    <div className="flex-[1.5] min-h-0 flex flex-col overflow-hidden">
       <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]">Lucro/Prejuízo por mês</p>
-      <div className={`${compacto ? 'h-[clamp(16px,9cqmin,60px)]' : 'h-[clamp(26px,14cqmin,90px)]'} flex gap-[2px] mt-[0.6cqmin]`}>
+      <div className="flex-1 min-h-[24px] flex gap-[2px] mt-[0.4cqmin]" style={{ ...fonte, ...folga }}>
         {vals.map((v, i) => (
           <div key={i} className="flex-1 min-w-0 h-full flex flex-col" title={`${nomeMes(`${ano}-${String(i + 1).padStart(2, '0')}`)}: ${v === null ? 'sem conta' : brl(v)}`}>
             <div className="flex flex-col justify-end" style={{ height: `${cima * 100}%` }}>
-              {v !== null && v > 0 && <div className={`w-full rounded-t-[2px] ${i === destaque ? 'ring-1 ring-white/80' : ''}`} style={{ height: `${Math.max(4, (v / maxPos) * 100)}%`, backgroundColor: VERDE }}></div>}
+              {v !== null && v > 0 && (
+                <div className={`relative w-full rounded-t-[2px] ${i === destaque ? 'ring-1 ring-white/80' : ''}`} style={{ height: `${Math.max(4, (v / maxPos) * 100)}%`, backgroundColor: VERDE }}>
+                  <span data-lucro-mes className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[0.15em] font-black leading-none whitespace-nowrap text-zinc-100">{rotulos[i]}</span>
+                </div>
+              )}
             </div>
-            <div className={v === null ? 'h-[2px] bg-white/[0.08]' : 'h-px bg-white/[0.25]'}></div>
+            <div className={`relative ${v === null ? 'h-[2px] bg-white/[0.08]' : 'h-px bg-white/[0.25]'}`}>
+              {v !== null && v <= 0 && (
+                <span data-lucro-mes className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-[0.2em] font-black leading-none whitespace-nowrap ${v < 0 ? '' : 'text-zinc-500'}`} style={v < 0 ? { color: VERMELHO } : undefined}>
+                  {rotulos[i]}
+                </span>
+              )}
+            </div>
             <div className="flex flex-col justify-start" style={{ height: `${(1 - cima) * 100}%` }}>
               {v !== null && v < 0 && <div className={`w-full rounded-b-[2px] ${i === destaque ? 'ring-1 ring-white/80' : ''}`} style={{ height: `${Math.max(4, (-v / maxNeg) * 100)}%`, backgroundColor: VERMELHO }}></div>}
             </div>
@@ -253,6 +273,46 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
   const valores = d.uteis.map((dia) => (dia <= hj ? (d.serie[Number(dia.slice(8)) - 1] ?? 0) : null))
   // número em cima da barra de cada dia: quantidade inteira; R$ curto (850 • 12,5k) para caber na barrinha
   const doDia = (v: number) => (ind.unidade === 'brl' && v >= 1000 ? `${UMA_CASA.format(v / 1000)}k` : num(v))
+  // número do mês, meta/piso, barra da meta e Hoje/Faltam (no Rebolo em card largo, a coluna é mais estreita: número menor)
+  const blocoMeta = (rebolo: boolean) => (
+    <>
+      {/* número do mês */}
+      <div>
+        <p className="font-bold uppercase tracking-widest text-zinc-400 text-[clamp(7px,2.6cqmin,12px)] truncate">{ind.label} no mês</p>
+        <p className="font-black leading-none tracking-tighter text-white">
+          <span className={`text-[clamp(20px,13cqmin,72px)] text-white ${rebolo ? '@md:text-[clamp(18px,10cqmin,60px)]' : ''}`}>{f(r.mes)}</span>
+          <span className={`text-zinc-400 text-[clamp(10px,4.5cqmin,26px)] ${rebolo ? 'whitespace-nowrap @md:text-[clamp(9px,3.8cqmin,22px)]' : ''}`}> / {f(r.meta.mensal)}</span>
+        </p>
+      </div>
+
+      {/* meta e piso: do mês e do dia */}
+      {r.meta.mensal > 0 && (
+        <div className="flex flex-wrap gap-x-[3cqmin] gap-y-[0.5cqmin] -mt-[0.8cqmin] font-bold leading-tight text-zinc-400 text-[clamp(7px,3cqmin,14px)]">
+          <span className="whitespace-nowrap">
+            Meta <b className="text-white">{f(r.meta.mensal)}</b> • <b className="text-white">{f(Math.round(r.meta.diaria))}</b>/dia
+          </span>
+          {r.piso > 0 && (
+            <span className="whitespace-nowrap">
+              Piso <b className="text-white">{f(r.piso)}</b> • <b className="text-white">{f(Math.round(r.pisoDiario))}</b>/dia
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* barra da meta com a marca do piso */}
+      <div className="relative h-[clamp(6px,3cqmin,16px)] rounded-full bg-white/[0.08]">
+        <div className="h-full rounded-full transition-all duration-700 bg-zinc-400/80" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
+        {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute -inset-y-1 w-[3px] rounded bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }} title={`Piso ${f(r.piso)}`}></div>}
+      </div>
+
+      {/* hoje / faltam (+ bônus da Produção): neutros; verde só na meta batida */}
+      <div className="flex flex-wrap gap-[1.5cqmin]">
+        <Chip>Hoje {f(r.hoje)}</Chip>
+        {r.falta > 0 ? <Chip>Faltam {f(r.falta)}</Chip> : <Chip cor={VERDE}>🎯 Meta batida</Chip>}
+        {c.setor === 'edicao' && <ChipBonus albuns={r.mes} />}
+      </div>
+    </>
+  )
   return (
     <div style={tamanho} className="h-full w-full min-h-0">
       <div
@@ -274,48 +334,31 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
           </span>
         </div>
 
-        {/* número do mês */}
-        <div>
-          <p className="font-bold uppercase tracking-widest text-zinc-400 text-[clamp(7px,2.6cqmin,12px)] truncate">{ind.label} no mês</p>
-          <p className="font-black leading-none tracking-tighter text-white">
-            <span className="text-[clamp(20px,13cqmin,72px)] text-white">{f(r.mes)}</span>
-            <span className="text-zinc-400 text-[clamp(10px,4.5cqmin,26px)]"> / {f(r.meta.mensal)}</span>
-          </p>
-        </div>
-
-        {/* meta e piso: do mês e do dia */}
-        {r.meta.mensal > 0 && (
-          <div className="flex flex-wrap gap-x-[3cqmin] gap-y-[0.5cqmin] -mt-[0.8cqmin] font-bold leading-tight text-zinc-400 text-[clamp(7px,3cqmin,14px)]">
-            <span className="whitespace-nowrap">
-              Meta <b className="text-white">{f(r.meta.mensal)}</b> • <b className="text-white">{f(Math.round(r.meta.diaria))}</b>/dia
-            </span>
-            {r.piso > 0 && (
-              <span className="whitespace-nowrap">
-                Piso <b className="text-white">{f(r.piso)}</b> • <b className="text-white">{f(Math.round(r.pisoDiario))}</b>/dia
-              </span>
-            )}
-          </div>
+        {lucro ? (
+          // vendedora do Rebolo (08/10, "organizar as informações no card"): em card largo, duas colunas em cima —
+          // a meta à esquerda e o Lucro/Prejuízo do mês à direita —; embaixo, cada gráfico com o seu título e a sua altura
+          <>
+            <div className="shrink-0 grid grid-cols-1 @md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-x-[3.5cqmin] gap-y-[2.2cqmin] items-start">
+              <div className="min-w-0 flex flex-col gap-[2.2cqmin]">{blocoMeta(true)}</div>
+              <div className="min-w-0 @md:border-l @md:border-white/[0.08] @md:pl-[3.5cqmin]">
+                <LucroPizzaTV l={lucro} anterior={lucroAnterior} compacto={compacto} />
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col gap-[2cqmin] overflow-hidden">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)] mb-[0.4cqmin]">{ind.label} por dia</p>
+                <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={compacto ? undefined : doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+              </div>
+              {lucroAno && <LucroMesesTV meses={lucroAno} ano={mes.slice(0, 4)} destaque={Number(mes.slice(5, 7)) - 1} />}
+            </div>
+          </>
+        ) : (
+          <>
+            {blocoMeta(false)}
+            {/* dias úteis */}
+            <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+          </>
         )}
-
-        {/* barra da meta com a marca do piso */}
-        <div className="relative h-[clamp(6px,3cqmin,16px)] rounded-full bg-white/[0.08]">
-          <div className="h-full rounded-full transition-all duration-700 bg-zinc-400/80" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
-          {r.piso > 0 && r.meta.mensal > 0 && <div className="absolute -inset-y-1 w-[3px] rounded bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }} title={`Piso ${f(r.piso)}`}></div>}
-        </div>
-
-        {/* hoje / faltam (+ bônus da Produção): neutros; verde só na meta batida */}
-        <div className="flex flex-wrap gap-[1.5cqmin]">
-          <Chip>Hoje {f(r.hoje)}</Chip>
-          {r.falta > 0 ? <Chip>Faltam {f(r.falta)}</Chip> : <Chip cor={VERDE}>🎯 Meta batida</Chip>}
-          {c.setor === 'edicao' && <ChipBonus albuns={r.mes} />}
-        </div>
-
-        {lucro && <LucroPizzaTV l={lucro} anterior={lucroAnterior} compacto={compacto} />}
-
-        {/* dias úteis */}
-        <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={lucro && compacto ? undefined : doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
-
-        {lucroAno && <LucroMesesTV meses={lucroAno} ano={mes.slice(0, 4)} destaque={Number(mes.slice(5, 7)) - 1} compacto={compacto} />}
       </div>
     </div>
   )
