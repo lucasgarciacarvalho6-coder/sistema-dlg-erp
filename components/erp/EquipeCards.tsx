@@ -276,7 +276,6 @@ function TelaCheiaEquipe({ s, mes, todos, onSair }: { s: ErpState; mes: string; 
     }
   }, [])
   const lista = marcados.length ? todos.filter((x) => marcados.includes(x.c.setor)) : todos
-  const tamanhoDaEquipe = marcados.length === 0 || (marcados.length === 1 && marcados[0] === 'operacional')
   return createPortal(
     <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white flex flex-col gap-5 px-8 py-6 2xl:px-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -305,16 +304,13 @@ function TelaCheiaEquipe({ s, mes, todos, onSair }: { s: ErpState; mes: string; 
       </div>
       <FaixaGerente s={s} />
       <div className="flex-1 min-h-0">
-        {/* Todos e só Operacional: o tamanho dos cards é o da equipe toda (como sempre). Os outros setores marcados
-            ajustam os cards à quantidade escolhida e ocupam a tela (pedido de 06/10/2026). */}
+        {/* todos os cards do mesmo tamanho; marcou ou desmarcou setor, a grade se ajusta à tela (pedido de 09/10/2026) */}
         <GradeTV
           key={marcados.join(',') || 'todos'}
           s={s}
           mes={mes}
           pessoas={lista.map(({ c }) => c)}
-          base={tamanhoDaEquipe ? todos.map(({ c }) => c) : undefined}
           producao={marcados.length === 0 || marcados.includes('edicao')}
-          proporcional={!tamanhoDaEquipe}
           ajustar
         />
       </div>

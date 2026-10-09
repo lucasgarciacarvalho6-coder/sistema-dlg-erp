@@ -84,7 +84,7 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
                     {i + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="font-black text-white leading-tight line-clamp-3 text-[clamp(10px,2.8cqmin,22px)]">
+                    <p className={`font-black text-white leading-tight text-[clamp(10px,2.8cqmin,22px)] ${compacto ? 'truncate' : 'line-clamp-3'}`} title={l.nome}>
                       <NomeEtapa nome={l.nome} />
                     </p>
                     {!compacto && <p className="text-zinc-400 leading-tight truncate text-[clamp(7px,1.9cqmin,14px)]">{l.descricao}</p>}

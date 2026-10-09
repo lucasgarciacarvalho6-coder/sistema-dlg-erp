@@ -494,7 +494,9 @@ function LegendaCusto() {
 // compacto = card pequeno na TV (muita gente na tela): some o que é detalhe, ficam os números e as barras
 // faixa = modo TV: Operações na largura toda, com os 3 mini-cards lado a lado numa linha só;
 // senão os 2 de custo em cima e a agenda embaixo, na largura toda
-export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: { s: ErpState; c: Colaborador; mes: string; compacto?: boolean; faixa?: boolean }) {
+// parte (09/10, "todos os cards do mesmo tamanho"): um dos 3 quadros sozinho, como card do tamanho padrão da grade
+export type ParteOperacoes = 'mes' | 'ano' | 'agenda'
+export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false, parte }: { s: ErpState; c: Colaborador; mes: string; compacto?: boolean; faixa?: boolean; parte?: ParteOperacoes }) {
   const x = useDados(s, c, mes)
   const r = x.r
   const corCusto = x.custoRef > x.custoMes * 1.03 ? VERMELHO : x.custoRef > 0 && x.custoRef < x.custoMes * 0.97 ? VERDE : AZUL
@@ -540,6 +542,125 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
   }, [s, c.id, mes, x])
   const corAno = custo.mensal.fichas > 0 && custo.anual.fichas > 0 ? (custo.mensal.media > custo.anual.media * 1.03 ? VERMELHO : custo.mensal.media < custo.anual.media * 0.97 ? VERDE : AZUL) : AZUL
   const a = x.agenda
+  // custo por ficha no mês: cada dia útil
+  const quadroMes = (
+    <>
+      <TopoCusto media={custo.mensal.media} cor={corCusto} legenda="custo médio por ficha no mês" total={custo.mensal.total} fichas={custo.mensal.fichas} operacoes={custo.mensal.operacoes} />
+      <BarrasCusto
+        rotulos={x.uteis.map((d) => String(Number(d.slice(8))))}
+        qtd={custo.mensal.qtd}
+        custos={custo.mensal.custos}
+        corBarra={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : AZUL)}
+        corCusto={(v) => (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE)}
+        destaque={custo.mensal.destaque}
+      />
+      {/* meta do mês: fichas fotografadas / meta (o traço branco é o piso) */}
+      {r && r.meta.mensal > 0 && (
+        <div className="relative shrink-0 h-[clamp(14px,7cqmin,30px)] rounded-xl bg-white/[0.08] overflow-hidden" title={`Meta do mês: ${num(r.mes)} de ${num(r.meta.mensal)} fichas${r.piso > 0 ? ` • piso ${num(r.piso)}` : ''}`}>
+          <div className="h-full rounded-xl bg-zinc-400/60" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
+          {r.piso > 0 && <div className="absolute inset-y-0 w-[3px] bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }}></div>}
+          <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow text-[clamp(9px,4cqmin,18px)]">
+            {num(r.mes)} / {num(r.meta.mensal)}
+          </span>
+        </div>
+      )}
+      {!compacto && <LegendaCusto />}
+    </>
+  )
+  // custo por ficha no ano: cada mês
+  const quadroAno = (
+    <>
+      <TopoCusto media={custo.anual.media} cor={corAno} legenda="custo médio por ficha no ano" total={custo.anual.total} fichas={custo.anual.fichas} operacoes={custo.anual.operacoes} />
+      <BarrasCusto
+        rotulos={MESES_CURTOS}
+        qtd={custo.anual.qtd}
+        custos={custo.anual.custos}
+        corBarra={(_, i) => custo.anual.cores[i]}
+        corCusto={(v) => (v > custo.anual.media * 1.03 ? VERMELHO : VERDE)}
+        abaixo={custo.anual.abaixo}
+        destaque={custo.anual.destaque}
+      />
+      {!compacto && <LegendaCusto />}
+    </>
+  )
+  // agenda futura: a PROJEÇÃO (visitas e retornos agendados) fica só aqui
+  const quadroAgenda = (
+    <>
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <span className="font-black leading-none tracking-tighter text-white text-[clamp(18px,13cqmin,68px)]">{num(a.agendadas)}</span>
+          <p className="font-bold text-zinc-300 text-[clamp(8px,3.4cqmin,15px)]">
+            fichas agendadas • <span className="text-white">{num(a.total)}</span> confirmadas
+          </p>
+        </div>
+        <div className="text-right leading-tight">
+          {a.capacidade !== null && (
+            <span className="block font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas agendadas ÷ o que a meta pede nesses dias">
+              {Math.round(a.capacidade)}%
+            </span>
+          )}
+          <p className="font-bold text-zinc-300 whitespace-nowrap text-[clamp(8px,3.4cqmin,15px)]" title="Custo previsto: carros × gasto fixo + fichas agendadas × custo por ficha">
+            Previsto <span className="text-white">{reais(a.custo)}</span>
+            {a.agendadas > 0 ? (
+              <>
+                {' '}• <span className="text-white">{reais(a.custoPorFicha)}</span>/ficha
+              </>
+            ) : null}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-[1.2cqmin]">
+        <ChipLegenda cor={VERDE}>{a.ok} OK</ChipLegenda>
+        <ChipLegenda cor={AMARELO}>{a.pendentes} Pend.</ChipLegenda>
+        <ChipLegenda cor={VERMELHO}>{a.vazios} Vazio</ChipLegenda>
+      </div>
+      <BarrasCusto
+        rotulos={a.dias.map((d) => String(Number(d.data.slice(8))))}
+        qtd={a.dias.map((d) => d.alunos)}
+        extra={a.dias.map((d) => Math.max(0, d.agendadas - d.alunos))}
+        custos={a.dias.map((d) => (d.agendadas > 0 ? d.custo / d.agendadas : null))}
+        corBarra={(v) => x.corAgendamento(v)}
+        corCusto={(v) => (custo.mensal.media > 0 ? (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE) : '#d4d4d8')}
+        fonteMax={20}
+      />
+      {!compacto && <LegendaAgendamento x={x} tv comCusto />}
+    </>
+  )
+  const titulos: Record<ParteOperacoes, string> = {
+    mes: `Custo por ficha • ${nomeCurto(mes)} (dias úteis)`,
+    ano: `Custo por ficha • ${mes.slice(0, 4)} (meses)`,
+    agenda: 'Agenda • próximos 20 dias',
+  }
+
+  // um quadro só, como card padrão (o mesmo cabeçalho dos cards das pessoas: foto, título e "Operações • nome")
+  if (parte)
+    return (
+      <div className="cq-tamanho h-full w-full min-h-0">
+        <div className="h-full w-full rounded-3xl border border-white/[0.2] bg-card-tv p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
+          <div className="flex items-center gap-[2.5cqmin] min-w-0">
+            <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-[clamp(24px,10cqmin,56px)] h-[clamp(24px,10cqmin,56px)]" arredondado="rounded-full" textoCls="text-[clamp(9px,3.4cqmin,16px)]" />
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-white leading-tight truncate text-[clamp(10px,4.4cqmin,22px)]">{titulos[parte]}</p>
+              <p className="font-bold uppercase tracking-widest truncate text-zinc-400 text-[clamp(7px,2.6cqmin,12px)]">Operações • {c.nome}</p>
+            </div>
+            {parte === 'mes' && r && r.meta.mensal > 0 && (
+              <div className="shrink-0 font-bold text-zinc-300 whitespace-nowrap text-right leading-tight text-[clamp(7px,2.6cqmin,13px)]">
+                <p>
+                  Meta <span className="text-white">{num(r.meta.mensal)}</span> • <span className="text-white">{num(r.meta.diaria)}</span>/dia
+                </p>
+                {r.piso > 0 && (
+                  <p>
+                    Piso <span className="text-white">{num(r.piso)}</span> • <span className="text-white">{num(r.pisoDiario)}</span>/dia
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          {parte === 'mes' ? quadroMes : parte === 'ano' ? quadroAno : quadroAgenda}
+        </div>
+      </div>
+    )
+
   return (
     <div className="cq-tamanho h-full w-full min-h-0">
       <div className="h-full w-full rounded-3xl border border-white/[0.2] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
@@ -570,87 +691,11 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
               : { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gridTemplateRows: 'repeat(2, minmax(0, 1fr))' }
           }
         >
-          {/* custo por ficha no mês: cada dia útil */}
-          <MiniTV titulo={`Custo por ficha • ${nomeCurto(mes)} (dias úteis)`}>
-            <TopoCusto media={custo.mensal.media} cor={corCusto} legenda="custo médio por ficha no mês" total={custo.mensal.total} fichas={custo.mensal.fichas} operacoes={custo.mensal.operacoes} />
-            <BarrasCusto
-              rotulos={x.uteis.map((d) => String(Number(d.slice(8))))}
-              qtd={custo.mensal.qtd}
-              custos={custo.mensal.custos}
-              corBarra={(v) => (r ? corDoDia(v, r.meta.diaria, r.pisoDiario) : AZUL)}
-              corCusto={(v) => (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE)}
-              destaque={custo.mensal.destaque}
-            />
-            {/* meta do mês: fichas fotografadas / meta (o traço branco é o piso) */}
-            {r && r.meta.mensal > 0 && (
-              <div className="relative shrink-0 h-[clamp(14px,7cqmin,30px)] rounded-xl bg-white/[0.08] overflow-hidden" title={`Meta do mês: ${num(r.mes)} de ${num(r.meta.mensal)} fichas${r.piso > 0 ? ` • piso ${num(r.piso)}` : ''}`}>
-                <div className="h-full rounded-xl bg-zinc-400/60" style={{ width: `${Math.min(100, r.pctMes)}%` }}></div>
-                {r.piso > 0 && <div className="absolute inset-y-0 w-[3px] bg-white/80" style={{ left: `${Math.min(100, (r.piso / r.meta.mensal) * 100)}%` }}></div>}
-                <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow text-[clamp(9px,4cqmin,18px)]">
-                  {num(r.mes)} / {num(r.meta.mensal)}
-                </span>
-              </div>
-            )}
-            {!compacto && <LegendaCusto />}
+          <MiniTV titulo={titulos.mes}>{quadroMes}</MiniTV>
+          <MiniTV titulo={titulos.ano}>{quadroAno}</MiniTV>
+          <MiniTV titulo={titulos.agenda} estilo={faixa ? undefined : { gridColumn: 'span 2' }}>
+            {quadroAgenda}
           </MiniTV>
-
-          {/* custo por ficha no ano: cada mês */}
-          <MiniTV titulo={`Custo por ficha • ${mes.slice(0, 4)} (meses)`}>
-            <TopoCusto media={custo.anual.media} cor={corAno} legenda="custo médio por ficha no ano" total={custo.anual.total} fichas={custo.anual.fichas} operacoes={custo.anual.operacoes} />
-            <BarrasCusto
-              rotulos={MESES_CURTOS}
-              qtd={custo.anual.qtd}
-              custos={custo.anual.custos}
-              corBarra={(_, i) => custo.anual.cores[i]}
-              corCusto={(v) => (v > custo.anual.media * 1.03 ? VERMELHO : VERDE)}
-              abaixo={custo.anual.abaixo}
-              destaque={custo.anual.destaque}
-            />
-            {!compacto && <LegendaCusto />}
-          </MiniTV>
-
-          {/* agenda futura: a PROJEÇÃO (visitas e retornos agendados) fica só aqui */}
-          <MiniTV titulo="Agenda • próximos 20 dias" estilo={faixa ? undefined : { gridColumn: 'span 2' }}>
-            <div className="flex items-end justify-between gap-2">
-              <div>
-                <span className="font-black leading-none tracking-tighter text-white text-[clamp(18px,13cqmin,68px)]">{num(a.agendadas)}</span>
-                <p className="font-bold text-zinc-300 text-[clamp(8px,3.4cqmin,15px)]">
-                  fichas agendadas • <span className="text-white">{num(a.total)}</span> confirmadas
-                </p>
-              </div>
-              <div className="text-right leading-tight">
-                {a.capacidade !== null && (
-                  <span className="block font-black leading-none text-white text-[clamp(14px,9cqmin,48px)]" title="Fichas agendadas ÷ o que a meta pede nesses dias">
-                    {Math.round(a.capacidade)}%
-                  </span>
-                )}
-                <p className="font-bold text-zinc-300 whitespace-nowrap text-[clamp(8px,3.4cqmin,15px)]" title="Custo previsto: carros × gasto fixo + fichas agendadas × custo por ficha">
-                  Previsto <span className="text-white">{reais(a.custo)}</span>
-                  {a.agendadas > 0 ? (
-                    <>
-                      {' '}• <span className="text-white">{reais(a.custoPorFicha)}</span>/ficha
-                    </>
-                  ) : null}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-[1.2cqmin]">
-              <ChipLegenda cor={VERDE}>{a.ok} OK</ChipLegenda>
-              <ChipLegenda cor={AMARELO}>{a.pendentes} Pend.</ChipLegenda>
-              <ChipLegenda cor={VERMELHO}>{a.vazios} Vazio</ChipLegenda>
-            </div>
-            <BarrasCusto
-              rotulos={a.dias.map((d) => String(Number(d.data.slice(8))))}
-              qtd={a.dias.map((d) => d.alunos)}
-              extra={a.dias.map((d) => Math.max(0, d.agendadas - d.alunos))}
-              custos={a.dias.map((d) => (d.agendadas > 0 ? d.custo / d.agendadas : null))}
-              corBarra={(v) => x.corAgendamento(v)}
-              corCusto={(v) => (custo.mensal.media > 0 ? (v > custo.mensal.media * 1.03 ? VERMELHO : VERDE) : '#d4d4d8')}
-              fonteMax={20}
-            />
-            {!compacto && <LegendaAgendamento x={x} tv comCusto />}
-          </MiniTV>
-
         </div>
       </div>
     </div>
@@ -658,28 +703,28 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
 }
 
 // ---------------- Grade: todos os cards na mesma tela ----------------
-// ajustar = true (modo TV): calcula colunas e linhas para caber tudo na altura disponível, sem rolar.
-// ajustar = false (página): colunas pela largura e altura fixa por card.
-// base (com ajustar): o tamanho dos cards é calculado pela equipe toda e fica FIXO — ao filtrar um setor,
-// os cards não esticam: ficam do mesmo tamanho, alinhados a partir do canto de cima.
-// producao: mostra o card das etapas da Produção (quando tem escola na Produção), no lugar de 2×2 cards (3×2 em telas com muitas colunas).
+// (09/10, "todos os cards do mesmo tamanho, seguindo o tamanho da tela" — TV de 75" ligada o dia todo):
+// cada pessoa, a Produção e os 3 quadros de Operações (custo do mês, custo do ano e agenda) são UMA célula igual.
+// ajustar = true (tela cheia e Modo TV): as colunas × linhas que deixam as células iguais e as maiores possíveis
+//   (proporção boa de ler, ~1,35 de largura para 1 de altura) e ocupam a tela; entrou ou saiu card (filtro de setor)
+//   ou mudou o tamanho da tela → recalcula sozinho. As letras e os gráficos acompanham o tamanho do card.
+// ajustar = false (página): colunas pela largura e altura fixa por card (a página rola).
+// producao: mostra o card das etapas da Produção (quando tem escola na Produção).
+const PROPORCAO_TV = 1.35
+const PARTES_OPERACOES: ParteOperacoes[] = ['mes', 'ano', 'agenda']
 export function GradeTV({
   s,
   mes,
   pessoas,
-  base,
   ajustar = false,
   producao = false,
-  proporcional = false,
   onAbrir,
 }: {
   s: ErpState
   mes: string
   pessoas: Colaborador[]
-  base?: Colaborador[]
   ajustar?: boolean
   producao?: boolean
-  proporcional?: boolean // aba de um setor na TV: os cards ocupam a tela, mas sem ficar mais largos que 1,6 × a altura (centralizados)
   onAbrir?: (c: Colaborador) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -694,97 +739,57 @@ export function GradeTV({
 
   const ops = pessoas.find((c) => c.setor === 'operacional')
   const outros = pessoas.filter((c) => c !== ops)
-  // quem define o tamanho: a equipe toda (base) ou quem está na tela
-  const opsBase = (base ?? pessoas).some((c) => c.setor === 'operacional')
-  const nBase = (base ?? pessoas).filter((c) => c.setor !== 'operacional').length
-  const temLotes = lotesProducao(s).length > 0
-  const prod = producao && temLotes
-  const prodBase = base ? temLotes : prod // com base, o lugar do card fica reservado mesmo filtrando outro setor
+  const prod = producao && lotesProducao(s).length > 0
+  const total = (ops ? PARTES_OPERACOES.length : 0) + (prod ? 1 : 0) + outros.length
   const GAP = 14
+  // página: com vendedora do Rebolo (lucro do mês + barras dos dias e dos meses), os cards ficam um pouco mais altos
+  const alturaPagina = outros.some((c) => c.setor === 'rebolo') ? 410 : 330
 
   const layout = useMemo(() => {
-    // card da Produção: 2 colunas × 2 linhas (1 × 1 numa coluna só). Na TV, com 7 colunas ou mais, pode ter 3 de largura:
-    // fica a combinação em que os cards das pessoas e o da Produção ficam maiores.
-    const blocos = (cols: number) => (!prodBase ? [{ pc: 0, pr: 0 }] : cols === 1 ? [{ pc: 1, pr: 1 }] : cols >= 7 ? [{ pc: 3, pr: 2 }, { pc: 2, pr: 2 }] : [{ pc: 2, pr: 2 }])
     if (!ajustar) {
       const cols = Math.max(2, Math.min(5, Math.floor((area.w + GAP) / (330 + GAP))))
-      return { cols, rows: 0, opsRows: 2, opsCols: Math.min(cols, 3), opsH: 0, w: 0, h: 0, ...blocos(cols).at(-1)! }
+      return { cols, rows: Math.ceil(total / cols), w: (area.w - GAP * (cols - 1)) / cols, h: alturaPagina }
     }
-    // Operações em cima na largura toda (a faixa diminui um pouco quando tem muita gente);
-    // embaixo, as colunas que deixam os cards das pessoas maiores (proporção ~ 1 : 0,95), com o card da Produção junto
-    const n = nBase
-    const celulas = n + (prodBase ? 4 : 0)
-    const opsH = !opsBase ? 0 : celulas === 0 ? area.h : Math.round((area.h - GAP) * (celulas <= 12 ? 0.47 : celulas <= 20 ? 0.42 : 0.37))
-    const resto = area.h - (opsBase ? opsH + GAP : 0)
-    let melhor = { cols: 4, rows: 1, opsRows: 0, opsCols: 0, opsH, w: 0, h: 0, pc: 0, pr: 0, nota: -1 }
-    for (let cols = 1; cols <= 14; cols++) {
-      for (const b of blocos(cols)) {
-        const rows = Math.max(1, b.pr, Math.ceil((n + b.pc * b.pr) / cols))
-        const w = (area.w - GAP * (cols - 1)) / cols
-        const h = (resto - GAP * (rows - 1)) / rows
-        if (w <= 0 || h <= 0) continue
-        // nota = tamanho do card da pessoa; com a Produção, o card dela também precisa caber bem (a tabela gosta de largura)
-        const prodNota = b.pc ? Math.min((b.pc * w + (b.pc - 1) * GAP) / 1.3, b.pr * h + (b.pr - 1) * GAP) / 2 : Infinity
-        const nota = Math.min(w, h / 0.95, prodNota)
-        if (nota > melhor.nota) melhor = { cols, rows, opsRows: 0, opsCols: 0, opsH, w, h, ...b, nota }
-      }
+    let melhor = { cols: 1, rows: 1, w: area.w, h: area.h, nota: -1 }
+    for (let cols = 1; cols <= Math.max(1, total); cols++) {
+      const rows = Math.max(1, Math.ceil(total / cols))
+      const w = (area.w - GAP * (cols - 1)) / cols
+      const h = (area.h - GAP * (rows - 1)) / rows
+      if (w <= 0 || h <= 0) continue
+      // o card "bom de ler": a medida que limita (largura ÷ proporção ou altura) é a maior possível
+      const nota = Math.min(w / PROPORCAO_TV, h)
+      if (nota > melhor.nota + 0.5) melhor = { cols, rows, w, h, nota }
     }
     return melhor
-  }, [ajustar, area, opsBase, nBase, prodBase])
+  }, [ajustar, area, total, alturaPagina])
 
-  // altura do card da Produção na TV: baixo demais → sem a explicação de cada etapa
-  const prodH = layout.pr * layout.h + (layout.pr - 1) * GAP
-  const cardProducao = prod && (
-    <div key="producao" className="min-h-0 min-w-0" style={{ gridColumn: `span ${layout.pc}`, gridRow: `span ${layout.pr}` }}>
-      <CardProducaoTV s={s} mes={mes} compacto={ajustar && prodH < 360} />
+  const celula = (key: string, conteudo: ReactNode) => (
+    <div key={key} className="min-h-0 min-w-0">
+      {conteudo}
     </div>
   )
+  const cards = [
+    ...(ops ? PARTES_OPERACOES.map((parte) => celula(`ops-${parte}`, <CardOperacoesTV s={s} c={ops} mes={mes} parte={parte} compacto={layout.h < 360} />)) : []),
+    ...(prod ? [celula('producao', <CardProducaoTV s={s} mes={mes} compacto={layout.h < 360} />)] : []),
+    ...outros.map((c) => celula(c.id, <CardPessoaTV s={s} c={c} mes={mes} onAbrir={onAbrir ? () => onAbrir(c) : undefined} compacto={layout.h < 420} />)),
+  ]
 
-  const pessoasCards = outros.map((c) => (
-    <div key={c.id} className="min-h-0 min-w-0">
-      <CardPessoaTV s={s} c={c} mes={mes} onAbrir={onAbrir ? () => onAbrir(c) : undefined} compacto={!ajustar || layout.h < 420} />
-    </div>
-  ))
-
-  // modo TV: faixa de Operações em cima + grade dos setores embaixo, tudo na altura da tela
+  // tela cheia / Modo TV: a grade ocupa a altura da tela, sem rolar
   if (ajustar)
     return (
-      <div ref={ref} className="h-full flex flex-col" style={{ gap: GAP }}>
-        {ops && (
-          <div className="min-h-0 min-w-0 shrink-0" style={{ height: layout.opsH }}>
-            <CardOperacoesTV s={s} c={ops} mes={mes} faixa compacto={layout.opsH < 330} />
-          </div>
-        )}
-        {(outros.length > 0 || cardProducao) && (
-          <div
-            className="flex-1 min-h-0 grid content-start"
-            style={
-              base
-                ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.w)}px)`, gridAutoRows: Math.floor(layout.h), gridAutoFlow: 'dense', gap: GAP }
-                : proporcional && layout.w > layout.h * 1.6
-                  ? { gridTemplateColumns: `repeat(${layout.cols}, ${Math.floor(layout.h * 1.6)}px)`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, justifyContent: 'center', gridAutoFlow: 'dense', gap: GAP }
-                  : { gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gridAutoFlow: 'dense', gap: GAP }
-            }
-          >
-            {cardProducao}
-            {pessoasCards}
-          </div>
-        )}
+      <div
+        ref={ref}
+        className="h-full min-h-0 grid"
+        style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${layout.rows}, minmax(0, 1fr))`, gap: GAP }}
+      >
+        {cards}
       </div>
     )
 
-  // página: Operações é o card maior dentro da grade. Com vendedora do Rebolo (pizza + meses do Lucro/Prejuízo),
-  // os cards ficam um pouco mais altos para as barrinhas dos dias caberem.
-  const alturaPagina = outros.some((c) => c.setor === 'rebolo') ? 410 : 330
+  // página: todos do mesmo tamanho, altura fixa
   return (
-    <div ref={ref} className="grid" style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridAutoRows: alturaPagina, gridAutoFlow: 'dense', gap: GAP }}>
-      {ops && (
-        <div className="min-h-0 min-w-0" style={{ gridColumn: `span ${layout.opsCols}`, gridRow: `span ${layout.opsRows}` }}>
-          <CardOperacoesTV s={s} c={ops} mes={mes} />
-        </div>
-      )}
-      {cardProducao}
-      {pessoasCards}
+    <div ref={ref} className="grid" style={{ gridTemplateColumns: `repeat(${layout.cols}, minmax(0, 1fr))`, gridAutoRows: alturaPagina, gap: GAP }}>
+      {cards}
     </div>
   )
 }
