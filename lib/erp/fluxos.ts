@@ -6,7 +6,7 @@
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { avisosRascunhoVisita, bloqueioVisitaEncerrada, camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
-import { addDias, addMeses, dataBR, hoje, uid } from './format'
+import { addDias, addMeses, dataBR, diaLocal, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 import { chaveEscola } from './escolas'
@@ -648,7 +648,8 @@ export function conferirVendaBook(d: ErpState, id: string, acao: 'conferir' | 'd
   if (acao === 'conferir') {
     gerarCobrancaVenda(d, v, ctx)
     if (v.canal === 'Rebolo') {
-      contarVendaRebolo(d, v, ctx)
+      // já contou na assinatura; a venda de antes do SQL 044 conta agora, no dia da assinatura
+      contarVendaRebolo(d, v, ctx, v.assinaturaEm ? diaLocal(String(v.assinaturaEm)) : undefined)
       const ficha = col(d, 'rebolo_fichas').find((f) => f.id === v.fichaReboloId)
       if (ficha) ficha.situacao = 'Vendida'
     }
@@ -1507,12 +1508,17 @@ export function devolverFechamento(d: ErpState, contaId: string, motivo: string,
 
 // ---------------- Vendas Rebolo (mesmas regras do SQL 012) ----------------
 
-// Venda aprovada (ou venda interna antiga) conta na meta da vendedora: books e valor vendido
-export function contarVendaRebolo(d: ErpState, v: Registro, ctx: Contexto) {
+// Venda conta na meta da vendedora: books e valor vendido (mesmas regras do SQL 044).
+// Rebolo: conta no dia em que o contrato assinado é anexado (não espera o Financeiro); uma vez só por venda.
+// data = dia em que conta (padrão: o dia da venda — venda interna antiga)
+export function contarVendaRebolo(d: ErpState, v: Registro, ctx: Contexto, dia?: string) {
+  const vendaId = String(v.id ?? '')
+  if (vendaId && d.lancamentos.some((l) => l.vendaId === vendaId)) return
   const colaboradorId = String(v.cobradorId ?? '')
-  const data = String(v.data || hoje())
-  lancar(d, ctx, { setor: 'rebolo', indicador: 'books_vendidos', colaboradorId, quantidade: Number(v.quantidade) || 1, descricao: `${v.pacote} — ${v.responsavel}`, data })
-  if ((Number(v.valor) || 0) > 0) lancar(d, ctx, { setor: 'rebolo', indicador: 'valor_vendido', colaboradorId, quantidade: Number(v.valor), descricao: `${v.pacote} — ${v.responsavel}`, data })
+  const data = dia || String(v.data || hoje())
+  const descricao = `${v.pacote} — ${v.responsavel}`
+  lancar(d, ctx, { setor: 'rebolo', indicador: 'books_vendidos', colaboradorId, quantidade: Number(v.quantidade) || 1, descricao, data, vendaId })
+  if ((Number(v.valor) || 0) > 0) lancar(d, ctx, { setor: 'rebolo', indicador: 'valor_vendido', colaboradorId, quantidade: Number(v.valor), descricao, data, vendaId })
 }
 
 export type ResultadoContato = 'Sem resposta' | 'Em negociação' | 'Agendado' | 'Descarte'
@@ -1605,6 +1611,7 @@ export function atualizarVendaRebolo(d: ErpState, vendaId: string, acao: 'enviar
     v.conferencia = 'Cancelada'
     v.conferenciaMotivo = String(dados.motivo ?? '').trim()
     if (ficha) ficha.situacao = 'Cancelada'
+    d.lancamentos = d.lancamentos.filter((l) => l.vendaId !== v.id) // cancelada não conta
     auditar(d, ctx, 'EDITAR', `Venda rebolo cancelada: ${v.responsavel}`, 'rebolo')
     return null
   }
@@ -1612,6 +1619,9 @@ export function atualizarVendaRebolo(d: ErpState, vendaId: string, acao: 'enviar
   v.anexos = JSON.stringify({ contratoAssinado: dados.contrato })
   v.conferencia = 'Aguardando conferência'
   v.conferenciaMotivo = ''
+  v.assinaturaEm = v.assinaturaEm || agora()
+  // contrato assinado = venda feita: conta na meta hoje (devolvida e reenviada não conta de novo)
+  contarVendaRebolo(d, v, ctx, hoje())
   notificar(d, ctx, { setores: ['financeiro', 'adm'], tipo: 'aprovacao', titulo: 'Venda do rebolo para conferir', descricao: `${v.responsavel} • ${v.pacote} • R$ ${(Number(v.valor) || 0).toFixed(2).replace('.', ',')}`, link: '/financeiro/conferencia' })
   auditar(d, ctx, 'EDITAR', `Venda rebolo enviada ao Financeiro: ${v.responsavel}`, 'rebolo')
   return null
@@ -1664,6 +1674,12 @@ export function editarVendaRebolo(d: ErpState, vendaId: string, e: EdicaoVendaRe
     telefone: e.whatsapp.trim() || v.telefone,
     observacao: e.observacao.trim(),
   })
+  // a venda devolvida já contou na assinatura: a meta acompanha o valor e o nome novos
+  for (const l of d.lancamentos)
+    if (l.vendaId === v.id) {
+      if (l.indicador === 'valor_vendido') l.quantidade = e.valor
+      l.descricao = `${v.pacote} — ${v.responsavel}`
+    }
   inserir(d, 'rebolo_contatos', {
     fichaId: v.fichaReboloId,
     vendedoraId: ctx.autorId,

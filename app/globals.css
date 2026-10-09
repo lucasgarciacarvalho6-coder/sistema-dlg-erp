@@ -15,6 +15,8 @@
   --t-fundo: #020202;
   --t-painel: #0a0a0a;
   --t-painel-2: #050505;
+  /* card da Visão TV: um pouco mais claro que o fundo — a TV escurece os tons quase pretos e os cards somem (09/10) */
+  --t-card-tv: #111216;
   --t-modal: #0c0f17;
   --t-campo: #0f1115;
   --t-erro-fundo: #1a0f0f;
@@ -30,6 +32,7 @@
   --t-fundo: #e8eef8;
   --t-painel: #f6f8fd;
   --t-painel-2: #f1f5fc;
+  --t-card-tv: #fbfcff;
   --t-modal: #f8faff;
   --t-campo: #ffffff;
   --t-erro-fundo: #fdeeee;
@@ -96,6 +99,7 @@
   --color-fundo: var(--t-fundo);
   --color-painel: var(--t-painel);
   --color-painel-2: var(--t-painel-2);
+  --color-card-tv: var(--t-card-tv);
   --color-modal: var(--t-modal);
   --color-campo: var(--t-campo);
   --color-erro-fundo: var(--t-erro-fundo);

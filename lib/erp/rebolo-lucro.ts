@@ -1,7 +1,8 @@
 // Lucro/Prejuízo de cada vendedora do Rebolo no mês — a conta da planilha "REBOLO - BASE PRINCIPAL"
 // (conferida até os centavos em 07/10/2026):
 //   vendido − reserva do boleto − frete − taxa do cartão − taxa do boleto − álbum − saquinho − comissão − salário com encargos
-// • Vendas: as do Rebolo aprovadas (conferidas pelo Financeiro), pela data da venda — o mesmo "vendido no mês" do card.
+// • Vendas: as do Rebolo com o contrato assinado anexado (não esperam o Financeiro — SQL 044), pelo dia da assinatura —
+//   o mesmo "vendido no mês" da meta e do card.
 // • Frete e taxa do cartão: os reais do envio (Rebolo › Envios); sem eles, a estimativa da Tabela de Preços ("estimado").
 // • Álbum e saquinho: por álbum vendido (o Pôster com Moldura sozinho não leva álbum nem saquinho).
 // • Salário: o do holerite (Financeiro › Custo do Rebolo) + encargos; sem ele, o estimado. O mês corrente conta o salário cheio.
@@ -9,7 +10,7 @@
 
 import type { ErpState, Registro } from './types'
 import { colecao } from './metrics'
-import { mesAtual } from './format'
+import { diaLocal, mesAtual } from './format'
 import { comissaoDaVenda, formaDaVenda, produtoDaVenda, tabelaRebolo } from './rebolo'
 
 export interface CustosLucroRebolo {
@@ -51,14 +52,18 @@ export function mesAnteriorDe(mes: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// (SQL 044) a venda conta assim que o contrato assinado é anexado — no Financeiro, devolvida para correção ou conferida —
+// e no MÊS DA ASSINATURA, igual à meta (venda sem data de assinatura — antiga ou importada — fica no dia da venda)
+const ASSINADA = new Set(['Aguardando conferência', 'Devolvida', 'Conferida'])
+export const diaDaVendaRebolo = (v: Registro) => (v.assinaturaEm ? diaLocal(String(v.assinaturaEm)) : String(v.data ?? ''))
 const vendasDaVendedora = (s: ErpState, vendedoraId: string) =>
-  colecao(s, 'vendas_ebooks').filter((v) => v.canal === 'Rebolo' && String(v.cobradorId) === vendedoraId && v.conferencia === 'Conferida')
+  colecao(s, 'vendas_ebooks').filter((v) => v.canal === 'Rebolo' && String(v.cobradorId) === vendedoraId && ASSINADA.has(String(v.conferencia)))
 
 // 1º mês da vendedora no sistema: o do primeiro pacote ou da primeira venda
 export function inicioNoRebolo(s: ErpState, vendedoraId: string): string | null {
   const meses = [
     ...colecao(s, 'rebolo_pacotes').filter((p) => String(p.vendedoraId) === vendedoraId).map((p) => mesDe(p.criadoEm)),
-    ...vendasDaVendedora(s, vendedoraId).map((v) => mesDe(v.data)),
+    ...vendasDaVendedora(s, vendedoraId).map((v) => mesDe(diaDaVendaRebolo(v))),
   ].filter((m) => /^\d{4}-\d{2}$/.test(m))
   return meses.length ? meses.sort()[0] : null
 }
@@ -73,7 +78,7 @@ export function lucroReboloMes(s: ErpState, vendedoraId: string, mes: string, ve
   const estimado = { fretes: 0, taxas: 0, salario: false }
   let vendido = 0
   let albuns = 0
-  const doMes = vendas.filter((v) => mesDe(v.data) === mes)
+  const doMes = vendas.filter((v) => mesDe(diaDaVendaRebolo(v)) === mes)
   for (const v of doMes) {
     const valor = Number(v.valor) || 0
     const forma = formaDaVenda(String(v.formaPagamento || ''))

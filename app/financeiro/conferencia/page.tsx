@@ -3,7 +3,8 @@
 // Financeiro › Conferência de vendas:
 //  • Externas (app do vendedor): contrato (lido pela IA), assinatura, documento, ficha, comprovante, promissória e foto do cliente.
 //  • Rebolo (vendas internas por telefone): Contrato de Compra Online assinado eletronicamente (PDF).
-// Conferir → gera as parcelas (títulos) e, no rebolo, conta na meta e libera o envio. Devolver → volta para corrigir, com o motivo.
+// Conferir → gera as parcelas (títulos) e, no rebolo, libera o envio (a venda do rebolo já contou na meta quando o contrato
+// assinado foi anexado — SQL 044). Devolver → volta para corrigir, com o motivo.
 
 import { useEffect, useState } from 'react'
 import type { Registro } from '@/lib/erp/types'

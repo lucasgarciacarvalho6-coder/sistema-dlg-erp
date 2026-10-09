@@ -69,6 +69,7 @@ export interface Lancamento {
   criadoEm: string
   origem: 'manual' | 'automatico'
   autorId: string
+  vendaId?: string // (SQL 044) meta ligada à venda do Rebolo: a mesma venda nunca conta duas vezes
 }
 
 export type Valor = string | number | boolean | null

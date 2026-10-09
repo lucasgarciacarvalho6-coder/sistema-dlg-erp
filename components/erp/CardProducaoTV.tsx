@@ -43,7 +43,7 @@ export function CardProducaoTV({ s, mes, compacto = false }: { s: ErpState; mes:
   const paradas = linhas.reduce((a, l) => a + l.paradas, 0)
   return (
     <div className="cq-tamanho h-full w-full min-h-0">
-      <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2.4cqmin] flex flex-col gap-[1.2cqmin] overflow-hidden">
+      <div className="h-full w-full rounded-3xl border border-white/[0.2] bg-card-tv p-[2.4cqmin] flex flex-col gap-[1.2cqmin] overflow-hidden">
         {/* cabeçalho: situação (o que o gerente precisa ver) + total que ainda não chegou na caixa */}
         <div className="flex items-start justify-between gap-[2cqmin] min-w-0">
           <div className="min-w-0">

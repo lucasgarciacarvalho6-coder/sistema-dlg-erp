@@ -85,7 +85,7 @@ export default function ReboloDashboardPage() {
       <PageHeader
         modulo="Módulo / Vendas Rebolo"
         titulo={supervisao ? `Dashboard • ${alvo.nome}` : 'Meu dashboard'}
-        descricao="Suas metas do mês e do dia, as vendas do ano e a sua fila. A venda conta na meta quando o Financeiro aprova."
+        descricao="Suas metas do mês e do dia, as vendas do ano e a sua fila. A venda conta na meta no dia em que o contrato assinado é anexado."
         acoes={acoes}
       />
       {semMeta && (

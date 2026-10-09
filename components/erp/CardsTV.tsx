@@ -165,6 +165,27 @@ function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: Luc
     : [{ valor: l.vendido, cor: '#71717a', rotulo: 'Coberto pelas vendas' }, { valor: -l.lucro, cor: VERMELHO, rotulo: 'Prejuízo' }]
   const v = variacaoLucro(l.lucro, anterior?.lucro)
   const estimado = [l.estimado.salario && 'salário', l.estimado.fretes > 0 && `${l.estimado.fretes} frete(s)`, l.estimado.taxas > 0 && `${l.estimado.taxas} taxa(s) do cartão`].filter(Boolean)
+  const variacao = v !== null && (
+    <span style={{ color: v >= 0 ? VERDE : VERMELHO }}>
+      {v >= 0 ? '↑' : '↓'} {UMA_CASA.format(Math.abs(v))}%
+    </span>
+  )
+  // card pequeno (09/10): o lucro numa linha só, para sobrar lugar para as barras das vendas de cada dia
+  if (compacto)
+    return (
+      <div className="min-w-0 flex items-center gap-[1.6cqmin] leading-tight">
+        <div className="shrink-0 w-[clamp(16px,7cqmin,40px)] h-[clamp(16px,7cqmin,40px)]">
+          <Pizza partes={partes} />
+        </div>
+        <p className="min-w-0 flex-1 truncate font-bold text-zinc-400 text-[clamp(7px,2.7cqmin,13px)]">
+          <span className="uppercase tracking-widest">Lucro/Prej. </span>
+          <b className="font-black text-[clamp(9px,4cqmin,22px)]" style={{ color: l.lucro >= 0 ? VERDE : VERMELHO }}>
+            {brl(l.lucro)}
+          </b>{' '}
+          {variacao}
+        </p>
+      </div>
+    )
   return (
     <div className="min-w-0 flex flex-col gap-[0.8cqmin] leading-tight">
       <p className="font-bold uppercase tracking-widest text-zinc-400 truncate text-[clamp(7px,2.6cqmin,12px)]">Lucro/Prejuízo do mês</p>
@@ -177,19 +198,13 @@ function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: Luc
         </p>
       </div>
       <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.7cqmin,13px)]">
-        {v !== null && (
-          <span style={{ color: v >= 0 ? VERDE : VERMELHO }}>
-            {v >= 0 ? '↑' : '↓'} {UMA_CASA.format(Math.abs(v))}% •{' '}
-          </span>
-        )}
-        mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
+        {variacao}
+        {variacao ? ' • ' : ''}mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
       </p>
-      {!compacto && (
-        <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
-          Vendido <span className="text-zinc-300">{reais(l.vendido)}</span> • custos <span className="text-zinc-300">{reais(l.totalCustos)}</span>
-        </p>
-      )}
-      {!compacto && estimado.length > 0 && (
+      <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
+        Vendido <span className="text-zinc-300">{reais(l.vendido)}</span> • custos <span className="text-zinc-300">{reais(l.totalCustos)}</span>
+      </p>
+      {estimado.length > 0 && (
         <p className="text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]" title="Ainda não lançados: o cálculo usa a estimativa da Tabela de Preços do Rebolo">
           ≈ estimado: {estimado.join(', ')}
         </p>
@@ -206,7 +221,8 @@ const curtoRS = (v: number) => {
 
 // barras do ano: acima da linha do zero = lucro (verde), abaixo = prejuízo (vermelho); "—" antes de começar.
 // (08/10) o valor de cada mês em cima da barra (do prejuízo, acima da linha do zero); ocupa a altura que sobrar no card.
-function LucroMesesTV({ meses, ano, destaque }: { meses: (LucroRebolo | null)[]; ano: string; destaque: number }) {
+// soCardAlto: card pequeno — o gráfico só aparece se o card tiver altura (senão, o lugar fica para as barras dos dias)
+function LucroMesesTV({ meses, ano, destaque, soCardAlto = false }: { meses: (LucroRebolo | null)[]; ano: string; destaque: number; soCardAlto?: boolean }) {
   const vals = meses.map((m) => (m ? m.lucro : null))
   const maxPos = Math.max(0, ...vals.map((v) => v ?? 0))
   const maxNeg = Math.max(0, ...vals.map((v) => -(v ?? 0)))
@@ -220,7 +236,7 @@ function LucroMesesTV({ meses, ano, destaque }: { meses: (LucroRebolo | null)[];
   // o número fica sempre EM CIMA: do lucro, na ponta da barra verde; do prejuízo, logo acima da linha do zero (em vermelho)
   const folga = { paddingTop: '1.2em' }
   return (
-    <div className="flex-[1.5] min-h-0 flex flex-col overflow-hidden">
+    <div className={`${soCardAlto ? 'hidden [@container(min-height:380px)]:flex' : 'flex'} flex-[1.5] min-h-0 flex-col overflow-hidden`}>
       <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)]">Lucro/Prejuízo por mês</p>
       <div className="cq-fonte flex-1 min-h-[24px] flex gap-[2px] mt-[0.4cqmin]" style={{ ...fonte, ...folga }}>
         {vals.map((v, i) => (
@@ -257,8 +273,8 @@ function LucroMesesTV({ meses, ano, destaque }: { meses: (LucroRebolo | null)[];
 }
 
 // ---------------- Card da pessoa ----------------
-// compacto = card pequeno na TV: na vendedora do Rebolo, as barrinhas dos dias perdem os números e a pizza diminui
-// (o gráfico dos meses fica)
+// compacto = card pequeno na TV: na vendedora do Rebolo, o lucro do mês vai numa linha só e as barras dos dias
+// continuam com o valor de cada dia (09/10); o gráfico dos meses só aparece se o card tiver altura
 export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpState; c: Colaborador; mes: string; onAbrir?: () => void; compacto?: boolean }) {
   const cfg = SETORES[c.setor]
   // vendedora do Rebolo: Lucro/Prejuízo do mês (pizza) e do ano (barras)
@@ -322,7 +338,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
         tabIndex={onAbrir ? 0 : undefined}
         onClick={onAbrir}
         onKeyDown={(e) => onAbrir && (e.key === 'Enter' || e.key === ' ') && onAbrir()}
-        className={`h-full w-full rounded-3xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2.2cqmin] overflow-hidden ${onAbrir ? 'cursor-pointer hover:border-white/[0.2] transition-all' : ''}`}
+        className={`h-full w-full rounded-3xl border border-white/[0.2] bg-card-tv p-[3.5cqmin] flex flex-col gap-[2.2cqmin] overflow-hidden ${onAbrir ? 'cursor-pointer hover:border-white/[0.35] transition-all' : ''}`}
       >
         {/* pessoa + situação */}
         <div className="flex items-center gap-[2.5cqmin] min-w-0">
@@ -349,9 +365,9 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
             <div className="flex-1 min-h-0 flex flex-col gap-[2cqmin] overflow-hidden">
               <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <p className="font-bold uppercase tracking-widest text-zinc-500 truncate text-[clamp(6px,2.3cqmin,11px)] mb-[0.4cqmin]">{ind.label} por dia</p>
-                <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={compacto ? undefined : doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
+                <BarrasTV dias={d.uteis} valores={valores} cor={(v) => corDoDia(v, r.meta.diaria, r.pisoDiario)} rotulo={doDia} destaque={mes === hj.slice(0, 7) ? hj : undefined} />
               </div>
-              {lucroAno && <LucroMesesTV meses={lucroAno} ano={mes.slice(0, 4)} destaque={Number(mes.slice(5, 7)) - 1} />}
+              {lucroAno && <LucroMesesTV meses={lucroAno} ano={mes.slice(0, 4)} destaque={Number(mes.slice(5, 7)) - 1} soCardAlto={compacto} />}
             </div>
           </>
         ) : (
@@ -370,7 +386,7 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
 function MiniTV({ titulo, children, estilo }: { titulo: ReactNode; children: ReactNode; estilo?: CSSProperties }) {
   return (
     <div style={estilo} className="cq-tamanho h-full min-h-0 min-w-0">
-      <div className="h-full rounded-2xl border border-white/[0.1] bg-painel-2/80 p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
+      <div className="h-full rounded-2xl border border-white/[0.2] bg-card-tv p-[3.5cqmin] flex flex-col gap-[2cqmin] overflow-hidden">
         <p className="font-black uppercase tracking-[0.15em] text-zinc-300 text-[clamp(8px,3.4cqmin,14px)] truncate">{titulo}</p>
         {children}
       </div>
@@ -526,7 +542,7 @@ export function CardOperacoesTV({ s, c, mes, compacto = false, faixa = false }: 
   const a = x.agenda
   return (
     <div className="cq-tamanho h-full w-full min-h-0">
-      <div className="h-full w-full rounded-3xl border border-white/[0.1] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
+      <div className="h-full w-full rounded-3xl border border-white/[0.2] bg-painel/80 p-[2cqmin] flex flex-col gap-[1.6cqmin] overflow-hidden">
         <div className="flex items-center gap-[1.6cqmin] min-w-0">
           <Avatar texto={iniciais(c.nome)} foto={c.foto} tamanho="w-[clamp(28px,8cqmin,60px)] h-[clamp(28px,8cqmin,60px)]" arredondado="rounded-full" textoCls="text-[clamp(10px,2.6cqmin,18px)]" />
           <div className="min-w-0 flex-1">

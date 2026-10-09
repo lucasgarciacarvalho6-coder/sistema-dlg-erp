@@ -87,7 +87,7 @@ export default function VendasReboloPage() {
       <PageHeader
         modulo="Vendas Rebolo / Vendas"
         titulo="Vendas"
-        descricao="Gere o contrato já preenchido, mande para o cliente assinar no site de assinatura eletrônica e anexe o PDF assinado. O Financeiro confere e aprova."
+        descricao="Gere o contrato já preenchido, mande para o cliente assinar no site de assinatura eletrônica e anexe o PDF assinado: a venda já conta na sua meta. O Financeiro confere e aprova."
         acoes={
           supervisao && (
             <select value={vendedora} onChange={(e) => setVendedora(e.target.value)} className="bg-black/50 border border-white/[0.05] text-white text-xs font-bold uppercase tracking-widest rounded-xl px-4 py-3.5 outline-none">
