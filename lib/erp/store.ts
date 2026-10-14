@@ -18,7 +18,7 @@ import { pode } from './permissions'
 import { ETAPAS_PRODUCAO, perfilDoSetor } from './config'
 import { addDias, hoje, uid } from './format'
 import { colaboradorDoBanco, registroParaBanco } from './adaptador'
-import { carregarDoSupabase, traduzirErro } from './supabase-sync'
+import { TABELAS_RECARGA_PARCIAL, carregarColecao, carregarDoSupabase, traduzirErro } from './supabase-sync'
 import { blobParaDataURL, prepararFoto, validarFoto } from './imagem'
 import { lerJSON } from './operacional'
 import { chaveCustoVariavel } from './operacoes-financeiro'
@@ -224,12 +224,49 @@ function agendarRecarga(ms = 350) {
   timerRecarga = setTimeout(() => void recarregar(), ms)
 }
 
+// 14/10 (lentidão): cada mudança em qualquer tabela fazia TODAS as telas recarregarem TUDO na hora.
+// Agora os avisos se juntam por 4 s; se só mudaram tabelas de coleção, recarrega só elas.
+const ESPERA_AVISOS = 4000
+let tabelasMudadas = new Set<string>()
+let recargaGeral = false
+let timerAvisos: ReturnType<typeof setTimeout> | undefined
+function aoMudar(tabela: string | undefined) {
+  if (tabela && TABELAS_RECARGA_PARCIAL.has(tabela)) tabelasMudadas.add(tabela)
+  else recargaGeral = true
+  if (timerAvisos) return
+  timerAvisos = setTimeout(() => {
+    timerAvisos = undefined
+    const geral = recargaGeral
+    const tabelas = [...tabelasMudadas]
+    recargaGeral = false
+    tabelasMudadas = new Set()
+    if (geral || recarregando) return agendarRecarga(0)
+    void recarregarTabelas(tabelas)
+  }, ESPERA_AVISOS)
+}
+
+async function recarregarTabelas(tabelas: string[]) {
+  const sessao = sessaoSb
+  if (!sessao || !cache || !tabelas.length) return
+  try {
+    const colabs = cache.colaboradores
+    const novas = await Promise.all(tabelas.map((t) => carregarColecao(t, colabs)))
+    if (sessaoSb?.colaboradorId !== sessao.colaboradorId || !cache) return
+    const colecoes = { ...cache.colecoes }
+    tabelas.forEach((t, i) => (colecoes[t] = novas[i]))
+    cache = { ...cache, colecoes }
+    emitir()
+  } catch {
+    agendarRecarga(0) // não deu para recarregar só a tabela: recarrega tudo
+  }
+}
+
 function assinarRealtime() {
   pararRealtime()
   // Qualquer mudança nas tabelas publicadas (outro setor lançou produção, aprovou algo...) → recarrega
   canal = sb()
     .channel('erp-nucleo')
-    .on('postgres_changes', { event: '*', schema: 'public' }, () => agendarRecarga())
+    .on('postgres_changes', { event: '*', schema: 'public' }, (aviso) => aoMudar((aviso as { table?: string }).table))
     .subscribe()
 }
 

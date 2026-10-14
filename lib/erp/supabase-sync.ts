@@ -67,11 +67,13 @@ export async function carregarDoSupabase(usuarioId: string): Promise<{ estado: E
   const desde = isoData(new Date(agora.getFullYear(), agora.getMonth() - 3, 1))
 
   const colaboradores = await todas('colaboradores') // obrigatório
+  // 14/10 (lentidão): a auditoria só vem para o ADM (era lida a cada recarga por todo mundo, 1,4 s cada vez)
+  const ehAdm = colaboradores.some((c) => c.id === usuarioId && c.perfil === 'ADM')
   const [metas, permissoes, lancamentos, auditoria, notificacoes, leituras, empresas, ...colecoes] = await Promise.all([
     segura('metas', {}, erros),
     segura('permissoes', {}, erros),
     segura('lancamentos', { desde: ['data', desde], ordem: 'created_at' }, erros),
-    segura('auditoria', { ordem: 'data', asc: false, limite: 1000 }, erros),
+    ehAdm ? segura('auditoria', { ordem: 'data', asc: false, limite: 500 }, erros) : Promise.resolve([] as Linha[]),
     segura('notificacoes', { ordem: 'created_at', asc: false, limite: 200 }, erros),
     segura('notificacao_leituras', {}, erros),
     segura('empresas', { limite: 1 }, erros),
@@ -117,4 +119,15 @@ export async function carregarDoSupabase(usuarioId: string): Promise<{ estado: E
       notificacoes: notificacoes.map((n) => notificacaoDoBanco(n, lidas, usuarioId)),
     },
   }
+}
+
+// 14/10 (lentidão): quando o aviso em tempo real diz QUAL tabela mudou, recarrega só ela (não o sistema inteiro)
+export const TABELAS_RECARGA_PARCIAL = new Set(TABELAS_COLECAO)
+export async function carregarColecao(tabela: string, colaboradores: { id: string; nome: string }[]): Promise<Registro[]> {
+  const linhas = await todas(tabela, { ordem: 'created_at', asc: false })
+  return linhas.map((linha) => {
+    const r = registroDoBanco(linha)
+    if (tabela === 'aprovacoes') r.decididoPor = colaboradores.find((c) => c.id === linha.decidido_por)?.nome ?? ''
+    return r
+  })
 }
