@@ -70,7 +70,7 @@ export default function ControleSpc() {
       <Panel
         titulo="Clientes"
         semPadding
-        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, venda ou CPF..." className={`${inputCls} w-64`} />}
+        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, venda ou CPF..." className={`campo-busca ${inputCls} w-64`} />}
       >
         <div className="px-6 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05]">
           <div className="flex flex-wrap gap-2">

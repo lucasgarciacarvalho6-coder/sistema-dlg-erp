@@ -55,7 +55,7 @@ export function TabelaEstoqueEscolas({ escolas, onAbrir }: { escolas: EstoqueEsc
             <option value="rebolo">Aguardando o Rebolo</option>
             <option value="diferenca">Com diferença no acerto</option>
           </select>
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade..." className="bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-60" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-60" />
         </div>
       }
     >

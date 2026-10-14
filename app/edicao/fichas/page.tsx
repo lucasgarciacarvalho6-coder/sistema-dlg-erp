@@ -37,8 +37,8 @@ export default function FichasPage() {
         subtitulo={`${lista.length} escola(s)`}
         acoes={
           <div className="relative w-80 max-w-full">
-            <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade" className={`${inputCls} !py-2.5 pl-10`} />
+            <Icon nome="search" className="icone-busca w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade" className={`campo-busca ${inputCls} !py-2.5 pl-10`} />
           </div>
         }
       >

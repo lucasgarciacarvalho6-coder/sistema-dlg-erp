@@ -333,7 +333,7 @@ function FormCarga({ s, editando, empresa, onFechar }: { s: ErpState; editando: 
 
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/[0.05]">
         <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Caixas no estoque (por escola)</p>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade..." className="bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola ou cidade..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
       </div>
       {visiveis.length === 0 ? (
         <p className="text-sm text-zinc-500">{grupos.length ? 'Nenhuma escola com essa busca.' : 'Nenhuma caixa no estoque: as caixas entram quando a Produção confere.'}</p>

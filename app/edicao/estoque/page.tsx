@@ -167,8 +167,8 @@ export default function EstoquePage() {
         </div>
         <div className={`flex flex-col sm:flex-row gap-3 ${aba === 'situacao' ? 'hidden' : ''}`}>
           <div className="relative sm:w-80">
-            <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, responsável ou cidade" className={`${inputCls} !py-2.5 pl-10`} />
+            <Icon nome="search" className="icone-busca w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, responsável ou cidade" className={`campo-busca ${inputCls} !py-2.5 pl-10`} />
           </div>
           <select value={cidade} onChange={(e) => setCidade(e.target.value)} className={`${inputCls} !py-2.5 sm:w-56`}>
             <option value="">Todas as cidades</option>

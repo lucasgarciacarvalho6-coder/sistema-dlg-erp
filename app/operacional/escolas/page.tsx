@@ -78,8 +78,8 @@ export default function EscolasPage() {
         acoes={
           <div className="flex flex-wrap gap-2">
             <div className="relative">
-              <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, INEP ou responsável" className={`${inputCls} !py-2.5 pl-10 w-80 max-w-full`} />
+              <Icon nome="search" className="icone-busca w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, INEP ou responsável" className={`campo-busca ${inputCls} !py-2.5 pl-10 w-80 max-w-full`} />
             </div>
             <select value={uf} onChange={(e) => setUf(e.target.value)} className={`${inputCls} !py-2.5 !w-28`}>
               <option value="">Todas UF</option>

@@ -79,7 +79,7 @@ export default function ContatosReboloPage() {
                 ))}
               </select>
             )}
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar aluno, pais, ficha, cidade..." className="bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar aluno, pais, ficha, cidade..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
           </div>
         }
       >

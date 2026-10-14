@@ -25,8 +25,8 @@ export function useAtrasado<T>(valor: T, ms = 350) {
 export function BuscaPessoas({ valor, onChange, rotulo }: { valor: string; onChange: (v: string) => void; rotulo: string }) {
   return (
     <div className="relative">
-      <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-      <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder="Nome, CPF, aluno, escola ou telefone" aria-label={rotulo} className={`${campoFiltro} pl-9 w-72`} />
+      <Icon nome="search" className="icone-busca w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+      <input value={valor} onChange={(e) => onChange(e.target.value)} placeholder="Nome, CPF, aluno, escola ou telefone" aria-label={rotulo} className={`campo-busca ${campoFiltro} pl-9 w-72`} />
     </div>
   )
 }

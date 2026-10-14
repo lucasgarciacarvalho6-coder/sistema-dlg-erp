@@ -163,6 +163,48 @@ input[type='date']::-webkit-calendar-picker-indicator {
   opacity: 0.6;
 }
 
+/* Barras de pesquisa em destaque (14/10): fundo mais claro que o painel, borda visível e texto de
+   exemplo legível — antes sumiam no fundo escuro. Fora de @layer: vence as classes do Tailwind do campo. */
+.campo-busca {
+  background-color: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.campo-busca::placeholder {
+  color: #a1a1aa;
+  opacity: 1;
+}
+.campo-busca:hover {
+  border-color: rgba(255, 255, 255, 0.38);
+}
+.campo-busca:focus {
+  border-color: rgba(59, 130, 246, 0.85);
+  background-color: rgba(255, 255, 255, 0.09);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+.icone-busca {
+  color: #d4d4d8;
+  z-index: 1;
+}
+:root[data-theme='light'] .campo-busca {
+  background-color: #ffffff;
+  border-color: rgba(30, 58, 138, 0.35);
+  box-shadow: 0 1px 2px rgba(30, 58, 138, 0.08);
+}
+:root[data-theme='light'] .campo-busca::placeholder {
+  color: #64748b;
+}
+:root[data-theme='light'] .campo-busca:hover {
+  border-color: rgba(30, 58, 138, 0.55);
+}
+:root[data-theme='light'] .campo-busca:focus {
+  border-color: rgba(37, 99, 235, 0.9);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+:root[data-theme='light'] .icone-busca {
+  color: #1e3a8a;
+}
+
 /* Brilho decorativo (manchas de luz dos cards e do fundo): máscara radial no lugar de
    filter: blur. O visual é o mesmo e custa quase nada para a placa de vídeo. O desfoque
    real era redesenhado a cada tecla e a cada rolagem e deixava o sistema lento em PCs comuns. */

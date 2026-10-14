@@ -68,7 +68,7 @@ export default function AuditoriaPage() {
                 <option key={x} value={x}>{SETORES[x].nome}</option>
               ))}
             </select>
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar usuário ou ação..." className="bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-56" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar usuário ou ação..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-56" />
             {podeFazer('auditoria', 'exportar') && (
               <button
                 onClick={() =>

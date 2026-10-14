@@ -758,7 +758,7 @@ function ModalLancar({ onFechar }: { onFechar: (cliente?: { id: string; nome: st
           </div>
         ) : (
           <>
-            <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Nome, CPF/CNPJ ou telefone do cadastro de clientes" aria-label="Procurar cliente" className={inputCls} />
+            <input value={termo} onChange={(e) => setTermo(e.target.value)} placeholder="Nome, CPF/CNPJ ou telefone do cadastro de clientes" aria-label="Procurar cliente" className={`campo-busca ${inputCls}`} />
             {termoAtrasado.trim().length >= 2 && opcoes.termo === termoAtrasado && (
               <div className="rounded-xl border border-white/[0.08] divide-y divide-white/[0.04] max-h-56 overflow-y-auto custom-scrollbar">
                 {opcoes.lista.length === 0 ? (

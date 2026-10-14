@@ -83,7 +83,7 @@ export default function AcordosCobranca({ modo = 'financeiro' }: { modo?: 'finan
       <Panel
         titulo="Acordos"
         semPadding
-        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por cliente, venda ou CPF/CNPJ..." className={`${inputCls} w-72`} />}
+        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por cliente, venda ou CPF/CNPJ..." className={`campo-busca ${inputCls} w-72`} />}
       >
         <div className="px-6 py-3 flex flex-wrap gap-2 border-b border-white/[0.05]">
           {FILTROS.map((f) => {

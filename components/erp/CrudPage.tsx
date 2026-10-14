@@ -208,8 +208,8 @@ export default function CrudPage(p: CrudProps) {
               </select>
             )}
             <div className="relative group">
-              <Icon nome="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} type="text" placeholder="Filtrar..." className="bg-black/50 border border-white/[0.05] rounded-xl pl-11 pr-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-56 transition-all" />
+              <Icon nome="search" className="icone-busca absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
+              <input value={busca} onChange={(e) => setBusca(e.target.value)} type="text" placeholder="Filtrar..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl pl-11 pr-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-56 transition-all" />
             </div>
             {pExportar && (
               <button onClick={exportar} className={btnSecundario} title="Exportar CSV">

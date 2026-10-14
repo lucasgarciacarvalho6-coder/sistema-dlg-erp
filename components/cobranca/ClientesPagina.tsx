@@ -97,13 +97,13 @@ export default function ClientesPagina({ modulo }: { modulo: Extract<Modulo, 'co
         acoes={
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
-              <Icon nome="search" className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Icon nome="search" className="icone-busca w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 value={digitado}
                 onChange={(e) => setDigitado(e.target.value)}
                 placeholder="Nome, CPF/CNPJ, telefone ou cidade"
                 aria-label="Pesquisar clientes"
-                className={`${campoFiltro} pl-9 w-80`}
+                className={`campo-busca ${campoFiltro} pl-9 w-80`}
               />
             </div>
             <select value={filtro.uf} onChange={(e) => mudarFiltro({ uf: e.target.value })} aria-label="UF" className={`${campoFiltro} w-24 appearance-none`}>

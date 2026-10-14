@@ -92,7 +92,7 @@ export default function ControleProducaoPage() {
         semPadding
         titulo={filtro === 'andamento' ? 'Escolas em andamento' : filtro === 'atrasadas' ? 'Atrasadas com o editor' : filtro}
         subtitulo={`${lista.length} escola(s) • ${num(lista.reduce((a, l) => a + (Number(l.alunos) || 0), 0))} alunos • ${num(soma(lista))} álbuns`}
-        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, vendedor ou editor" className={`${inputCls} !py-2.5 w-72 max-w-full`} />}
+        acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, vendedor ou editor" className={`campo-busca ${inputCls} !py-2.5 w-72 max-w-full`} />}
       >
         {lista.length === 0 ? (
           <EmptyState titulo="Nenhuma escola aqui" descricao="Quando uma visita é encerrada nas Operações, a escola aparece aqui aguardando as fotos." />

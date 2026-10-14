@@ -386,8 +386,8 @@ export default function ContratosEscolaPage() {
         titulo={`Base de contratos • ${lista.length}`}
         acoes={
           <div className="relative group">
-            <Icon nome="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar escola, cidade ou vendedor..." className="bg-black/50 border border-white/[0.05] rounded-xl pl-11 pr-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-72" />
+            <Icon nome="search" className="icone-busca absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-blue-500 transition-colors" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Filtrar escola, cidade ou vendedor..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl pl-11 pr-4 py-2.5 text-sm text-white outline-none focus:border-blue-500/50 w-72" />
           </div>
         }
       >

@@ -57,7 +57,7 @@ export default function CategoriasCobranca({ editavel }: { editavel: boolean }) 
             <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500 cursor-pointer">
               <input type="checkbox" checked={inativas} onChange={(e) => setInativas(e.target.checked)} className="accent-blue-500" /> Mostrar inativas
             </label>
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Pesquisar categorias" placeholder="Buscar categoria ou nome antigo..." className="bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} aria-label="Pesquisar categorias" placeholder="Buscar categoria ou nome antigo..." className="campo-busca bg-black/50 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white outline-none focus:border-blue-500/50 w-64" />
           </div>
         }
       >
