@@ -12,13 +12,15 @@ import Link from 'next/link'
 import type { Registro, Valor } from '@/lib/erp/types'
 import type { ResultadoContato } from '@/lib/erp/fluxos'
 import { addDias, brl, dataBR, hoje } from '@/lib/erp/format'
-import { editarVendaRebolo, fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarContatoRebolo, usePode } from '@/lib/erp/store'
+import { editarVendaRebolo, fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarContatoRebolo, salvarFichaRebolo, usePode } from '@/lib/erp/store'
 import {
+  buscarCep,
   comissaoDaVenda,
   EM_ABERTO,
   escolaFicha,
   faixaDaFicha,
   formaDaVenda,
+  formatarCep,
   formatarTelefone,
   FORMAS_REBOLO,
   maxParcelas,
@@ -31,6 +33,7 @@ import {
   PRODUTOS_REBOLO,
   SEM_ESCOLA,
   TOM_FAIXA,
+  UFS,
   type FormaRebolo,
   type OpcaoCompleto,
   type ProdutoRebolo,
@@ -332,6 +335,10 @@ function RegistrarContato({ ficha, onFeito }: { ficha: Registro; onFeito: () => 
 
 // Fechar venda — e editar a venda já fechada (venda = a venda a efetivar ou devolvida): o formulário abre com o que
 // foi combinado e, enquanto o produto, as opções, a forma e o desconto forem os mesmos, o valor fica o da venda.
+// campos da ficha que formam o endereço para entrega (os mesmos do cadastro da ficha)
+const CAMPOS_ENTREGA = ['cep', 'rua', 'numero', 'apto', 'bairro', 'cidade', 'uf', 'fazenda', 'pontoReferencia'] as const
+type Entrega = Record<(typeof CAMPOS_ENTREGA)[number], string>
+
 export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro; faixa: 1 | 2 | 3; venda?: Registro; onFeito: () => void }) {
   const { tabela } = useRebolo()
   const disponiveis = PRODUTOS_REBOLO.filter((p) => FORMAS_REBOLO.some((f) => tabela.preco(faixa, p.id, f.id) > 0))
@@ -385,6 +392,23 @@ export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro;
         },
   )
   const [d, setD] = useState(d0)
+  // 14/10: endereço para entrega — vem da ficha e pode ser preenchido/corrigido aqui; grava na ficha (Envios lê de lá)
+  const [e0] = useState(() => {
+    const x = Object.fromEntries(CAMPOS_ENTREGA.map((k) => [k, String(ficha[k] ?? '')])) as Entrega
+    return { ...x, uf: x.uf.toUpperCase() }
+  })
+  const [ent, setEnt] = useState<Entrega>(e0)
+  const [avisoCep, setAvisoCep] = useState('')
+  const mudouEntrega = CAMPOS_ENTREGA.some((k) => ent[k].trim() !== e0[k].trim())
+  const aoMudarCep = async (valor: string) => {
+    setEnt((x) => ({ ...x, cep: formatarCep(valor) }))
+    if (valor.replace(/\D/g, '').length !== 8) return setAvisoCep('')
+    setAvisoCep('Buscando CEP...')
+    const r = await buscarCep(valor)
+    if (!r) return setAvisoCep('CEP não encontrado. Preencha o endereço à mão.')
+    setAvisoCep(`CEP encontrado: ${r.cidade}/${r.uf}`)
+    setEnt((x) => ({ ...x, rua: r.rua || x.rua, bairro: r.bairro || x.bairro, cidade: r.cidade || x.cidade, uf: r.uf || x.uf }))
+  }
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const parcelamento = forma === 'pix' || n <= 1 ? 'À vista' : `${n}x ${brl(Math.round((valor / n) * 100) / 100)}`
@@ -397,7 +421,8 @@ export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro;
     (!mesmoNegocio ||
       n !== (Number(venda.parcelas) || 1) ||
       (forma === 'boleto' && d.primeiroVencimento !== d0.primeiroVencimento) ||
-      (['responsavel', 'cpf', 'rg', 'whatsapp', 'observacao'] as const).some((k) => d[k].trim() !== d0[k].trim()))
+      (['responsavel', 'cpf', 'rg', 'whatsapp', 'observacao'] as const).some((k) => d[k].trim() !== d0[k].trim()) ||
+      mudouEntrega)
 
   const salvar = async () => {
     if (!produto) return setErro('Escolha o produto.')
@@ -405,8 +430,17 @@ export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro;
     if (!d.responsavel.trim()) return setErro('Informe o nome do comprador.')
     if (d.cpf.replace(/\D/g, '').length !== 11) return setErro('Informe o CPF do comprador (11 dígitos).')
     if (forma === 'boleto' && !d.primeiroVencimento) return setErro('Informe o 1º vencimento do boleto.')
+    if (!ent.rua.trim() && !ent.fazenda.trim()) return setErro('Informe o endereço para entrega (rua ou fazenda).')
+    if (!ent.cidade.trim() || !ent.uf.trim()) return setErro('Informe a cidade e o estado da entrega.')
     setErro('')
     setSalvando(true)
+    if (mudouEntrega) {
+      const e = await salvarFichaRebolo(Object.fromEntries(CAMPOS_ENTREGA.map((k) => [k, ent[k].trim()])), ficha.id)
+      if (e) {
+        setSalvando(false)
+        return setErro(e)
+      }
+    }
     const formaPagamento = FORMAS_REBOLO.find((f) => f.id === forma)!.formaPagamento
     const observacao = [d.observacao.trim(), usarDesconto && descontoOk ? `Desconto aprovado (tabela ${brl(precoTabela)})` : ''].filter(Boolean).join(' • ')
     if (venda) {
@@ -437,11 +471,11 @@ export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro;
       whatsapp: d.whatsapp,
       cpf: d.cpf,
       rg: d.rg,
-      endereco: [ficha.rua, ficha.numero].filter(Boolean).join(', '),
-      bairro: String(ficha.bairro || ''),
-      cep: String(ficha.cep || ''),
-      cidade: String(ficha.cidade || ''),
-      uf: String(ficha.uf || ''),
+      endereco: [ent.rua.trim() || ent.fazenda.trim(), ent.numero.trim()].filter(Boolean).join(', '),
+      bairro: ent.bairro.trim(),
+      cep: ent.cep.trim(),
+      cidade: ent.cidade.trim(),
+      uf: ent.uf.trim(),
       nomePai: String(ficha.nomePai || ''),
       nomeMae: String(ficha.nomeMae || ''),
       pacote,
@@ -603,6 +637,61 @@ export function FecharVenda({ ficha, faixa, venda, onFeito }: { ficha: Registro;
         <div className="space-y-1.5">
           <label className={labelCls}>Observação</label>
           <input value={d.observacao} onChange={(e) => setD({ ...d, observacao: e.target.value })} className={inputCls} />
+        </div>
+      </div>
+      <p className="text-sm font-black text-blue-400 pt-2 border-t border-white/[0.06]">📦 Endereço para entrega</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className={labelCls}>CEP</label>
+          <input value={ent.cep} onChange={(e) => void aoMudarCep(e.target.value)} inputMode="numeric" placeholder="00000-000" className={inputCls} />
+        </div>
+        <div className="flex items-end pb-2 text-[11px] text-zinc-400">{avisoCep}</div>
+        <div className="space-y-1.5 col-span-2">
+          <label className={labelCls}>
+            Rua <Obrigatorio />
+          </label>
+          <input value={ent.rua} onChange={(e) => setEnt({ ...ent, rua: e.target.value })} className={inputCls} />
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Número</label>
+          <input value={ent.numero} onChange={(e) => setEnt({ ...ent, numero: e.target.value })} className={inputCls} />
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Apto / complemento</label>
+          <input value={ent.apto} onChange={(e) => setEnt({ ...ent, apto: e.target.value })} className={inputCls} />
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Bairro</label>
+          <input value={ent.bairro} onChange={(e) => setEnt({ ...ent, bairro: e.target.value })} className={inputCls} />
+        </div>
+        <div className="grid grid-cols-[1fr_5rem] gap-2">
+          <div className="space-y-1.5">
+            <label className={labelCls}>
+              Cidade <Obrigatorio />
+            </label>
+            <input value={ent.cidade} onChange={(e) => setEnt({ ...ent, cidade: e.target.value })} className={inputCls} />
+          </div>
+          <div className="space-y-1.5">
+            <label className={labelCls}>
+              UF <Obrigatorio />
+            </label>
+            <select value={ent.uf} onChange={(e) => setEnt({ ...ent, uf: e.target.value })} className={`${inputCls} appearance-none`}>
+              <option value="">—</option>
+              {UFS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Fazenda (zona rural)</label>
+          <input value={ent.fazenda} onChange={(e) => setEnt({ ...ent, fazenda: e.target.value })} className={inputCls} />
+        </div>
+        <div className="space-y-1.5">
+          <label className={labelCls}>Ponto de referência</label>
+          <input value={ent.pontoReferencia} onChange={(e) => setEnt({ ...ent, pontoReferencia: e.target.value })} className={inputCls} />
         </div>
       </div>
       {venda && mudou && (

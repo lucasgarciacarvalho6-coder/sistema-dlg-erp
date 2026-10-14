@@ -133,8 +133,9 @@ export function imprimirContratoRebolo(v: Registro, ficha: Registro | undefined,
     ${linha('Nome do Pai', v.nomePai, 'Telefone', ficha?.nomePai ? ficha.whatsapp1 : '')}
     ${linha('Nome da Mãe', v.nomeMae, 'Telefone', ficha?.nomeMae ? ficha.whatsapp1 : '')}
     ${linha('Rua', ficha?.rua ?? v.endereco, 'Nº', ficha ? [ficha.numero, ficha.apto && `apto ${ficha.apto}`].filter(Boolean).join(' ') : '')}
-    ${linha('Bairro', v.bairro, 'CEP', v.cep)}
-    ${linha('Cidade', v.cidade, 'Estado', v.uf)}
+    ${linha('Bairro', ficha?.bairro ?? v.bairro, 'CEP', ficha?.cep ?? v.cep)}
+    ${linha('Cidade', ficha?.cidade ?? v.cidade, 'Estado', ficha?.uf ?? v.uf)}
+    ${ficha?.fazenda || ficha?.pontoReferencia ? linha('Fazenda', ficha.fazenda, 'Ponto de referência', ficha.pontoReferencia) : ''}
   </table>
   <div class="total"><b>Valor total da compra: ${esc(brl(Number(v.valor) || 0))}</b><br><b>Forma de pagamento: ${esc(v.formaPagamento === 'Cartão de crédito' ? 'Cartão' : v.formaPagamento)}</b></div>
   <div class="total"><b>Forma de parcelamento: ${esc(v.formaParcelamento)}</b></div>
