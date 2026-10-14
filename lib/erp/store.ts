@@ -230,9 +230,17 @@ const ESPERA_AVISOS = 4000
 let tabelasMudadas = new Set<string>()
 let recargaGeral = false
 let timerAvisos: ReturnType<typeof setTimeout> | undefined
+// históricos que saíram do aviso em tempo real (SQL 053): recarregam junto com a tabela "mãe", que sempre muda junto
+const COMPANHEIRAS: Record<string, string[]> = {
+  agenda_visitas: ['agenda_historico'],
+  producao_lotes: ['producao_historico'],
+  cobranca_regras: ['cobranca_regras_historico'],
+}
 function aoMudar(tabela: string | undefined) {
-  if (tabela && TABELAS_RECARGA_PARCIAL.has(tabela)) tabelasMudadas.add(tabela)
-  else recargaGeral = true
+  if (tabela && TABELAS_RECARGA_PARCIAL.has(tabela)) {
+    tabelasMudadas.add(tabela)
+    for (const c of COMPANHEIRAS[tabela] ?? []) if (TABELAS_RECARGA_PARCIAL.has(c)) tabelasMudadas.add(c)
+  } else recargaGeral = true
   if (timerAvisos) return
   timerAvisos = setTimeout(() => {
     timerAvisos = undefined
