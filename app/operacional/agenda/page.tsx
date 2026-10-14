@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
 import { agendarRetorno, atualizarRegistro, cancelarAgendamento, corrigirFichasVisita, desfazerEncerramento, editarAgendamento, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
-import { MAX_FOTOGRAFOS, bloqueioVisitaEncerrada, conflitosEquipe, contratoDaVisita, corEquipe, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
+import { MAX_FOTOGRAFOS, bloqueioVisitaEncerrada, conflitosEquipe, contratoDaVisita, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
 import { addDias, dataBR, diasNoMes, hoje, mesAtual, nomeMes, num } from '@/lib/erp/format'
 import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
@@ -14,6 +14,31 @@ import type { Tom } from '@/lib/erp/types'
 // Cores da agenda: confirmada (a escola confirmou as fichas) = verde • a confirmar = amarelo;
 // fotografada e fechada ficam neutras (já foram feitas). Dia anterior ainda sem encerrar ganha o aviso "⚠ não encerrada".
 // As canceladas NÃO aparecem na agenda (pedido de 05/10/2026): ficam só em Contratos de Escola › Cancelados.
+// Cor de cada equipe — EXCEÇÃO à regra "cor só para alerta", pedida em 14/10/2026 pela colaboradora de Operações
+// (vale só nesta agenda): para distinguir os cards, ainda mais com 2 agendamentos no mesmo dia.
+// As cores não usam verde/amarelo/vermelho (esses continuam sendo da situação e dos alertas). Sem equipe = neutro.
+const CORES_EQUIPE = [
+  { faixa: 'bg-blue-500', texto: 'text-blue-300', borda: 'border-blue-500/50', fundo: 'bg-blue-500/[0.10]' },
+  { faixa: 'bg-violet-500', texto: 'text-violet-300', borda: 'border-violet-500/50', fundo: 'bg-violet-500/[0.10]' },
+  { faixa: 'bg-orange-500', texto: 'text-orange-300', borda: 'border-orange-500/50', fundo: 'bg-orange-500/[0.10]' },
+  { faixa: 'bg-cyan-500', texto: 'text-cyan-300', borda: 'border-cyan-500/50', fundo: 'bg-cyan-500/[0.10]' },
+  { faixa: 'bg-pink-500', texto: 'text-pink-300', borda: 'border-pink-500/50', fundo: 'bg-pink-500/[0.10]' },
+  { faixa: 'bg-indigo-400', texto: 'text-indigo-300', borda: 'border-indigo-400/50', fundo: 'bg-indigo-400/[0.10]' },
+  { faixa: 'bg-fuchsia-500', texto: 'text-fuchsia-300', borda: 'border-fuchsia-500/50', fundo: 'bg-fuchsia-500/[0.10]' },
+  { faixa: 'bg-sky-400', texto: 'text-sky-300', borda: 'border-sky-400/50', fundo: 'bg-sky-400/[0.10]' },
+]
+const SEM_COR = { faixa: 'bg-zinc-600', texto: 'text-zinc-500', borda: 'border-white/[0.06]', fundo: 'bg-white/[0.03]' }
+type CorEquipe = (typeof CORES_EQUIPE)[number]
+const chaveEquipe = (nome: unknown) => String(nome ?? '').toLowerCase().replace(/\s+/g, '')
+// a ordem vem de TODAS as equipes da agenda (não só do mês): a mesma equipe fica sempre com a mesma cor
+function coresDasEquipes(visitas: Registro[]): (nome: unknown) => CorEquipe {
+  const ordem = [...new Set(visitas.map((v) => chaveEquipe(v.equipe)).filter(Boolean))].sort()
+  return (nome) => {
+    const i = ordem.indexOf(chaveEquipe(nome))
+    return i < 0 ? SEM_COR : CORES_EQUIPE[i % CORES_EQUIPE.length]
+  }
+}
+
 const situacao = (v: Registro): { tom: Tom; rotulo: string } =>
   v.status === 'Fechamento enviado'
     ? { tom: 'zinc', rotulo: 'Fechado' }
@@ -73,6 +98,7 @@ export default function AgendaFotograficaPage() {
   const passa = (v: Registro) =>
     (!filtroEquipe || (filtroEquipe === SEM_EQUIPE ? !String(v.equipe || '').trim() : String(v.equipe || '').trim() === filtroEquipe)) && (!filtroUF || v.uf === filtroUF)
   const doMes = visitasDoMes.filter(passa)
+  const corDa = coresDasEquipes(visitas)
   const previstas = doMes.reduce((a, v) => a + Number(v.fichasPrevistas || 0), 0)
   const confirmadas = doMes.reduce((a, v) => a + Number(v.fichasConfirmadas || 0), 0)
   const fotografadas = doMes.reduce((a, v) => a + Number(v.fichasFotografadas || 0), 0)
@@ -173,7 +199,7 @@ export default function AgendaFotograficaPage() {
         </div>
       </div>
 
-      {visao === 'equipes' && <PorEquipe s={s} visitas={doMes} onAbrir={setVisitaId} />}
+      {visao === 'equipes' && <PorEquipe s={s} visitas={doMes} corDa={corDa} onAbrir={setVisitaId} />}
 
       {/* Calendário mensal */}
       {visao === 'calendario' && (
@@ -185,6 +211,7 @@ export default function AgendaFotograficaPage() {
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${TONS.emerald.solido}`}></span>Confirmada</span>
             <span className="flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${TONS.yellow.solido}`}></span>A confirmar</span>
+            <span>• a cor do card é a equipe</span>
             <span>• clique para ver dados, equipe e fichas</span>
           </span>
         </div>
@@ -218,19 +245,20 @@ export default function AgendaFotograficaPage() {
                       const eq = equipeDaVisita(s, v)
                       const sit = situacao(v)
                       const st = TONS[sit.tom]
+                      const ce = corDa(v.equipe)
                       return (
                         <button
                           key={v.id}
                           onClick={() => setVisitaId(v.id)}
                           title={`${v.escola} • ${v.cidade}-${v.uf}${eq.nome ? ` • ${eq.nome}` : ''}`}
-                          className="relative w-full text-left bg-white/[0.03] border border-white/[0.06] rounded-xl pl-3 pr-2 py-2 space-y-1 hover:border-blue-500/50 transition-all group"
+                          className={`relative w-full text-left border rounded-xl pl-3 pr-2 py-2 space-y-1 hover:border-white/40 transition-all group ${ce.fundo} ${ce.borda}`}
                         >
-                          <span className={`absolute left-1 top-2 bottom-2 w-1 rounded-full ${st.solido}`}></span>
+                          <span className={`absolute left-1 top-2 bottom-2 w-1 rounded-full ${ce.faixa}`}></span>
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-[9px] font-black text-white bg-white/[0.08] px-1.5 py-0.5 rounded">{String(v.uf)}</span>
-                            <span className={`text-[9px] font-black uppercase tracking-wider truncate ${eq.nome ? 'text-zinc-300' : 'text-zinc-500'}`}>{eq.nome || 'Sem equipe'}</span>
+                            <span className={`text-[9px] font-black uppercase tracking-wider truncate ${ce.texto}`}>{eq.nome || 'Sem equipe'}</span>
                           </div>
-                          <p className="text-[11px] font-bold text-white group-hover:text-blue-400 transition-colors leading-tight line-clamp-2">{String(v.escola)}</p>
+                          <p className="text-[11px] font-bold text-white transition-colors leading-tight line-clamp-2">{String(v.escola)}</p>
                           {v.retornoDe && <p className="text-[9px] font-black uppercase tracking-wider text-zinc-400">↺ Retorno</p>}
                           <p className="text-[10px] text-zinc-400 truncate">{String(v.cidade)}</p>
                           <div className="flex items-center justify-between gap-1 text-[9px] font-bold">
@@ -262,7 +290,7 @@ export default function AgendaFotograficaPage() {
 }
 
 // Roteiro de cada equipe no mês: composição (veículo, motorista, fotógrafos) e as escolas por data
-function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visitas: Registro[]; onAbrir: (id: string) => void }) {
+function PorEquipe({ s, visitas, corDa, onAbrir }: { s: ReturnType<typeof useErp>; visitas: Registro[]; corDa: (nome: unknown) => CorEquipe; onAbrir: (id: string) => void }) {
   const grupos = new Map<string, Registro[]>()
   for (const v of [...visitas].sort((a, b) => String(a.data).localeCompare(String(b.data)))) {
     const k = String(v.equipe || '').trim()
@@ -275,7 +303,7 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       {ordem.map((nome) => {
         const lista = grupos.get(nome)!
-        const cor = TONS[corEquipe(nome)]
+        const cor = corDa(nome)
         // composição: da próxima visita agendada (ou da última, se todas já passaram)
         const ref = lista.find((v) => v.status === 'Agendada' && String(v.data) >= hoje()) ?? lista[lista.length - 1]
         const eq = equipeDaVisita(s, ref)
@@ -286,9 +314,9 @@ function PorEquipe({ s, visitas, onAbrir }: { s: ReturnType<typeof useErp>; visi
           <div key={nome || SEM_EQUIPE} className={`bg-painel/80 border rounded-3xl overflow-hidden ${nome ? cor.borda : 'border-yellow-500/20'}`}>
             <div className="px-6 py-4 border-b border-white/[0.05] flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <span className={`w-3 h-3 rounded-full ${nome ? cor.solido : 'bg-yellow-500'}`}></span>
+                <span className={`w-3 h-3 rounded-full ${nome ? cor.faixa : 'bg-yellow-500'}`}></span>
                 <div>
-                  <p className="text-base font-black text-white">{nome || 'Sem equipe definida'}</p>
+                  <p className={`text-base font-black ${nome ? cor.texto : 'text-white'}`}>{nome || 'Sem equipe definida'}</p>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">
                     {lista.length} escola(s) • {num(fichas)} fichas • {ufs.join(' · ')}
                   </p>
