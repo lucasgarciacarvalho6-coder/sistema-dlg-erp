@@ -11,8 +11,9 @@ import { Badge, PageHeader, Panel, Tabs } from '@/components/erp/ui'
 import RegrasCobranca from '@/components/cobranca/RegrasCobranca'
 import CategoriasCobranca from '@/components/cobranca/CategoriasCobranca'
 import EscritoriosCobranca from '@/components/cobranca/EscritoriosCobranca'
+import CondicoesFaixa from '@/components/cobranca/CondicoesFaixa'
 
-type Aba = 'regras' | 'categorias' | 'escritorios' | 'situacoes'
+type Aba = 'regras' | 'condicoes' | 'categorias' | 'escritorios' | 'situacoes'
 
 export default function ConfiguracoesCobrancaPage() {
   const s = useErp()
@@ -27,12 +28,13 @@ export default function ConfiguracoesCobrancaPage() {
       <PageHeader
         modulo="Cobrança / Configurações"
         titulo="Configurações da Cobrança"
-        descricao="Regras de negociação, categorias das cobranças e escritórios externos. ADM e Gerência alteram; a equipe consulta."
+        descricao="Regras de negociação, condições por faixa, categorias das cobranças e escritórios externos. O ADM altera; a equipe consulta."
       />
-      {!editavel && <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-zinc-400">Somente leitura: ADM e Gerência alteram as configurações.</p>}
+      {!editavel && <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs text-zinc-400">Somente leitura: o ADM altera as configurações.</p>}
       <Tabs
         abas={[
           { id: 'regras' as Aba, label: 'Regras de negociação' },
+          { id: 'condicoes' as Aba, label: 'Condições por faixa' },
           { id: 'categorias' as Aba, label: `Categorias (${colecao(s, 'cobranca_categorias').length})` },
           { id: 'escritorios' as Aba, label: `Escritórios (${colecao(s, 'cobranca_escritorios').length})` },
           { id: 'situacoes' as Aba, label: 'Situações e contatos' },
@@ -41,6 +43,7 @@ export default function ConfiguracoesCobrancaPage() {
         onChange={setAba}
       />
       {aba === 'regras' && <RegrasCobranca key={assinaturaRegras} editavel={editavel} />}
+      {aba === 'condicoes' && <CondicoesFaixa editavel={editavel} />}
       {aba === 'categorias' && <CategoriasCobranca editavel={editavel} />}
       {aba === 'escritorios' && <EscritoriosCobranca editavel={editavel} />}
       {aba === 'situacoes' && (

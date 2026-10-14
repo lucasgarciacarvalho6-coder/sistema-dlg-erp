@@ -37,7 +37,7 @@ export const REGRAS_COBRANCA: RegraCobranca[] = [
   regra('meta_mensal', 'Metas', 'Meta mensal da Cobrança (recebido)', 'brl', 40000),
   regra('meta_spc_dia', 'Metas', 'Meta SPC por cobradora (clientes por dia útil)', 'qtd', 50, 'Clientes elegíveis trabalhados; cada cliente conta uma vez no ciclo.'),
   regra('ciclo_spc_inicio', 'Metas', 'Ciclo da meta SPC começa no dia', 'dia', 12, 'Vai até a véspera desse dia no mês seguinte (ex.: 12 → 11).'),
-  regra('comissao_nivel1_ate', 'Comissão', 'Nível 1 vai até (recebido no mês)', 'brl', 29999.99),
+  regra('comissao_nivel1_ate', 'Comissão', 'Nível 1 vai até (entradas SPC confirmadas no mês)', 'brl', 30000),
   regra('comissao_nivel2_ate', 'Comissão', 'Nível 2 vai até', 'brl', 35000),
   ...([1, 2, 3] as const).flatMap((n) => ([1, 2, 3, 4] as const).map((f) => regra(chaveComissao(n, f), 'Comissão', `Nível ${n} • ${FAIXAS_COMISSAO[f - 1]}`, 'pct', PERCENTUAIS[n][f - 1]))),
 ]

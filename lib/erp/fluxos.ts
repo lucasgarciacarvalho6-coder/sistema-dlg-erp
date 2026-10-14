@@ -6,14 +6,15 @@
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
 import { avisosRascunhoVisita, bloqueioVisitaEncerrada, camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
-import { addDias, addMeses, dataBR, diaLocal, hoje, uid } from './format'
+import { addDias, addMeses, brl, dataBR, diaLocal, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
 import { chaveEscola } from './escolas'
 import { proximoPacote } from './rebolo'
 import { REGRAS_COBRANCA, rotuloRegra, tipoEscritorioDoGrupo, validarRegrasCobranca } from './cobranca-config'
-import { textoBusca } from './documento'
+import { documentoValido, textoBusca } from './documento'
 import { calcularCarteira } from './carteira'
+import { calcularAcordo, type DadosAcordo } from './acordo'
 
 export interface Contexto {
   autorId: string
@@ -364,8 +365,16 @@ function registrarHistoricoCategoria(d: ErpState, cobrancaId: string, anterior: 
   inserir(d, 'cobranca_categorias_historico', { cobrancaId, categoriaAnteriorId: anterior, categoriaId: nova, alteradoPor: ctx.autorId, alteradoPorNome: ctx.autorNome || 'sistema' })
 }
 
+// cobrador da dívida (14/10, SQL 045): tem que ser alguém do setor Cobrança. Com 1 cobrador ativo só, a dívida é sempre dele
+// (a vendedora do Rebolo/interna não vira cobradora da própria venda).
+function cobradorDaCobranca(d: ErpState, sugerido: string): string {
+  const doSetor = d.colaboradores.filter((x) => x.setor === 'cobranca' && x.status === 'ATIVO')
+  if (doSetor.length === 1) return doSetor[0].id
+  return doSetor.some((x) => x.id === sugerido) ? sugerido : ''
+}
+
 function novaCobranca(d: ErpState, dados: Record<string, string>, ctx: Contexto) {
-  const c = inserir(d, 'cobrancas', { situacao: 'Aguardando cobrança', observacao: '', referencia: '', codigoVenda: '', vendaId: '', conta: 'CA Beatriz', ...dados })
+  const c = inserir(d, 'cobrancas', { situacao: 'Aguardando cobrança', observacao: '', referencia: '', codigoVenda: '', vendaId: '', conta: 'CA Beatriz', ...dados, cobradorId: cobradorDaCobranca(d, String(dados.cobradorId ?? '')) })
   registrarHistoricoCategoria(d, c.id, '', String(c.categoriaId), ctx)
   return c
 }
@@ -481,9 +490,9 @@ export function registrarPagamentoParcela(
   const encargos = valor >= saldo ? centavos(valor - saldo) : 0
   const desconto = valor < saldo && quitar ? centavos(saldo - valor) : 0
   const cliente = col(d, 'clientes').find((x) => x.id === c?.clienteId)
-  const lancamentoId = c?.cobradorId
-    ? lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(c.cobradorId), quantidade: valor, descricao: `Recebido parcela ${p.numero}/${p.total} — ${cliente?.nome ?? ''}`, data })
-    : ''
+  // meta do cobrador (SQL 049): só a entrada confirmada dos acordos em SPC; pagamento de parcela não lança meta
+  void cliente
+  const lancamentoId = ''
   inserir(d, 'cobranca_pagamentos', {
     parcelaId: p.id, cobrancaId: String(p.cobrancaId), valor, principal, encargos, desconto, data, forma, observacao: observacao.trim(), origem: 'Sistema', lancamentoId,
     registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome, estornadoEm: '', estornadoPorNome: '', estornoMotivo: '',
@@ -591,7 +600,7 @@ export function editarCobranca(d: ErpState, id: string, x: DadosEditarCobranca, 
   if (!CONTAS_VALIDAS.includes(x.conta)) return 'Escolha a conta (CA Beatriz ou CA Diogo).'
   if (!col(d, 'cobranca_categorias').some((y) => y.id === x.categoriaId)) return 'Escolha a categoria.'
   if (c.categoriaId !== x.categoriaId) registrarHistoricoCategoria(d, c.id, String(c.categoriaId), x.categoriaId, ctx)
-  Object.assign(c, { categoriaId: x.categoriaId, cobradorId: x.cobradorId, conta: x.conta, referencia: x.referencia.trim(), observacao: x.observacao.trim() })
+  Object.assign(c, { categoriaId: x.categoriaId, cobradorId: cobradorDaCobranca(d, x.cobradorId), conta: x.conta, referencia: x.referencia.trim(), observacao: x.observacao.trim() })
   auditar(d, ctx, 'EDITAR', 'Cobrança alterada', ctx.autorSetor)
   return null
 }
@@ -2041,5 +2050,279 @@ export function desfazerEnvioRebolo(d: ErpState, envioId: string, ctx: Contexto)
   d.colecoes.estoque_envios_rebolo = col(d, 'estoque_envios_rebolo').filter((x) => x.id !== envioId)
   inserir(d, 'estoque_movimentos', { loteId: r.loteId, cargaId: '', tipo: 'Envio ao Rebolo desfeito', albuns: r.albuns, posteres: r.posteres, descricao: `Envio de ${dataBR(String(r.data))} desfeito: voltou a ficar aguardando o Rebolo`, autor: ctx.autorNome })
   auditar(d, ctx, 'EXCLUIR', `Envio ao Rebolo desfeito: ${nomeEscola(d, r.loteId)}`, 'financeiro')
+  return null
+}
+
+// ---------------- Cobrança: registrar contato (SQL 046 — mesmas regras do banco) ----------------
+export interface DadosContatoCobranca {
+  cobrancas: string[]
+  tipo: string
+  data: string
+  situacao: string
+  observacao: string
+  retornoEm: string
+  promessaEm: string
+  promessaValor: number
+}
+
+export function conferirContatoCobranca(x: DadosContatoCobranca, hj = hoje()): string | null {
+  if (!x.cobrancas.length) return 'Escolha a cobrança.'
+  if (!['WhatsApp', 'Ligação', 'E-mail', 'Outro'].includes(x.tipo)) return 'Escolha o tipo do contato (WhatsApp, Ligação, E-mail ou Outro).'
+  if (!x.data || x.data > hj) return 'Informe a data do contato (não pode ser no futuro).'
+  if (!['Contato realizado sem acordo', 'Aguardando retorno', 'Pagamento de boleto agendado', 'Não localizado', 'Ficha não encontrada SPC'].includes(x.situacao))
+    return 'Escolha a situação da cobrança.'
+  if (['Contato realizado sem acordo', 'Não localizado'].includes(x.situacao) && !x.observacao.trim())
+    return 'Observação obrigatória para "Cliente não localizado" e "Contato realizado sem acordo".'
+  if (x.situacao === 'Aguardando retorno' && (!x.retornoEm || x.retornoEm < hj)) return 'Informe a data do retorno (hoje ou depois).'
+  if (x.situacao === 'Pagamento de boleto agendado' && (!x.promessaEm || x.promessaEm < hj)) return 'Informe a data do pagamento agendado (hoje ou depois).'
+  if (x.promessaValor < 0) return 'O valor prometido tem que ser maior que zero.'
+  return null
+}
+
+export function registrarContatoCobranca(d: ErpState, x: DadosContatoCobranca, ctx: Contexto): string | null {
+  const erro = conferirContatoCobranca(x)
+  if (erro) return erro
+  const calc = calcularCarteira(d).cobrancas
+  const alvo = x.cobrancas.map((id) => calc.find((c) => c.id === id))
+  if (alvo.some((c) => !c)) return 'Cobrança não encontrada.'
+  if (new Set(alvo.map((c) => c!.clienteId)).size > 1) return 'As cobranças têm que ser do mesmo cliente.'
+  for (const c of alvo) {
+    if (c!.carteira !== 'Cobrança DLG') return `Esta dívida está na carteira ${c!.carteira} (a Cobrança só consulta).`
+    if (c!.vencido <= 0) return 'Esta cobrança não tem boleto vencido.'
+    if (['Renegociação feita (aguardando entrada)', 'Entrada confirmada', 'Renegociação efetivada'].includes(c!.situacao))
+      return `Esta cobrança tem acordo em andamento (${c!.situacao}): o contato não muda a situação.`
+  }
+  const ret = x.situacao === 'Aguardando retorno' ? x.retornoEm : ''
+  const pro = x.situacao === 'Pagamento de boleto agendado' ? x.promessaEm : ''
+  const val = x.situacao === 'Pagamento de boleto agendado' && x.promessaValor > 0 ? centavos(x.promessaValor) : 0
+  for (const c of alvo) {
+    const bruta = col(d, 'cobrancas').find((y) => y.id === c!.id)!
+    inserir(d, 'cobranca_contatos', {
+      cobrancaId: c!.id, clienteId: c!.clienteId, tipo: x.tipo, data: x.data, situacao: x.situacao, situacaoAntes: String(bruta.situacao ?? ''),
+      observacao: x.observacao.trim(), retornoEm: ret, promessaEm: pro, promessaValor: val, registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome,
+    })
+    const ultimo = String(bruta.ultimoContatoEm ?? '')
+    Object.assign(bruta, { situacao: x.situacao, retornoEm: ret, promessaEm: pro, promessaValor: val, ultimoContatoEm: ultimo > x.data ? ultimo : x.data })
+  }
+  auditar(d, ctx, 'EDITAR', `Contato de cobrança registrado (${x.situacao})`, ctx.autorSetor)
+  return null
+}
+
+// ---------------- Cobrança: simulação e acordo (SQL 047 — mesmas regras do banco) ----------------
+export type ModoAcordo = 'simular' | 'fechar' | 'data' | 'recalcular'
+const ACORDO_ABERTO = ['Simulada', 'Aguardando entrada', 'Entrada confirmada']
+
+export function salvarAcordoCobranca(d: ErpState, cobrancaId: string, modo: ModoAcordo, x: DadosAcordo, ctx: Contexto): string | null {
+  const hj = hoje()
+  const acordos = col(d, 'cobranca_acordos')
+  const a = acordos.find((y) => y.cobrancaId === cobrancaId && ACORDO_ABERTO.includes(String(y.situacao)))
+  const evento = (acao: string, extra: Record<string, unknown> = {}) => [...((a?.historico as unknown as unknown[]) ?? []), { em: agora(), por: ctx.autorNome, acao, ...extra }]
+  if (modo === 'data') {
+    if (!a || a.situacao !== 'Aguardando entrada') return 'Só dá para mudar a data da entrada de um acordo aguardando a entrada.'
+    if (!x.entradaPrazo || x.entradaPrazo < hj) return 'Informe o prazo para pagar a entrada (hoje ou depois).'
+    Object.assign(a, { entradaPrazo: x.entradaPrazo, historico: evento('Data da entrada alterada', { de: a.entradaPrazo, para: x.entradaPrazo }) })
+    return null
+  }
+  if (modo === 'recalcular' && (!a || a.situacao !== 'Aguardando entrada')) return 'Só dá para recalcular um acordo aguardando a entrada.'
+  if (a?.situacao === 'Entrada confirmada') return 'A entrada deste acordo já foi confirmada pelo Financeiro: não muda mais.'
+  if ((modo === 'simular' || modo === 'fechar') && a?.situacao === 'Aguardando entrada') return 'Esta cobrança já tem acordo fechado: use "Editar renegociação".'
+  const calc = calcularCarteira(d)
+  const c = calc.cobrancas.find((y) => y.id === cobrancaId)
+  if (!c) return 'Cobrança não encontrada.'
+  if (c.carteira !== 'Cobrança DLG') return `Esta dívida está na carteira ${c.carteira} (a Cobrança só consulta).`
+  if (c.vencido <= 0) return 'Esta cobrança não tem boleto vencido.'
+  if (x.desconto < 0 || (x.descontoTipo === '%' && x.desconto > 100)) return 'O desconto vai de 0 a 100%.'
+  if (x.entrada < 0) return 'A entrada não pode ser negativa.'
+  if (x.entrada > 0 && !x.entradaForma) return 'Escolha a forma de pagamento da entrada (PIX, Cartão ou Dinheiro).'
+  if (x.entrada > 0 && (!x.entradaPrazo || x.entradaPrazo < hj)) return 'Informe o prazo para pagar a entrada (hoje ou depois).'
+  if (x.entrada > 0 && x.pagadorTipo === 'Outra pessoa' && (!x.pagadorNome.trim() || !documentoValido(x.pagadorDocumento)))
+    return 'Informe o nome e um CPF/CNPJ válido de quem vai pagar a entrada.'
+  if (modo === 'simular' && (!x.retornoEm || x.retornoEm < hj)) return 'Informe a data do retorno do cliente (hoje ou depois).'
+  const conta = calcularAcordo(c.totalDivida, x)
+  if (!conta.quitacaoAVista) {
+    if (x.simularPor === 'Valor' && !(x.valorDesejado > 0)) return 'Informe o valor desejado da parcela.'
+    if (conta.parcelasQtd < 1) return 'Informe o número de parcelas.'
+    if (!x.primeiroVencimento) return 'Informe o vencimento do primeiro boleto.'
+  }
+  const snapshot = calc.parcelas.filter((p) => p.cobrancaId === cobrancaId && (p.situacao === 'Aberta' || p.situacao === 'Parcial'))
+  const doc = x.pagadorDocumento.replace(/\D/g, '')
+  const dados = {
+    cobrancaId, clienteId: c.clienteId, situacao: modo === 'simular' ? 'Simulada' : 'Aguardando entrada', conta: c.conta, dataCalculo: hj, parcelasSnapshot: snapshot,
+    valorOriginalAtraso: c.vencido, multa: c.multa, juros: c.juros, atualizado: c.atualizado, aVencer: c.aVencer, totalDivida: c.totalDivida,
+    descontoTipo: x.descontoTipo, descontoInformado: x.desconto, desconto: conta.desconto, valorAposDesconto: conta.valorAposDesconto,
+    entrada: x.entrada, entradaPrazo: x.entradaPrazo, entradaForma: x.entrada > 0 ? x.entradaForma : '',
+    pagadorTipo: x.pagadorTipo, pagadorNome: x.pagadorTipo === 'Outra pessoa' ? x.pagadorNome.trim() : '', pagadorDocumento: x.pagadorTipo === 'Outra pessoa' ? doc : '',
+    valorPrazo: conta.valorPrazo, simularPor: x.simularPor, parcelasQtd: conta.parcelasQtd, parcelaValor: conta.parcelaValor,
+    formaPagamento: conta.quitacaoAVista ? '' : x.formaPagamento, primeiroVencimento: conta.quitacaoAVista ? '' : x.primeiroVencimento,
+    quitacaoAVista: conta.quitacaoAVista, totalAPagar: conta.totalAPagar, observacao: x.observacao.trim(), retornoEm: modo === 'simular' ? x.retornoEm : '',
+    parcelasVencidasCongeladas: c.parcelasVencidas, categoriaGrupoCongelado: c.grupo, estavaSpc: c.grupo === 'Registro SPC',
+  }
+  const acao = modo === 'simular' ? 'Simulação salva' : modo === 'fechar' ? 'Acordo fechado' : 'Acordo recalculado'
+  if (a) Object.assign(a, dados, { fechadoEm: modo === 'simular' ? '' : a.fechadoEm || agora(), historico: evento(acao) })
+  else {
+    const versao = Math.max(0, ...acordos.filter((y) => y.cobrancaId === cobrancaId).map((y) => Number(y.versao) || 0)) + 1
+    inserir(d, 'cobranca_acordos', {
+      ...dados, versao, cobradorId: String(col(d, 'cobrancas').find((y) => y.id === cobrancaId)?.cobradorId ?? ''), criadoPor: ctx.autorId, criadoPorNome: ctx.autorNome,
+      fechadoEm: modo === 'simular' ? '' : agora(), fichaImpressoes: 0, historico: [{ em: agora(), por: ctx.autorNome, acao }],
+    } as never)
+  }
+  const bruta = col(d, 'cobrancas').find((y) => y.id === cobrancaId)!
+  Object.assign(bruta, { situacao: modo === 'simular' ? 'Renegociação simulada' : 'Renegociação feita (aguardando entrada)', retornoEm: modo === 'simular' ? x.retornoEm : '', promessaEm: '', promessaValor: 0 })
+  auditar(d, ctx, 'EDITAR', `Renegociação: ${acao.toLowerCase()}`, ctx.autorSetor)
+  return null
+}
+
+export function registrarImpressaoFicha(d: ErpState, acordoId: string): string | null {
+  const a = col(d, 'cobranca_acordos').find((y) => y.id === acordoId)
+  if (!a || !['Aguardando entrada', 'Entrada confirmada', 'Efetivada'].includes(String(a.situacao))) return 'A ficha só sai de acordo fechado.'
+  Object.assign(a, { fichaImpressoes: (Number(a.fichaImpressoes) || 0) + 1, fichaImpressaEm: a.fichaImpressaEm || agora() })
+  return null
+}
+
+// ---------------- Financeiro: conferir a entrada e efetivar o acordo (SQL 048 — mesmas regras do banco) ----------------
+export type AcaoFinanceiroAcordo = 'confirmar' | 'devolver' | 'reverter' | 'efetivar' | 'quebrar' | 'boletos_enviados'
+
+function eventoAcordo(a: Registro, ctx: Contexto, acao: string, extra: Record<string, unknown> = {}) {
+  return [...((a.historico as unknown as unknown[]) ?? []), { em: agora(), por: ctx.autorNome, acao, ...extra }] as never
+}
+
+function efetivarAcordoDemo(d: ErpState, a: Registro, ctx: Contexto) {
+  const velha = col(d, 'cobrancas').find((y) => y.id === a.cobrancaId)!
+  for (const p of col(d, 'cobranca_parcelas').filter((y) => y.cobrancaId === velha.id && (y.situacao === 'Aberta' || y.situacao === 'Parcial'))) Object.assign(p, { situacao: 'Em acordo', cobrancaAcordoId: a.id })
+  const nova = novaCobranca(
+    d,
+    {
+      clienteId: String(velha.clienteId), origem: 'Acordo', codigoVenda: String(velha.codigoVenda ?? ''), categoriaId: String(velha.categoriaId), cobradorId: String(velha.cobradorId ?? ''),
+      conta: String(velha.conta ?? ''), referencia: [`Acordo v${a.versao}`, String(velha.referencia ?? '')].filter(Boolean).join(' • '), observacao: String(a.observacao ?? ''), acordoOrigemId: a.id,
+    },
+    ctx,
+  )
+  const qtd = Number(a.parcelasQtd) || 0
+  if (Number(a.entrada) > 0) {
+    const p = novaParcela(d, { cobrancaId: nova.id, numero: 0, total: Math.max(qtd, 1), valor: Number(a.entrada), vencimento: String(a.entradaRecebidaEm), multa: 0, cobraJuros: false as never, cobrancaAcordoId: a.id, baixado: Number(a.entrada), pagoEm: String(a.entradaRecebidaEm) })
+    inserir(d, 'cobranca_pagamentos', {
+      parcelaId: p.id, cobrancaId: nova.id, valor: Number(a.entrada), principal: Number(a.entrada), encargos: 0, desconto: 0, data: String(a.entradaRecebidaEm), forma: String(a.entradaConfirmadaForma),
+      observacao: `Entrada do acordo v${a.versao} (confirmada pelo Financeiro)`, origem: 'Sistema', lancamentoId: '', registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome,
+      estornadoEm: '', estornadoPorNome: '', estornoMotivo: '',
+    })
+  }
+  for (let i = 1; i <= qtd; i++) {
+    const valor = i === qtd ? centavos(Number(a.valorPrazo) - Number(a.parcelaValor) * (qtd - 1)) : Number(a.parcelaValor)
+    novaParcela(d, { cobrancaId: nova.id, numero: i, total: qtd, valor, vencimento: addMeses(String(a.primeiroVencimento), i - 1), cobrancaAcordoId: a.id })
+  }
+  Object.assign(a, { situacao: 'Efetivada', efetivadoEm: agora(), efetivadoPorNome: ctx.autorNome, cobrancaNovaId: nova.id, historico: eventoAcordo(a, ctx, 'Renegociação efetivada') })
+  velha.situacao = 'Renegociação efetivada'
+}
+
+export function financeiroAcordo(d: ErpState, id: string, acao: AcaoFinanceiroAcordo, x: { valor?: number; forma?: string; data?: string; motivo?: string }, ctx: Contexto): string | null {
+  const a = col(d, 'cobranca_acordos').find((y) => y.id === id)
+  if (!a) return 'Acordo não encontrado.'
+  const motivo = (x.motivo ?? '').trim()
+  if (['devolver', 'reverter', 'quebrar'].includes(acao) && motivo.length < 8) return 'Informe o motivo (pelo menos 8 letras).'
+  const cob = col(d, 'cobrancas').find((y) => y.id === a.cobrancaId)!
+  if (acao === 'confirmar') {
+    if (a.situacao !== 'Aguardando entrada') return `Este acordo está "${a.situacao}": não confirma entrada.`
+    if (!(Number(a.entrada) > 0)) return 'Este acordo não tem entrada.'
+    if (centavos(Number(x.valor) || 0) !== Number(a.entrada)) return `O valor recebido tem que ser exatamente ${brl(Number(a.entrada))} (o combinado). Diferente disso: devolva ao cobrador.`
+    if (x.forma !== a.entradaForma) return `A forma tem que ser ${a.entradaForma} (a combinada). Diferente disso: devolva ao cobrador.`
+    if (!x.data || x.data > hoje()) return 'Informe a data real do recebimento (não pode ser no futuro).'
+    Object.assign(a, {
+      situacao: 'Entrada confirmada', entradaConfirmadaValor: Number(a.entrada), entradaConfirmadaForma: x.forma, entradaRecebidaEm: x.data, confirmadoEm: agora(), confirmadoPorNome: ctx.autorNome,
+      historico: eventoAcordo(a, ctx, 'Entrada confirmada pelo Financeiro', { valor: x.valor, forma: x.forma, data: x.data }),
+    })
+    cob.situacao = 'Entrada confirmada'
+    if (a.estavaSpc && a.cobradorId) {
+      const nomeCli = String(col(d, 'clientes').find((y) => y.id === a.clienteId)?.nome ?? '')
+      a.metaLancamentoId = lancar(d, ctx, { setor: 'cobranca', indicador: 'valor_recebido', colaboradorId: String(a.cobradorId), quantidade: Number(a.entrada), descricao: `Entrada do acordo v${a.versao} — ${nomeCli}`, data: String(x.data) })
+    }
+    if (a.quitacaoAVista) efetivarAcordoDemo(d, a, ctx)
+  } else if (acao === 'devolver') {
+    if (a.situacao !== 'Aguardando entrada') return 'Só devolve acordo aguardando a entrada.'
+    Object.assign(a, { situacao: 'Simulada', motivo, devolvidoEm: agora(), retornoEm: hoje(), fechadoEm: '', historico: eventoAcordo(a, ctx, 'Devolvido ao cobrador pelo Financeiro', { motivo }) })
+    Object.assign(cob, { situacao: 'Renegociação simulada', retornoEm: hoje() })
+  } else if (acao === 'reverter') {
+    if (a.situacao !== 'Entrada confirmada') return 'Só reverte entrada confirmada e ainda não efetivada.'
+    Object.assign(a, { situacao: 'Aguardando entrada', entradaConfirmadaValor: 0, entradaConfirmadaForma: '', entradaRecebidaEm: '', confirmadoEm: '', confirmadoPorNome: '', motivo, historico: eventoAcordo(a, ctx, 'Confirmação revertida', { motivo }) })
+    cob.situacao = 'Renegociação feita (aguardando entrada)'
+    if (a.metaLancamentoId) {
+      d.lancamentos = d.lancamentos.filter((l) => l.id !== a.metaLancamentoId)
+      a.metaLancamentoId = ''
+    }
+  } else if (acao === 'efetivar') {
+    if (a.situacao !== 'Entrada confirmada') return 'Só efetiva acordo com a entrada confirmada.'
+    efetivarAcordoDemo(d, a, ctx)
+  } else if (acao === 'quebrar') {
+    if (a.situacao !== 'Aguardando entrada') return 'Só marca como quebrado acordo aguardando a entrada.'
+    Object.assign(a, { situacao: 'Quebrada', motivo, historico: eventoAcordo(a, ctx, 'Acordo quebrado (entrada não paga)', { motivo }) })
+    Object.assign(cob, { situacao: 'Acordo quebrado', retornoEm: '' })
+  } else if (acao === 'boletos_enviados') {
+    if (a.situacao !== 'Efetivada') return 'Só marca boletos enviados de acordo efetivado.'
+    Object.assign(a, { boletosEnviadosEm: a.boletosEnviadosEm ? '' : x.data || hoje(), historico: eventoAcordo(a, ctx, a.boletosEnviadosEm ? 'Envio de boletos desmarcado' : 'Boletos enviados ao cliente') })
+  } else return 'Ação inválida.'
+  auditar(d, ctx, 'EDITAR', `Acordo da cobrança: ${acao}`, ctx.autorSetor)
+  return null
+}
+
+// ---------------- SPC (SQL 050 — mesmas regras do banco) ----------------
+export type AcaoCobrancaSpc = 'incluir' | 'ficha_localizada' | 'desmarcar'
+export type AcaoFinanceiroSpc = 'enviar' | 'confirmar' | 'divergencia' | 'solicitar_retirada' | 'confirmar_retirada'
+
+function eventoSpc(x: Registro, ctx: Contexto, acao: string, obs: string) {
+  return [...((x.spcHistorico as unknown as unknown[]) ?? []), { em: agora(), por: ctx.autorNome, acao, obs }] as never
+}
+
+export function cobrancaSpc(d: ErpState, id: string, acao: AcaoCobrancaSpc, observacao: string, ctx: Contexto): string | null {
+  const c = calcularCarteira(d).cobrancas.find((y) => y.id === id)
+  const x = col(d, 'cobrancas').find((y) => y.id === id)
+  if (!c || !x) return 'Cobrança não encontrada.'
+  const obs = observacao.trim()
+  const contato = (texto: string) =>
+    inserir(d, 'cobranca_contatos', {
+      cobrancaId: id, clienteId: c.clienteId, tipo: 'Outro', data: hoje(), situacao: 'Contato realizado sem acordo', situacaoAntes: String(x.situacao ?? ''),
+      observacao: obs || texto, retornoEm: '', promessaEm: '', promessaValor: 0, registradoPor: ctx.autorId, registradoPorNome: ctx.autorNome,
+    })
+  if (acao === 'incluir') {
+    if (x.spcEstado && x.spcEstado !== 'Removido') return `Esta cobrança já está no fluxo do SPC (${x.spcEstado}).`
+    if (!c.podeIrSpc) return 'Inclusão no SPC bloqueada: esta cobrança não está elegível (carteira DLG, 2 boletos vencidos, 61 dias, CPF/CNPJ válido, fora do Registro SPC).'
+    if (['Renegociação feita (aguardando entrada)', 'Entrada confirmada'].includes(String(x.situacao))) return 'Esta cobrança tem acordo em andamento.'
+    contato('Cliente sem interesse - enviar ao SPC')
+    Object.assign(x, { spcEstado: 'Inclusão marcada', spcMarcadoEm: hoje(), situacao: 'Contato realizado sem acordo', retornoEm: '', promessaEm: '', promessaValor: 0, ultimoContatoEm: hoje(), spcHistorico: eventoSpc(x, ctx, 'Marcado para inclusão no SPC (cliente sem interesse)', obs) })
+  } else if (acao === 'ficha_localizada') {
+    if (x.situacao !== 'Ficha não encontrada SPC') return 'Só libera cobrança que está como "Ficha não encontrada".'
+    contato('Ficha localizada — liberar para SPC')
+    Object.assign(x, { situacao: 'Contato realizado sem acordo', spcHistorico: eventoSpc(x, ctx, 'Ficha localizada — liberar para SPC', obs) })
+  } else if (acao === 'desmarcar') {
+    if (x.spcEstado !== 'Inclusão marcada') return 'Só desmarca antes de o Financeiro enviar.'
+    Object.assign(x, { spcEstado: '', spcMarcadoEm: '', spcHistorico: eventoSpc(x, ctx, 'Inclusão no SPC desmarcada', obs) })
+  } else return 'Ação inválida.'
+  auditar(d, ctx, 'EDITAR', `SPC (Cobrança): ${acao}`, ctx.autorSetor)
+  return null
+}
+
+export function financeiroSpc(d: ErpState, id: string, acao: AcaoFinanceiroSpc, observacao: string, ctx: Contexto): string | null {
+  const x = col(d, 'cobrancas').find((y) => y.id === id)
+  if (!x) return 'Cobrança não encontrada.'
+  const obs = observacao.trim()
+  const est = String(x.spcEstado ?? '')
+  if (acao === 'enviar') {
+    if (est !== 'Inclusão marcada') return 'Só envia cobrança marcada pela Cobrança.'
+    Object.assign(x, { spcEstado: 'Enviado', spcEnviadoEm: hoje(), spcHistorico: eventoSpc(x, ctx, 'Enviado ao SPC pelo Financeiro', obs) })
+  } else if (acao === 'confirmar') {
+    if (est !== 'Enviado' && est !== 'Divergência') return 'Só confirma registro de cobrança enviada (ou em divergência).'
+    const cat = col(d, 'cobranca_categorias').filter((y) => y.grupo === 'Registro SPC' && y.ativa !== false).sort((a, b) => String(a.nome).localeCompare(String(b.nome)))[0]
+    if (!cat) return 'Cadastre uma categoria do grupo Registro SPC em Configurações.'
+    if (x.categoriaId !== cat.id) registrarHistoricoCategoria(d, id, String(x.categoriaId), String(cat.id), ctx)
+    Object.assign(x, { spcEstado: 'Registrado', spcRegistradoEm: hoje(), categoriaId: cat.id, spcHistorico: eventoSpc(x, ctx, 'Registro no SPC confirmado', obs) })
+  } else if (acao === 'divergencia') {
+    if (!obs) return 'Informe o que não bateu.'
+    Object.assign(x, { spcEstado: 'Divergência', spcHistorico: eventoSpc(x, ctx, 'Divergência na conferência do SPC', obs) })
+  } else if (acao === 'solicitar_retirada') {
+    if (est !== 'Registrado' && est !== 'Divergência') return 'Só pede retirada de quem está registrado no SPC.'
+    Object.assign(x, { spcEstado: 'Retirada solicitada', spcHistorico: eventoSpc(x, ctx, 'Solicitação de retirada do SPC', obs) })
+  } else if (acao === 'confirmar_retirada') {
+    if (est !== 'Retirada solicitada') return 'Só confirma retirada já solicitada.'
+    Object.assign(x, { spcEstado: 'Removido', spcHistorico: eventoSpc(x, ctx, 'Retirada do SPC confirmada', obs) })
+  } else return 'Ação inválida.'
+  auditar(d, ctx, 'EDITAR', `SPC (Financeiro): ${acao}`, ctx.autorSetor)
   return null
 }

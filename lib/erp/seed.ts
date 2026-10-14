@@ -65,7 +65,7 @@ const COLABORADORES: [string, string, string, Setor, string][] = [
   // Revelação (id 'producao', a antiga Produção): informa os álbuns revelados pelo app
   ['u-pr1', 'Juliana Prado', 'producao@dlgphotos.com', 'producao', 'Revelação'],
   ['u-pr2', 'Marcos Vieira', 'marcos.producao@dlgphotos.com', 'producao', 'Revelação'],
-  ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador(a)'],
+  ['u-co1', 'Patrícia Gomes', 'cobranca@dlgphotos.com', 'cobranca', 'Cobrador'],
   ['u-co2', 'Renata Alves', 'renata.cobranca@dlgphotos.com', 'cobranca', 'Atendente de vendas'],
   ['u-fi1', 'Eduardo Nunes', 'financeiro@dlgphotos.com', 'financeiro', 'Analista financeiro'],
   // Vendas Rebolo: revendem por telefone/WhatsApp os books que o externo não vendeu

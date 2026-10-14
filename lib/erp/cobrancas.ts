@@ -10,6 +10,9 @@ import { traduzirErro } from './supabase-sync'
 import { termosBusca } from './documento'
 import { colecao } from './metrics'
 import { useVersaoCarteira } from './carteira-versao'
+import { conferirPlanilhaDemo, filaSpcDaCarteira, linhaSpcDoBanco, resultadoDoBanco, type LinhaSpc, type ResultadoPlanilha } from './spc'
+import { painelDaCarteira, painelDoBanco, type PainelCobranca } from './painel-cobranca'
+import { CONDICOES_PADRAO, acordoFin, acordoV, type AcordoFin, type AcordoV, type CondicaoFaixa } from './acordo'
 import {
   INDICADORES_VAZIOS,
   ORDEM_SITUACAO,
@@ -23,7 +26,13 @@ import {
   passaNaBusca,
   resumoDaCarteira,
   type ClienteCarteira,
+  contatoV,
+  paraHojeDaCarteira,
+  situacoesDaCarteira,
   type CobrancaV,
+  type ContatoV,
+  type PendenciaHoje,
+  type SituacaoCobranca,
   type Inadimplente,
   type Indicadores,
   type PagamentoV,
@@ -122,6 +131,33 @@ const ordemReceber = (a: ClienteCarteira, b: ClienteCarteira) =>
   a.cliente.localeCompare(b.cliente, 'pt-BR') ||
   a.clienteId.localeCompare(b.clienteId)
 
+function contatoDoBanco(l: Linha): ContatoV {
+  return contatoV({
+    id: l.id, cobrancaId: l.cobranca_id, clienteId: l.cliente_id, tipo: l.tipo, data: l.data, situacao: l.situacao, situacaoAntes: l.situacao_antes,
+    observacao: l.observacao, retornoEm: l.retorno_em, promessaEm: l.promessa_em, promessaValor: l.promessa_valor, registradoPorNome: l.registrado_por_nome,
+    criadoEm: l.created_at,
+  } as never)
+}
+
+function situacaoDoBanco(l: Linha): SituacaoCobranca {
+  const t = (v: unknown) => (v == null ? '' : String(v))
+  return {
+    cobrancaId: t(l.cobranca_id), situacao: t(l.situacao), situacaoGravada: t(l.situacao_gravada), retornoEm: t(l.retorno_em),
+    promessaEm: t(l.promessa_em), promessaValor: Number(l.promessa_valor) || 0, ultimoContatoEm: t(l.ultimo_contato_em),
+  }
+}
+
+// "Para hoje" do cobrador (SQL 046)
+export async function lerParaHoje(): Promise<PendenciaHoje[]> {
+  if (MODO !== 'supabase') return paraHojeDaCarteira(lerEstado()).sort((a, b) => a.dataPendencia.localeCompare(b.dataPendencia))
+  const { data, error } = await sb().from('vw_cobranca_para_hoje').select('cobranca_id, cliente_id, cliente, conta, vencido, situacao, pendencia, data_pendencia').order('data_pendencia').limit(300)
+  if (error) return []
+  return ((data ?? []) as Linha[]).map((l) => ({
+    cobrancaId: String(l.cobranca_id), clienteId: String(l.cliente_id), cliente: String(l.cliente ?? ''), conta: String(l.conta ?? ''),
+    vencido: Number(l.vencido) || 0, situacao: String(l.situacao ?? ''), pendencia: String(l.pendencia ?? ''), dataPendencia: String(l.data_pendencia ?? ''),
+  }))
+}
+
 export async function buscarContasReceber(f: FiltroReceber, pagina: number, porPagina = POR_PAGINA_CARTEIRA): Promise<Pagina<ClienteCarteira>> {
   const de = pagina * porPagina
   if (MODO !== 'supabase') {
@@ -200,6 +236,9 @@ export interface FichaCarteira {
   cobrancas: CobrancaV[]
   parcelas: ParcelaV[]
   pagamentos: PagamentoV[]
+  contatos?: ContatoV[]
+  situacoes?: SituacaoCobranca[]
+  acordos?: AcordoV[]
   erro?: string
 }
 
@@ -214,6 +253,9 @@ export async function lerFichaCarteira(clienteId: string): Promise<FichaCarteira
       cobrancas: minhas,
       parcelas: parcelas.filter((p) => ids.has(p.cobrancaId)),
       pagamentos: colecao(s, 'cobranca_pagamentos').filter((g) => ids.has(String(g.cobrancaId))).map(pagamentoV),
+      contatos: colecao(s, 'cobranca_contatos').filter((g) => ids.has(String(g.cobrancaId))).map(contatoV),
+      situacoes: situacoesDaCarteira(s, minhas),
+      acordos: colecao(s, 'cobranca_acordos').filter((g) => ids.has(String(g.cobrancaId))).map((g) => acordoV(g as never)),
     }
   }
   const { data: cs, error } = await sb().from('vw_cobrancas').select('*').eq('cliente_id', clienteId).order('created_at')
@@ -221,14 +263,21 @@ export async function lerFichaCarteira(clienteId: string): Promise<FichaCarteira
   const cobrancas = ((cs ?? []) as Linha[]).map(cobrancaDoBanco)
   const ids = cobrancas.map((c) => c.id)
   if (!ids.length) return { cobrancas, parcelas: [], pagamentos: [] }
-  const [ps, gs] = await Promise.all([
+  const [ps, gs, ct, si, ac] = await Promise.all([
     sb().from('vw_cobranca_parcelas').select('*').in('cobranca_id', ids).order('numero'),
     sb().from('cobranca_pagamentos').select('*').in('cobranca_id', ids).order('data').order('created_at'),
+    // contatos e situação de hoje (SQL 046); sem o SQL rodado, a ficha só não mostra o histórico
+    sb().from('cobranca_contatos').select('*').in('cobranca_id', ids).order('created_at', { ascending: false }),
+    sb().from('vw_cobranca_situacao').select('*').in('cobranca_id', ids),
+    sb().from('cobranca_acordos').select('*').in('cobranca_id', ids).order('versao', { ascending: false }),
   ])
   return {
     cobrancas,
     parcelas: ((ps.data ?? []) as Linha[]).map(parcelaDoBanco),
     pagamentos: ((gs.data ?? []) as Linha[]).map(pagamentoDoBanco),
+    contatos: ct.error ? undefined : ((ct.data ?? []) as Linha[]).map(contatoDoBanco),
+    situacoes: si.error ? undefined : ((si.data ?? []) as Linha[]).map(situacaoDoBanco),
+    acordos: ac.error ? undefined : ((ac.data ?? []) as Linha[]).map((l) => acordoV(l)),
     erro: ps.error ? traduzirErro(ps.error) : gs.error ? traduzirErro(gs.error) : undefined,
   }
 }
@@ -314,4 +363,98 @@ export function useFichaCarteira(clienteId: string | null) {
 
 export function useResumoVendas(mes: string) {
   return useConsulta(`vendas|${mes}`, () => lerResumoVendas(mes)).dados ?? new Map<string, ResumoVenda>()
+}
+
+export function useParaHoje() {
+  return useConsulta('para-hoje', lerParaHoje)
+}
+
+// tabela de condições por faixa (SQL 047; sugestão na simulação)
+export async function lerCondicoesFaixa(): Promise<CondicaoFaixa[]> {
+  if (MODO !== 'supabase') {
+    const salvas = colecao(lerEstado(), 'cobranca_condicoes_faixa')
+    return salvas.length ? (salvas as unknown as CondicaoFaixa[]) : CONDICOES_PADRAO
+  }
+  const { data, error } = await sb().from('cobranca_condicoes_faixa').select('*').order('faixa').order('condicao')
+  if (error || !data?.length) return CONDICOES_PADRAO
+  return (data as Linha[]).map((l) => ({ faixa: Number(l.faixa), condicao: Number(l.condicao), entradaPct: Number(l.entrada_pct), descJurosPct: Number(l.desc_juros_pct), descPrincipalPct: Number(l.desc_principal_pct) }))
+}
+export function useCondicoesFaixa() {
+  return useConsulta('condicoes-faixa', lerCondicoesFaixa).dados ?? CONDICOES_PADRAO
+}
+
+// Financeiro › Acordos da Cobrança (SQL 048): acordos fechados, do mais urgente ao mais antigo
+const SITUACOES_FIN = ['Aguardando entrada', 'Entrada confirmada', 'Efetivada', 'Quebrada']
+export async function lerAcordosFinanceiro(): Promise<AcordoFin[]> {
+  if (MODO !== 'supabase') {
+    const s = lerEstado()
+    const clientes = new Map(colecao(s, 'clientes').map((c) => [String(c.id), c]))
+    const cobrancas = new Map(colecao(s, 'cobrancas').map((c) => [String(c.id), c]))
+    const hj = new Date().toISOString().slice(0, 10)
+    return colecao(s, 'cobranca_acordos')
+      .filter((a) => SITUACOES_FIN.includes(String(a.situacao)))
+      .map((a) => {
+        const cl = clientes.get(String(a.clienteId))
+        return acordoFin({
+          ...a, cliente: cl?.nome, documento: cl?.documento, telefone: cl?.whatsapp || cl?.telefone1, codigoVenda: cobrancas.get(String(a.cobrancaId))?.codigoVenda,
+          pagador: a.pagadorTipo === 'Titular' ? cl?.nome : a.pagadorNome, entradaVencida: a.situacao === 'Aguardando entrada' && String(a.entradaPrazo) < hj,
+        } as never)
+      })
+      .sort((a, b) => a.entradaPrazo.localeCompare(b.entradaPrazo))
+  }
+  const { data, error } = await sb().from('vw_acordos_financeiro').select('*').order('entrada_prazo', { nullsFirst: false }).limit(1000)
+  if (error) return []
+  return ((data ?? []) as Linha[]).map((l) => acordoFin(l))
+}
+export function useAcordosFinanceiro() {
+  return useConsulta('acordos-financeiro', lerAcordosFinanceiro)
+}
+
+// Painel da Cobrança (SQL 049): comissão, meta SPC e indicadores do mês
+export async function lerPainelCobranca(mes: string, cobradorId = ''): Promise<PainelCobranca | null> {
+  if (MODO !== 'supabase') return painelDaCarteira(lerEstado(), mes, cobradorId)
+  const { data, error } = await sb().rpc('painel_cobranca', { p_mes: mes, p_cobrador: cobradorId || null })
+  if (error || !data) return null
+  return painelDoBanco(data as Record<string, unknown>)
+}
+export function usePainelCobranca(mes: string, cobradorId = '') {
+  return useConsulta(`painel-cobranca|${mes}|${cobradorId}`, () => lerPainelCobranca(mes, cobradorId)).dados
+}
+
+// SPC (SQL 050): a fila (elegíveis + quem já está no fluxo + ficha não encontrada)
+export async function lerFilaSpc(): Promise<LinhaSpc[]> {
+  if (MODO !== 'supabase') return filaSpcDaCarteira(lerEstado())
+  const linhas: LinhaSpc[] = []
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb().from('vw_cobranca_spc').select('*').order('dias_atraso', { ascending: false }).range(de, de + 999)
+    if (error) return linhas
+    linhas.push(...((data ?? []) as Linha[]).map(linhaSpcDoBanco))
+    if (!data || data.length < 1000) return linhas
+  }
+}
+export function useFilaSpc() {
+  return useConsulta('fila-spc', lerFilaSpc)
+}
+
+// conferência com a planilha oficial (o cruzamento é feito no banco; só sobem CPF/CNPJ e contrato)
+export async function conferirPlanilhaSpc(linhas: { documento: string; contrato: string }[]): Promise<{ naPlanilha: ResultadoPlanilha[]; foraDaPlanilha: ResultadoPlanilha[]; erro?: string }> {
+  if (MODO !== 'supabase') return conferirPlanilhaDemo(lerEstado(), linhas)
+  const { data, error } = await sb().rpc('conferir_planilha_spc', { p_linhas: linhas })
+  if (error) return { naPlanilha: [], foraDaPlanilha: [], erro: traduzirErro(error) }
+  const j = (data ?? {}) as { na_planilha?: Linha[]; fora_da_planilha?: Linha[] }
+  return { naPlanilha: (j.na_planilha ?? []).map(resultadoDoBanco), foraDaPlanilha: (j.fora_da_planilha ?? []).map(resultadoDoBanco) }
+}
+
+// "Para hoje": marcados para o SPC que o Financeiro ainda não enviou (SQL 050)
+export async function lerSpcPendentes(): Promise<{ cobrancaId: string; cliente: string; conta: string; vencido: number; marcadoEm: string }[]> {
+  if (MODO !== 'supabase')
+    return filaSpcDaCarteira(lerEstado())
+      .filter((l) => l.spcEstado === 'Inclusão marcada')
+      .map((l) => ({ cobrancaId: l.cobrancaId, cliente: l.cliente, conta: l.conta, vencido: l.vencido, marcadoEm: l.spcMarcadoEm }))
+  const { data, error } = await sb().from('vw_cobranca_spc_pendente').select('*').order('spc_marcado_em').limit(300)
+  if (error) return []
+  return ((data ?? []) as Linha[]).map((l) => ({ cobrancaId: String(l.cobranca_id), cliente: String(l.cliente ?? ''), conta: String(l.conta ?? ''), vencido: Number(l.vencido) || 0, marcadoEm: String(l.spc_marcado_em ?? '') }))
+}
+export function useSpcPendentes() {
+  return useConsulta('spc-pendentes', lerSpcPendentes).dados ?? []
 }

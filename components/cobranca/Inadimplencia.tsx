@@ -3,11 +3,11 @@
 // Cobrança › Inadimplência (carteira nova, SQLs 041/042). A Cobrança só recebe a inadimplência para renegociar a dívida:
 // aqui aparecem SÓ as parcelas vencidas e não pagas, um nome por linha (busca no servidor, 50 por vez). Clicando no nome
 // abre a ficha com os boletos atrasados de cada cobrança (conta CA Beatriz / CA Diogo, carteira, juros e multa).
-// "Negociar" gera o acordo (só quando a cobrança pode ser renegociada) e vai para a aprovação do ADM.
+// "Efetuar renegociação" abre a simulação e o acordo (SQL 047), igual ao sistema antigo; nada vai para aprovação.
 // Receber e dar baixa é do Financeiro (Contas a Receber).
 
 import { useMemo, useState } from 'react'
-import { negociarCobranca, useErp, usePode } from '@/lib/erp/store'
+import { useErp, usePode } from '@/lib/erp/store'
 import { regrasCobranca } from '@/lib/erp/cobranca-config'
 import { brl, dataBR, mesAtual } from '@/lib/erp/format'
 import { exportarCSV } from '@/lib/erp/export'
@@ -26,9 +26,10 @@ import {
 } from '@/lib/erp/cobrancas'
 import Icon from '@/components/erp/Icon'
 import { BuscaPessoas, CabecalhoCobranca, DadosCliente, Filtro, NomeCliente, Paginacao, SelecaoConta, SeloConta, Total, rotuloParcela, useAtrasado } from '@/components/erp/ContasPessoa'
+import SimularRenegociacao from '@/components/cobranca/SimularRenegociacao'
+import { HistoricoContatos, MensagensWhatsApp, ParaHoje, RegistrarContato, SeloSituacaoCobranca, recebeContato } from '@/components/cobranca/ContatosCobranca'
 import { Badge, EmptyState, Modal, PageHeader, Panel, StatCard, btnPrimario, btnSecundario } from '@/components/erp/ui'
 
-const PARCELAS_ACORDO = 3
 
 export default function Inadimplencia() {
   const s = useErp()
@@ -38,7 +39,8 @@ export default function Inadimplencia() {
   const termo = useAtrasado(busca)
   const [pagina, setPagina] = useState(0)
   const [aberta, setAberta] = useState<{ id: string; nome: string } | null>(null)
-  const [negociar, setNegociar] = useState<CobrancaV | null>(null)
+  const [contato, setContato] = useState<CobrancaV[] | null>(null)
+  const [simular, setSimular] = useState<CobrancaV | null>(null)
 
   const pNegociar = podeFazer('cobranca', 'criar')
   const pExportar = podeFazer('cobranca', 'exportar')
@@ -100,8 +102,10 @@ export default function Inadimplencia() {
       <PageHeader
         modulo="Cobrança / Inadimplência"
         titulo="Inadimplência"
-        descricao="Quem está com boleto vencido e não pago, um nome por linha. Clique no nome para ver os boletos atrasados (com juros e multa) e negociar."
+        descricao="Quem está com boleto vencido e não pago, um nome por linha. Clique no nome para registrar a cobrança, simular e fechar o acordo."
       />
+
+      <ParaHoje onAbrir={(id, nome) => setAberta({ id, nome })} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
         <StatCard label="Clientes em atraso" valor={ind.clientesEmAtraso} tom={ind.clientesEmAtraso ? 'red' : 'zinc'} detalhe={`${ind.parcelasVencidas} boleto(s) vencido(s)`} />
@@ -229,6 +233,14 @@ export default function Inadimplencia() {
         ) : (
           <div className="space-y-6">
             <DadosCliente cobrancas={cobrancasVencidas} />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <MensagensWhatsApp cobrancas={cobrancasVencidas} />
+              {pNegociar && cobrancasVencidas.some(recebeContato) && (
+                <button onClick={() => setContato(cobrancasVencidas.filter(recebeContato))} className={btnPrimario}>
+                  Registrar cobrança
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Total rotulo="Em atraso" valor={brl(cobrancasVencidas.reduce((a, c) => a + c.vencido, 0))} tom="red" />
               <Total rotulo="Com juros e multa" valor={brl(cobrancasVencidas.reduce((a, c) => a + c.atualizado, 0))} />
@@ -242,21 +254,21 @@ export default function Inadimplencia() {
                     c={c}
                     extra={
                       <>
+                        <SeloSituacaoCobranca s={ficha.situacoes?.find((x) => x.cobrancaId === c.id)} />
                         {c.foraDaCategoria && <Badge texto="Fora da categoria (mais de 730 dias)" tom="yellow" />}
                         {c.podeIrSpc && <Badge texto="Pode ir ao SPC" tom="zinc" />}
                       </>
                     }
                     acoes={
-                      pNegociar &&
-                      (c.podeRenegociar ? (
-                        <button onClick={() => setNegociar(c)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap transition-all text-blue-400 border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20">
-                          Negociar ({PARCELAS_ACORDO}x)
+                      pNegociar && c.carteira === 'Cobrança DLG' ? (
+                        <button onClick={() => setSimular(c)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest border whitespace-nowrap transition-all text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/10">
+                          {ficha.acordos?.some((a) => a.cobrancaId === c.id && a.situacao !== 'Simulada' && a.situacao !== 'Quebrada' && a.situacao !== 'Cancelada')
+                            ? 'Renegociação efetuada'
+                            : 'Efetuar renegociação'}
                         </button>
-                      ) : (
-                        <span className="text-[10px] text-zinc-500 max-w-[16rem] text-right">
-                          Ainda não renegocia: precisa de {regras.reneg_min_boletos ?? 2} boletos vencidos e {regras.reneg_min_dias ?? 61} dias de atraso, na Cobrança DLG.
-                        </span>
-                      ))
+                      ) : c.carteira !== 'Cobrança DLG' ? (
+                        <span className="text-[10px] text-zinc-500">Carteira {c.carteira}: só consulta</span>
+                      ) : null
                     }
                   />
                   <div className="overflow-x-auto custom-scrollbar">
@@ -291,38 +303,21 @@ export default function Inadimplencia() {
                 </div>
               )
             })}
+            <HistoricoContatos contatos={ficha.contatos} cobrancas={ficha.cobrancas} />
           </div>
         )}
       </Modal>
 
-      <Modal
-        aberto={!!negociar}
-        titulo="Negociar"
-        subtitulo="As parcelas vencidas ficam em acordo e o acordo vai para a aprovação do ADM"
-        onFechar={() => setNegociar(null)}
-        largura="max-w-md"
-        rodape={
-          <>
-            <button onClick={() => setNegociar(null)} className={btnSecundario}>Cancelar</button>
-            <button
-              onClick={() => {
-                if (negociar) void negociarCobranca(negociar, PARCELAS_ACORDO)
-                setNegociar(null)
-              }}
-              className={btnPrimario}
-            >
-              Gerar acordo
-            </button>
-          </>
-        }
-      >
-        {negociar && (
-          <p className="text-sm text-zinc-300">
-            Gerar um acordo em <strong className="text-white">{PARCELAS_ACORDO}x</strong> para <strong className="text-white">{negociar.cliente}</strong> ({negociar.conta}): {negociar.parcelasVencidas} boleto(s) vencido(s),{' '}
-            {brl(negociar.vencido)} em atraso, <strong className="text-white">{brl(negociar.atualizado)}</strong> com juros e multa, há {negociar.diasAtraso} dias?
-          </p>
-        )}
-      </Modal>
+      {simular && ficha && (
+        <SimularRenegociacao
+          c={simular}
+          parcelas={ficha.parcelas.filter((p) => p.cobrancaId === simular.id)}
+          acordo={ficha.acordos?.find((a) => a.cobrancaId === simular.id && ['Simulada', 'Aguardando entrada', 'Entrada confirmada'].includes(a.situacao))}
+          onFechar={() => setSimular(null)}
+        />
+      )}
+      <RegistrarContato aberto={!!contato} cobrancas={contato ?? []} onFechar={() => setContato(null)} />
+
     </div>
   )
 }

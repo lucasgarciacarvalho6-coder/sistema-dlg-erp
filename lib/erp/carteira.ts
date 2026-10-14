@@ -395,3 +395,100 @@ export function resumoDaCarteira(cobrancas: CobrancaV[]): ResumoCarteira[] {
   }
   return [...m.values()].map((r) => ({ carteira: r.carteira, faixaDias: r.faixaDias, cobrancas: r.cobrancas, clientes: r.clientes, vencido: r.vencido, atualizado: r.atualizado }))
 }
+
+// ---------------- Contatos da Cobrança (SQL 046, igual ao "Registrar Cobrança" do sistema antigo) ----------------
+export const TIPOS_CONTATO = ['WhatsApp', 'Ligação', 'E-mail', 'Outro'] as const
+export const SITUACOES_CONTATO = ['Contato realizado sem acordo', 'Aguardando retorno', 'Pagamento de boleto agendado', 'Não localizado', 'Ficha não encontrada SPC'] as const
+export const SITUACOES_COM_OBSERVACAO = ['Contato realizado sem acordo', 'Não localizado']
+export const SITUACOES_DE_ACORDO = ['Renegociação feita (aguardando entrada)', 'Entrada confirmada', 'Renegociação efetivada']
+
+export interface ContatoV {
+  id: string
+  cobrancaId: string
+  clienteId: string
+  tipo: string
+  data: string
+  situacao: string
+  situacaoAntes: string
+  observacao: string
+  retornoEm: string
+  promessaEm: string
+  promessaValor: number
+  registradoPorNome: string
+  criadoEm: string
+}
+
+export interface SituacaoCobranca {
+  cobrancaId: string
+  situacao: string // a de hoje ("Promessa não cumprida" calculada)
+  situacaoGravada: string
+  retornoEm: string
+  promessaEm: string
+  promessaValor: number
+  ultimoContatoEm: string
+}
+
+export interface PendenciaHoje {
+  cobrancaId: string
+  clienteId: string
+  cliente: string
+  conta: string
+  vencido: number
+  situacao: string
+  pendencia: string
+  dataPendencia: string
+}
+
+// a promessa de pagamento passou e a dívida continua vencida → "Promessa não cumprida" (não vira "sem acordo")
+export function situacaoDeHoje(gravada: string, promessaEm: string, vencido: number, hj = hoje()) {
+  return gravada === 'Pagamento de boleto agendado' && promessaEm && promessaEm < hj && vencido > 0 ? 'Promessa não cumprida' : gravada
+}
+
+export function situacoesDaCarteira(s: ErpState, cobrancas: CobrancaV[], hj = hoje()): SituacaoCobranca[] {
+  const brutas = new Map(colecao(s, 'cobrancas').map((x) => [String(x.id), x]))
+  return cobrancas.map((c) => {
+    const x = brutas.get(c.id) ?? ({} as Registro)
+    const promessaEm = String(x.promessaEm ?? '')
+    return {
+      cobrancaId: c.id,
+      situacao: situacaoDeHoje(c.situacao, promessaEm, c.vencido, hj),
+      situacaoGravada: c.situacao,
+      retornoEm: String(x.retornoEm ?? ''),
+      promessaEm,
+      promessaValor: Number(x.promessaValor) || 0,
+      ultimoContatoEm: String(x.ultimoContatoEm ?? ''),
+    }
+  })
+}
+
+export function pendenciaDeHoje(sit: SituacaoCobranca, hj = hoje()): string {
+  if (sit.situacao === 'Promessa não cumprida') return 'Boleto agendado vencido'
+  if (sit.situacaoGravada === 'Pagamento de boleto agendado' && sit.promessaEm === hj) return 'Pagamento agendado para hoje'
+  if (sit.situacaoGravada === 'Aguardando retorno' && sit.retornoEm && sit.retornoEm < hj) return 'Retorno atrasado'
+  if (sit.situacaoGravada === 'Aguardando retorno' && sit.retornoEm === hj) return 'Retorno de hoje'
+  return ''
+}
+
+export function paraHojeDaCarteira(s: ErpState, hj = hoje()): PendenciaHoje[] {
+  const cobrancas = calcularCarteira(s, hj).cobrancas.filter((c) => c.carteira === 'Cobrança DLG' && c.vencido > 0)
+  const porId = new Map(cobrancas.map((c) => [c.id, c]))
+  return situacoesDaCarteira(s, cobrancas, hj)
+    .map((x) => ({ x, p: pendenciaDeHoje(x, hj) }))
+    .filter(({ p }) => p)
+    .map(({ x, p }) => {
+      const c = porId.get(x.cobrancaId)!
+      return {
+        cobrancaId: c.id, clienteId: c.clienteId, cliente: c.cliente, conta: c.conta, vencido: c.vencido, situacao: x.situacao, pendencia: p,
+        dataPendencia: (x.situacao === 'Promessa não cumprida' ? x.promessaEm : '') || x.retornoEm || x.promessaEm,
+      }
+    })
+}
+
+export function contatoV(r: Registro): ContatoV {
+  const t = (v: unknown) => (v == null ? '' : String(v))
+  return {
+    id: t(r.id), cobrancaId: t(r.cobrancaId), clienteId: t(r.clienteId), tipo: t(r.tipo), data: t(r.data), situacao: t(r.situacao),
+    situacaoAntes: t(r.situacaoAntes), observacao: t(r.observacao), retornoEm: t(r.retornoEm), promessaEm: t(r.promessaEm),
+    promessaValor: Number(r.promessaValor) || 0, registradoPorNome: t(r.registradoPorNome), criadoEm: t(r.criadoEm),
+  }
+}

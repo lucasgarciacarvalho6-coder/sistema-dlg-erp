@@ -97,8 +97,8 @@ export const SETORES: Record<Setor, ConfigSetor> = {
     home: '/cobranca',
     tom: 'zinc',
     // a venda de books aos pais passou para o setor Vendas Rebolo
-    indicadores: [{ id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1500, mensal: 33000 } }],
-    funcoes: ['Cobrador(a)', 'Atendente de cobrança', 'Supervisor(a) de cobrança'],
+    indicadores: [{ id: 'valor_recebido', label: 'Valor recebido', unidade: 'brl', metaPadrao: { diaria: 1818, mensal: 40000 } }],
+    funcoes: ['Cobrador'], // 14/10: o setor não tem hierarquia, só cobrador
   },
   rebolo: {
     id: 'rebolo',
@@ -248,6 +248,8 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Contas a Pagar', href: '/financeiro/contas-pagar', icone: 'wallet' },
         { label: 'Pagamentos Operacionais', href: '/financeiro/pagamentos', icone: 'percent' },
         { label: 'Conferência de Vendas', href: '/financeiro/conferencia', icone: 'check' },
+        { label: 'Acordos da Cobrança', href: '/financeiro/acordos-cobranca', icone: 'check' },
+        { label: 'Registro SPC', href: '/financeiro/spc', icone: 'check' },
         { label: 'Vendas de Books', href: '/financeiro/vendas-books', icone: 'book' },
         { label: 'Custo do Rebolo', href: '/financeiro/custos-rebolo', icone: 'users' },
         { label: 'Estoque e Cargas', href: '/financeiro/estoque', icone: 'box' },
@@ -263,6 +265,7 @@ export const MENUS: Record<Setor, GrupoMenu[]> = {
         { label: 'Dashboard de Cobrança', href: '/cobranca', icone: 'dashboard' },
         { label: 'Clientes', href: '/cobranca/clientes', icone: 'users' },
         { label: 'Inadimplência', href: '/cobranca/inadimplencia', icone: 'alert' },
+        { label: 'Controle SPC', href: '/cobranca/spc', icone: 'alert' },
         { label: 'Acordos', href: '/cobranca/acordos', icone: 'handshake' },
         { label: 'Configurações', href: '/cobranca/configuracoes', icone: 'key' },
         { label: 'Histórico', href: '/cobranca/historico', icone: 'log' },

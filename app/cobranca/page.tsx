@@ -4,16 +4,15 @@ import Link from 'next/link'
 import SectorDashboard from '@/components/erp/SectorDashboard'
 import { Panel, StatCard } from '@/components/erp/ui'
 import { SeloConta } from '@/components/erp/ContasPessoa'
-import { useErp } from '@/lib/erp/store'
-import { colecao } from '@/lib/erp/metrics'
+
 import { brl, dataBR, mesAtual, pct } from '@/lib/erp/format'
 import { FILTRO_INADIMPLENCIA, useIndicadores, useInadimplentes } from '@/lib/erp/cobrancas'
+import PainelCobranca from '@/components/cobranca/PainelCobranca'
+import { ParaHoje } from '@/components/cobranca/ContatosCobranca'
 
 // A Cobrança só recebe a inadimplência para renegociar (07/10/2026): receber e dar baixa é do Financeiro.
 // Os números vêm da carteira (calculados no banco).
 export default function CobrancaDashboardPage() {
-  const s = useErp()
-  const acordos = colecao(s, 'acordos')
   const ind = useIndicadores(mesAtual())
   const { linhas: maisAtrasados } = useInadimplentes(FILTRO_INADIMPLENCIA, 0, 8)
 
@@ -25,11 +24,13 @@ export default function CobrancaDashboardPage() {
       tituloEquipe="Cobradores • metas diárias e mensais"
       antesDaEquipe={
         <div className="space-y-6">
+          <ParaHoje />
+          <PainelCobranca mes={mesAtual()} />
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
             <StatCard tom={ind.clientesEmAtraso ? 'red' : 'zinc'} label="Clientes em atraso" valor={ind.clientesEmAtraso} detalhe={`${ind.parcelasVencidas} boleto(s) vencido(s)`} />
             <StatCard tom={ind.emAtraso ? 'red' : 'zinc'} label="Valor em atraso" valor={brl(ind.emAtraso)} detalhe={`Atraso médio de ${ind.atrasoMedio} dias`} />
             <StatCard tom={ind.taxaInadimplencia ? 'red' : 'zinc'} label="Taxa de inadimplência" valor={pct(ind.taxaInadimplencia)} detalhe="do valor a receber" />
-            <StatCard label="Acordos gerados" valor={acordos.length} detalhe={`${acordos.filter((a) => a.status === 'Ativo').length} ativos • ${acordos.filter((a) => a.status === 'Aguardando aprovação').length} aguardando`} />
+            <StatCard label="Atraso médio" valor={`${ind.atrasoMedio} dias`} detalhe="da carteira em atraso" />
           </div>
           <Panel titulo="Clientes em atraso" semPadding acoes={<Link href="/cobranca/inadimplencia" className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300">Negociar →</Link>}>
             {maisAtrasados.length === 0 ? (

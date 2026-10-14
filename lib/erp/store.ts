@@ -12,6 +12,7 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import { FunctionsHttpError, type RealtimeChannel } from '@supabase/supabase-js'
 import type { Acao, Colaborador, ErpState, Lancamento, Meta, Modulo, Registro, Sessao, Setor, Valor } from './types'
 import * as F from './fluxos'
+import type { DadosAcordo } from './acordo'
 import { VERSAO_DADOS, estadoVazio, gerarSeed } from './seed'
 import { pode } from './permissions'
 import { ETAPAS_PRODUCAO, perfilDoSetor } from './config'
@@ -676,6 +677,116 @@ export function mudarSituacaoParcela(id: string, situacao: 'Cancelada' | 'Aberta
   const msg = situacao === 'Cancelada' ? 'Parcela cancelada.' : 'Parcela reaberta.'
   if (MODO === 'supabase') return gravarCarteira(() => sb().from('cobranca_parcelas').update({ situacao }).eq('id', id), msg)
   return mutarCarteira((d, ctx) => F.mudarSituacaoParcela(d, id, situacao, ctx), msg)
+}
+
+// Configurações › tabela de condições por faixa (SQL 047): só o ADM
+export async function salvarCondicoesFaixa(lista: { faixa: number; condicao: number; entradaPct: number; descJurosPct: number; descPrincipalPct: number }[]): Promise<string | null> {
+  if (MODO === 'supabase') {
+    for (const c of lista) {
+      const { error } = await sb()
+        .from('cobranca_condicoes_faixa')
+        .update({ entrada_pct: c.entradaPct, desc_juros_pct: c.descJurosPct, desc_principal_pct: c.descPrincipalPct })
+        .eq('faixa', c.faixa)
+        .eq('condicao', c.condicao)
+      if (error) {
+        const msg = traduzirErro(error)
+        avisar(msg)
+        return msg
+      }
+    }
+    avisar('Tabela de condições salva.', 'ok')
+    carteiraMudou()
+    return null
+  }
+  return mutarCarteira((d) => {
+    d.colecoes.cobranca_condicoes_faixa = lista.map((c) => ({ ...c, id: `${c.faixa}-${c.condicao}`, criadoEm: '' })) as never
+    return null
+  }, 'Tabela de condições salva.')
+}
+
+// SPC (SQL 050): a Cobrança marca; o Financeiro envia, confirma e retira
+export function cobrancaSpc(id: string, acao: F.AcaoCobrancaSpc, observacao = '') {
+  const msg = { incluir: 'Cliente marcado para o SPC: o Financeiro faz o envio.', ficha_localizada: 'Ficha localizada: a cobrança voltou para a fila do SPC.', desmarcar: 'Inclusão no SPC desmarcada.' }[acao]
+  if (MODO === 'supabase') return gravarCarteira(() => sb().rpc('cobranca_spc', { p_cobranca: id, p_acao: acao, p_observacao: observacao || null }), msg)
+  return mutarCarteira((d, ctx) => F.cobrancaSpc(d, id, acao, observacao, ctx), msg)
+}
+export function financeiroSpc(id: string, acao: F.AcaoFinanceiroSpc, observacao = '') {
+  const msg = {
+    enviar: 'Envio ao SPC registrado: aguardando a confirmação.', confirmar: 'Registro no SPC confirmado (categoria Registro SPC).', divergencia: 'Divergência registrada.',
+    solicitar_retirada: 'Solicitação de retirada registrada.', confirmar_retirada: 'Retirada do SPC confirmada.',
+  }[acao]
+  if (MODO === 'supabase') return gravarCarteira(() => sb().rpc('financeiro_spc', { p_cobranca: id, p_acao: acao, p_observacao: observacao || null }), msg)
+  return mutarCarteira((d, ctx) => F.financeiroSpc(d, id, acao, observacao, ctx), msg)
+}
+
+// Financeiro › conferir a entrada / efetivar / devolver / quebrar (SQL 048)
+export function financeiroAcordo(id: string, acao: F.AcaoFinanceiroAcordo, x: { valor?: number; forma?: string; data?: string; motivo?: string } = {}) {
+  const msg: Record<F.AcaoFinanceiroAcordo, string> = {
+    confirmar: 'Entrada confirmada.', devolver: 'Acordo devolvido ao cobrador.', reverter: 'Confirmação revertida.',
+    efetivar: 'Renegociação efetivada: parcelas novas criadas.', quebrar: 'Acordo quebrado registrado.', boletos_enviados: 'Envio dos boletos atualizado.',
+  }
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () => sb().rpc('financeiro_acordo', { p_acordo: id, p_acao: acao, p_valor: x.valor ?? null, p_forma: x.forma ?? null, p_data: x.data || null, p_motivo: x.motivo || null }),
+      msg[acao],
+    )
+  return mutarCarteira((d, ctx) => F.financeiroAcordo(d, id, acao, x, ctx), msg[acao])
+}
+
+// Cobrança › simulação e acordo (SQL 047)
+export function salvarAcordoCobranca(cobrancaId: string, modo: F.ModoAcordo, x: DadosAcordo) {
+  const msg = modo === 'simular' ? 'Simulação salva.' : modo === 'fechar' ? 'Acordo fechado: imprima a ficha e entregue ao Financeiro.' : modo === 'data' ? 'Data da entrada alterada.' : 'Acordo recalculado.'
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () =>
+        sb().rpc('salvar_acordo_cobranca', {
+          p_cobranca: cobrancaId,
+          p_modo: modo,
+          p_dados: {
+            desconto_tipo: x.descontoTipo, desconto: x.desconto, entrada: x.entrada, entrada_prazo: x.entradaPrazo || null, entrada_forma: x.entradaForma || null,
+            pagador_tipo: x.pagadorTipo, pagador_nome: x.pagadorNome || null, pagador_documento: x.pagadorDocumento || null, simular_por: x.simularPor,
+            parcelas_qtd: x.parcelasQtd, valor_desejado: x.valorDesejado, forma_pagamento: x.formaPagamento, primeiro_vencimento: x.primeiroVencimento || null,
+            retorno_em: x.retornoEm || null, observacao: x.observacao || null,
+          },
+        }),
+      msg,
+    )
+  return mutarCarteira((d, ctx) => F.salvarAcordoCobranca(d, cobrancaId, modo, x, ctx), msg)
+}
+
+// a ficha do acordo foi impressa (conta as reimpressões)
+export async function registrarImpressaoFicha(acordoId: string): Promise<string | null> {
+  if (MODO === 'supabase') {
+    const { error } = await sb().rpc('registrar_impressao_ficha_acordo', { p_acordo: acordoId })
+    if (error) return traduzirErro(error)
+    carteiraMudou()
+    return null
+  }
+  let erro: string | null = null
+  mutar((d) => {
+    erro = F.registrarImpressaoFicha(d, acordoId)
+  })
+  if (!erro) carteiraMudou()
+  return erro
+}
+
+// Cobrança › registrar contato (SQL 046): histórico que não se apaga + situação da cobrança
+export function registrarContatoCobranca(x: F.DadosContatoCobranca) {
+  const erro = F.conferirContatoCobranca(x)
+  if (erro) {
+    avisar(erro)
+    return Promise.resolve(erro)
+  }
+  if (MODO === 'supabase')
+    return gravarCarteira(
+      () =>
+        sb().rpc('registrar_contato_cobranca', {
+          p_cobrancas: x.cobrancas, p_tipo: x.tipo, p_data: x.data, p_situacao: x.situacao, p_observacao: x.observacao || null,
+          p_retorno: x.retornoEm || null, p_promessa: x.promessaEm || null, p_promessa_valor: x.promessaValor > 0 ? x.promessaValor : null,
+        }),
+      'Contato registrado.',
+    )
+  return mutarCarteira((d, ctx) => F.registrarContatoCobranca(d, x, ctx), 'Contato registrado.')
 }
 
 export function lancarCobranca(x: F.DadosLancarCobranca) {
