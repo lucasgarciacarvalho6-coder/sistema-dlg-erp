@@ -1,8 +1,9 @@
 // ESTOQUE DE ÁLBUNS — só o FINANCEIRO mexe; a PRODUÇÃO só vê, para conferir se bate (mesmas regras do SQL 029).
 // O estoque é por escola: as caixas que a Produção conferiu. A carga leva caixas de várias escolas com um vendedor de books
 // (fica "Em venda", sem prazo). Na volta, o acerto por escola diz quantos álbuns e pôsteres/brindes foram vendidos e quantos
-// voltaram; a diferença (levados − vendidos − voltaram) fica registrada. O que voltou fica "aguardando Rebolo" até o
-// Financeiro encaminhar (o Rebolo pega as caixas e tenta vender; não precisa confirmar).
+// voltaram; a diferença (levados − vendidos − voltaram) fica registrada. O que voltou tem um destino (SQL 056):
+// "Estoque" (vira uma caixa da escola, em estoque, que pode sair em outra carga) ou "Rebolo" (encaminhado na hora).
+// Acertos antigos, sem destino, ficam "aguardando Rebolo" até o Financeiro encaminhar (o Rebolo não precisa confirmar).
 
 import type { ErpState, Registro } from './types'
 import { colecao } from './metrics'
@@ -107,6 +108,7 @@ export interface EstoqueEscola extends DadosLote {
   emVenda: Quantidade & { caixas: Registro[]; cargas: Registro[] }
   vendidos: Quantidade
   voltaram: Quantidade
+  voltaramEstoque: Quantidade // voltaram e foram para o estoque (056)
   rebolo: Quantidade // encaminhados ao Rebolo
   aguardandoRebolo: Quantidade // voltaram e ainda não foram para o Rebolo
   diferenca: Quantidade
@@ -136,6 +138,7 @@ export function estoquePorEscola(s: ErpState): EstoqueEscola[] {
       emVenda: { ...zero(), caixas: [], cargas: [] },
       vendidos: zero(),
       voltaram: zero(),
+      voltaramEstoque: zero(),
       rebolo: zero(),
       aguardandoRebolo: zero(),
       diferenca: zero(),
@@ -158,10 +161,14 @@ export function estoquePorEscola(s: ErpState): EstoqueEscola[] {
     for (const a of acs) {
       somar(e.vendidos, a.albunsVendidos, a.posteresVendidos)
       somar(e.voltaram, a.albunsVoltaram, a.posteresVoltaram)
+      if (a.destino === 'Estoque') somar(e.voltaramEstoque, a.albunsVoltaram, a.posteresVoltaram)
       somar(e.diferenca, a.albunsDiferenca, a.posteresDiferenca)
     }
     for (const r of evs) somar(e.rebolo, r.albuns, r.posteres)
-    e.aguardandoRebolo = { albuns: e.voltaram.albuns - e.rebolo.albuns, posteres: e.voltaram.posteres - e.rebolo.posteres }
+    e.aguardandoRebolo = {
+      albuns: e.voltaram.albuns - e.voltaramEstoque.albuns - e.rebolo.albuns,
+      posteres: e.voltaram.posteres - e.voltaramEstoque.posteres - e.rebolo.posteres,
+    }
     lista.push(e)
   }
   return lista.sort(ordemLote)
@@ -185,7 +192,8 @@ export function estoqueAgora(s: ErpState): Quantidade & { escolas: number; caixa
 // Quanto o estoque mudou hoje (álbuns): caixas conferidas hoje e as que voltaram para o estoque − as que saíram na carga
 export function variacaoEstoqueHoje(s: ErpState, hojeISO: string): number {
   let v = 0
-  for (const c of colecao(s, 'producao_caixas')) if (c.status !== 'Aguardando conferência' && t(c.conferidoEm).slice(0, 10) === hojeISO) v += albunsDaCaixa(c)
+  // (a caixa da volta de carga entra pelo movimento "Voltou ao estoque", não conta duas vezes)
+  for (const c of colecao(s, 'producao_caixas')) if (c.status !== 'Aguardando conferência' && !c.origemCargaId && t(c.conferidoEm).slice(0, 10) === hojeISO) v += albunsDaCaixa(c)
   for (const m of colecao(s, 'estoque_movimentos')) {
     if (!t(m.criadoEm) || diaLocal(t(m.criadoEm)) !== hojeISO) continue
     if (m.tipo === 'Saiu na carga') v -= n(m.albuns)
@@ -221,7 +229,7 @@ export interface LinhaExtrato {
 // Extrato da escola: caixas que entraram (conferidas pela Produção) + os movimentos do Financeiro (do mais novo ao mais antigo)
 export function extratoDaEscola(s: ErpState, loteId: string): LinhaExtrato[] {
   const entradas: LinhaExtrato[] = colecao(s, 'producao_caixas')
-    .filter((c) => c.loteId === loteId && c.status !== 'Aguardando conferência' && t(c.conferidoEm))
+    .filter((c) => c.loteId === loteId && c.status !== 'Aguardando conferência' && t(c.conferidoEm) && !c.origemCargaId)
     .map((c) => ({
       id: `cx-${c.id}`,
       data: `${t(c.conferidoEm).slice(0, 10)}T08:00:00`,
@@ -267,4 +275,5 @@ export interface AcertoEscola {
   posteresVendidos: number
   posteresVoltaram: number
   observacao: string
+  destino?: 'Estoque' | 'Rebolo' | ''
 }

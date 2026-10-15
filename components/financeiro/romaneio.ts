@@ -26,7 +26,7 @@ function documento(r: CargaResumo, acerto: boolean, empresa: string) {
   ${celula(a?.posteresVendidos)}
   ${celula(a?.posteresVoltaram)}
   ${acerto ? `<td class="num">${a ? num(n(a.posteresDiferenca)) : '—'}</td>` : ''}
-</tr>${acerto && a?.observacao ? `<tr class="obs"><td colspan="9">Obs.: ${esc(a.observacao)}</td></tr>` : ''}`
+</tr>${acerto && (a?.observacao || a?.destino) ? `<tr class="obs"><td colspan="9">${[a?.destino === 'Estoque' ? 'O que voltou: voltou para o estoque' : a?.destino === 'Rebolo' ? 'O que voltou: enviado para o Rebolo' : '', a?.observacao ? `Obs.: ${esc(a.observacao)}` : ''].filter(Boolean).join(' • ')}</td></tr>` : ''}`
     })
     .join('\n')
   const total = (v: number) => `<td class="num"><b>${num(v)}</b></td>`
@@ -55,7 +55,7 @@ ${linhas}
   </table>
   ${c.observacao ? `<p class="nota"><b>Observação:</b> ${esc(c.observacao)}</p>` : ''}
   ${acerto && c.acertoObs ? `<p class="nota"><b>Observação do acerto:</b> ${esc(c.acertoObs)}</p>` : ''}
-  ${acerto ? '<p class="nota">Diferença = levados − vendidos − voltaram (fica registrada). O que voltou fica no estoque aguardando o Rebolo.</p>' : '<p class="nota">Na volta, anote em cada escola quantos foram vendidos e quantos voltaram.</p>'}
+  ${acerto ? '<p class="nota">Diferença = levados − vendidos − voltaram (fica registrada). O que voltou vai para o estoque ou para o Rebolo, como escolhido em cada escola.</p>' : '<p class="nota">Na volta, anote em cada escola quantos foram vendidos e quantos voltaram.</p>'}
   <div class="assinaturas">
     <div><span></span>${esc(c.vendedor)} • vendedor</div>
     <div><span></span>Financeiro${acerto && c.acertoPor ? ` • ${esc(c.acertoPor)}` : ''}</div>

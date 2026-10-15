@@ -49,7 +49,7 @@ export default function EstoqueCargasPage() {
       <PageHeader
         modulo="Módulo / Financeiro"
         titulo="Estoque e Cargas"
-        descricao="O estoque de álbuns de cada escola, a carga de cada vendedor de books e o acerto na volta. O que volta vai para o Rebolo."
+        descricao="O estoque de álbuns de cada escola, a carga de cada vendedor de books e o acerto na volta. O que volta vai para o estoque ou para o Rebolo."
         acoes={
           pEditar && (
             <button onClick={() => setForm({ editando: null })} className={btnBranco}>
@@ -383,16 +383,21 @@ function FormCarga({ s, editando, empresa, onFechar }: { s: ErpState; editando: 
 }
 
 // ---------------- Acerto na volta ----------------
-type Digitado = { av: string; ar: string; pv: string; pr: string; obs: string }
+type Digitado = { av: string; ar: string; pv: string; pr: string; obs: string; dest: '' | 'Estoque' | 'Rebolo' }
 
 function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) {
   const [v, setV] = useState<Record<string, Digitado>>(() =>
-    Object.fromEntries(r.escolas.map((e) => [e.loteId, { av: '', ar: '', pv: e.posteres ? '' : '0', pr: e.posteres ? '' : '0', obs: '' }])),
+    Object.fromEntries(r.escolas.map((e) => [e.loteId, { av: '', ar: '', pv: e.posteres ? '' : '0', pr: e.posteres ? '' : '0', obs: '', dest: '' as const }])),
   )
   const [obs, setObs] = useState('')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
-  const muda = (loteId: string, k: keyof Digitado, valor: string) => setV((x) => ({ ...x, [loteId]: { ...x[loteId], [k]: valor } }))
+  const muda = (loteId: string, k: keyof Digitado, valor: string) => {
+    setErro('')
+    setV((x) => ({ ...x, [loteId]: { ...x[loteId], [k]: valor } }))
+  }
+  // voltou alguma coisa (álbum ou pôster/brinde): precisa escolher o destino
+  const voltou = (d: Digitado) => (Number(d.ar) || 0) + (Number(d.pr) || 0) > 0
   const vazio = (t: string) => t.trim() === ''
   const dif = (lev: number, a: string, b: string) => (vazio(a) || vazio(b) ? null : lev - (Number(a) || 0) - (Number(b) || 0))
   const salvar = async () => {
@@ -402,6 +407,7 @@ function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) 
       if (vazio(d.av) || vazio(d.ar) || vazio(d.pv) || vazio(d.pr)) return setErro(`${e.escola}: informe os vendidos e os que voltaram.`)
       if ((dif(e.albuns, d.av, d.ar) ?? 0) < 0) return setErro(`${e.escola}: vendidos + voltaram passa dos ${num(e.albuns)} álbuns levados.`)
       if ((dif(e.posteres, d.pv, d.pr) ?? 0) < 0) return setErro(`${e.escola}: vendidos + voltaram passa dos ${num(e.posteres)} pôsteres/brindes levados.`)
+      if (voltou(d) && !d.dest) return setErro(`${e.escola}: escolha para onde vai o que voltou (estoque ou Rebolo).`)
     }
     setSalvando(true)
     const e = await acertarCarga(
@@ -413,6 +419,7 @@ function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) 
         posteresVendidos: Number(v[x.loteId].pv) || 0,
         posteresVoltaram: Number(v[x.loteId].pr) || 0,
         observacao: v[x.loteId].obs,
+        destino: voltou(v[x.loteId]) ? v[x.loteId].dest : '',
       })),
       obs,
     )
@@ -452,7 +459,7 @@ function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) 
         </>
       }
     >
-      <p className="text-xs text-zinc-400">Para cada escola, conte o que voltou e informe quantos foram vendidos. A diferença (levados − vendidos − voltaram) fica registrada.</p>
+      <p className="text-xs text-zinc-400">Para cada escola, conte o que voltou e informe quantos foram vendidos. A diferença (levados − vendidos − voltaram) fica registrada. O que voltou vai para o estoque (pode sair em outra carga) ou para o Rebolo.</p>
       <div className="space-y-4">
         {r.escolas.map((e) => {
           const d = v[e.loteId]
@@ -488,6 +495,34 @@ function AcertoCarga({ r, onFechar }: { r: CargaResumo; onFechar: () => void }) 
                   <p className="md:col-span-3 text-[11px] text-zinc-500 pb-4">Sem pôsteres/brindes nesta escola.</p>
                 )}
               </div>
+              {voltou(d) && (
+                <div className="space-y-1.5">
+                  <p className={labelCls}>
+                    O que voltou ({num(Number(d.ar) || 0)} álbuns{Number(d.pr) ? ` + ${num(Number(d.pr))} pôst./brindes` : ''}) vai para
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(
+                      [
+                        ['Estoque', '↩ Voltar para o estoque', 'Vira uma caixa da escola no estoque e pode sair em outra carga'],
+                        ['Rebolo', '➜ Enviar para o Rebolo', 'Encaminha agora (avisa o Rebolo) e sai do estoque'],
+                      ] as const
+                    ).map(([valor, rotulo, ajuda]) => (
+                      <button
+                        key={valor}
+                        type="button"
+                        onClick={() => muda(e.loteId, 'dest', valor)}
+                        className={`text-left px-4 py-3 rounded-xl border transition-all ${d.dest === valor ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500/40' : 'border-white/[0.1] hover:bg-white/[0.04]'}`}
+                      >
+                        <p className={`text-xs font-black uppercase tracking-widest ${d.dest === valor ? 'text-blue-300' : 'text-white'}`}>
+                          {d.dest === valor ? '✓ ' : ''}
+                          {rotulo}
+                        </p>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">{ajuda}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <input value={d.obs} onChange={(x) => muda(e.loteId, 'obs', x.target.value)} placeholder="Observação desta escola (ex.: o que aconteceu com a diferença)" className={inputCls} />
             </div>
           )
@@ -535,7 +570,7 @@ function MotivoCarga({ tipo, r, onFechar }: { tipo: 'cancelar' | 'desfazer'; r: 
       <p className="text-sm text-zinc-300">
         {cancelar
           ? 'Use para carga montada por engano: as caixas voltam para o estoque e a carga fica no histórico como cancelada.'
-          : 'A carga volta para "Em venda" e você faz o acerto de novo. Se o que voltou já foi encaminhado ao Rebolo, desfaça esse envio antes (na ficha da escola).'}
+          : 'A carga volta para "Em venda" e você faz o acerto de novo. A caixa que voltou para o estoque e o envio ao Rebolo feitos neste acerto são desfeitos juntos. Se o que voltou já saiu em outra carga, desfaça aquela antes.'}
       </p>
       <div className="space-y-2">
         <label className={labelCls}>

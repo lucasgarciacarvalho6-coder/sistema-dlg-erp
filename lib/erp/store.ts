@@ -1022,6 +1022,7 @@ export function acertarCarga(cargaId: string, escolas: F.AcertoDigitado[], obser
     albuns_voltaram: e.albunsVoltaram,
     posteres_vendidos: e.posteresVendidos,
     posteres_voltaram: e.posteresVoltaram,
+    destino: e.destino || null,
     observacao: e.observacao.trim(),
   }))
   return acaoProducao('estoque_acertar_carga', { p_carga: cargaId, p_escolas, p_observacao: observacao.trim() || null }, (d, ctx) => F.acertarCarga(d, cargaId, escolas, observacao, ctx), 'Carga acertada e encerrada.')

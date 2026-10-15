@@ -213,7 +213,9 @@ export function FichaEstoqueEscola({ s, e, podeMexer, onFechar }: { s: ErpState;
                   {r.autor ? ` • ${String(r.autor)}` : ''}
                   {r.observacao ? ` • ${String(r.observacao)}` : ''}
                 </span>
-                {podeMexer &&
+                {r.cargaId ? (
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">no acerto da carga</span>
+                ) : podeMexer &&
                   (desfazer === r.id ? (
                     <button onClick={() => desfazerEnvioRebolo(r.id).then(() => setDesfazer(null))} className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest bg-red-600 hover:bg-red-500 text-white">
                       Confirmar: desfazer

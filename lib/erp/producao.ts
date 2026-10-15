@@ -107,7 +107,7 @@ export const ETAPA_DA_ACAO: Record<AcaoLote, EtapaLote> = {
 export const ETAPAS_REVELACAO: EtapaLote[] = ['Aguardando revelação', 'Revelando', 'Na caixa']
 export const caixasDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_caixas')
-    .filter((c) => c.loteId === loteId)
+    .filter((c) => c.loteId === loteId && !c.origemCargaId) // a caixa da volta de carga (056) é do Financeiro, não da Revelação
     .sort((a, b) => Number(a.numero) - Number(b.numero))
 // Comprovante: uma cor para cada CIDADE (para achar as caixas no estoque físico). Mesma lista e ordem do SQL 024.
 export const PALETA_CIDADES: { cor: string; nome: string }[] = [
