@@ -12,6 +12,7 @@ import { SETORES, SETORES_PRODUTIVOS } from '@/lib/erp/config'
 import { diaReferencia, equipeComMeta, esperadoAteHoje, resumo, serieMes, setoresComMeta, situacaoResumo, somar } from '@/lib/erp/metrics'
 import { brl, formatar, mesAtual, nomeMes, num, pct } from '@/lib/erp/format'
 import { GradeTV } from './CardsTV'
+import PalcoTV from './PalcoTV'
 import { FaixaGerente } from './GerenteVirtual'
 import Icon from './Icon'
 import { LegendaSituacao, PillSituacao, STATUS } from './status'
@@ -32,7 +33,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
 
   return (
     <div className="bg-painel/80 border border-white/[0.05] rounded-3xl shadow-2xl overflow-hidden">
-      <div className={`border-b border-white/[0.05] flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white/[0.01] ${grande ? 'px-8 py-4' : 'p-6'}`}>
+      <div className={`border-b border-white/[0.05] flex justify-between gap-4 bg-white/[0.01] ${grande ? 'flex-row items-center px-8 py-4' : 'flex-col lg:flex-row lg:items-center p-6'}`}>
         <div>
           <h2 className={`font-black text-white tracking-wide ${grande ? 'text-2xl' : 'text-lg'}`}>Placar das áreas • meta do mês</h2>
           <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
@@ -51,12 +52,12 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
           const semMeta = r.meta.mensal <= 0
           return (
             <div key={setor} className={`grid grid-cols-12 items-center gap-4 ${grande ? 'px-8 py-3.5' : 'px-6 py-5'}`}>
-              <div className="col-span-12 md:col-span-3 min-w-0">
+              <div className={`min-w-0 ${grande ? 'col-span-3' : 'col-span-12 md:col-span-3'}`}>
                 <p className={`font-black text-white ${grande ? 'text-2xl' : 'text-base'}`}>{cfg.nome}</p>
                 <p className="text-[10px] text-zinc-500 uppercase tracking-widest truncate">{ind.label}</p>
               </div>
 
-              <div className="col-span-12 md:col-span-6">
+              <div className={grande ? 'col-span-6' : 'col-span-12 md:col-span-6'}>
                 {semMeta ? (
                   <p className="text-xs text-zinc-500">Sem colaboradores com meta neste setor.</p>
                 ) : (
@@ -94,7 +95,7 @@ export function PlacarAreas({ s, mes, grande = false }: { s: ErpState; mes: stri
                 )}
               </div>
 
-              <div className={`col-span-12 md:col-span-3 flex items-center md:items-end justify-between gap-2 ${grande ? 'md:flex-row md:items-center md:justify-end md:gap-4' : 'md:flex-col'}`}>
+              <div className={`flex ${grande ? 'col-span-3 flex-row items-center justify-end gap-4' : 'col-span-12 md:col-span-3 items-center md:items-end justify-between gap-2 md:flex-col'}`}>
                 <p className={`font-black text-white tracking-tighter leading-none ${grande ? 'text-4xl' : 'text-3xl'}`}>{semMeta ? '—' : pct(r.pctMes)}</p>
                 {!semMeta && <PillSituacao situacao={sit} grande={grande} />}
               </div>
@@ -157,7 +158,7 @@ export function EvolucaoSetor({ s, setor, mes, grande = false }: { s: ErpState; 
   const ph = hover ? pontos[hover - 1] : null
 
   return (
-    <div className={`bg-painel/80 border border-white/[0.05] rounded-3xl ${grande ? 'p-7' : 'p-5'} relative`}>
+    <div className={`bg-painel/80 border border-white/[0.05] rounded-3xl relative ${grande ? 'p-7 h-full min-h-0 flex flex-col' : 'p-5'}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <p className={`font-black text-white ${grande ? 'text-2xl' : 'text-base'}`}>{cfg.nome}</p>
@@ -173,11 +174,11 @@ export function EvolucaoSetor({ s, setor, mes, grande = false }: { s: ErpState; 
         </p>
       </div>
 
-      <div className="relative">
+      <div className={grande ? 'relative flex-1 min-h-0' : 'relative'}>
         <svg
           ref={svgRef}
           viewBox={`0 0 ${W} ${H}`}
-          className="w-full h-auto overflow-visible"
+          className={`w-full overflow-visible ${grande ? 'h-full' : 'h-auto'}`}
           onMouseMove={aoMover}
           onMouseLeave={() => setHover(null)}
           role="img"
@@ -248,20 +249,28 @@ export function EvolucaoSetor({ s, setor, mes, grande = false }: { s: ErpState; 
 }
 
 export function GradeEvolucao({ s, mes, grande = false }: { s: ErpState; mes: string; grande?: boolean }) {
+  const setores = setoresComMeta(s, mes)
+  // TV (palco de 1920×1080): 3 colunas e as linhas dividem a altura — os gráficos cabem na tela, sem rolar
+  if (grande)
+    return (
+      <div className="h-full grid grid-cols-3 gap-6" style={{ gridTemplateRows: `repeat(${Math.max(1, Math.ceil(setores.length / 3))}, minmax(0, 1fr))` }}>
+        {setores.map((setor) => (
+          <EvolucaoSetor key={setor} s={s} setor={setor} mes={mes} grande />
+        ))}
+      </div>
+    )
   return (
     <div className="space-y-4">
-      {!grande && (
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
-            <h2 className="text-sm font-black text-white uppercase tracking-widest">Evolução do mês • realizado × meta</h2>
-          </div>
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Linha colorida acima da cinza = à frente da meta • passe o mouse para ver cada dia</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
+          <h2 className="text-sm font-black text-white uppercase tracking-widest">Evolução do mês • realizado × meta</h2>
         </div>
-      )}
-      <div className={`grid grid-cols-1 md:grid-cols-2 ${grande ? 'xl:grid-cols-3 gap-6' : 'xl:grid-cols-3 gap-5'}`}>
-        {setoresComMeta(s, mes).map((setor) => (
-          <EvolucaoSetor key={setor} s={s} setor={setor} mes={mes} grande={grande} />
+        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Linha colorida acima da cinza = à frente da meta • passe o mouse para ver cada dia</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        {setores.map((setor) => (
+          <EvolucaoSetor key={setor} s={s} setor={setor} mes={mes} />
         ))}
       </div>
     </div>
@@ -294,7 +303,7 @@ function NumeroTV({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode
   return (
     <div className="bg-painel-2/80 border border-white/[0.08] rounded-3xl px-7 py-5 relative overflow-hidden">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400">{rotulo}</p>
-      <p className="text-5xl 2xl:text-6xl font-black text-white tracking-tighter mt-2 leading-none break-words">{valor}</p>
+      <p className="text-6xl font-black text-white tracking-tighter mt-2 leading-none break-words">{valor}</p>
       <p className="text-xs text-zinc-500 mt-2 uppercase tracking-widest font-bold">{detalhe}</p>
     </div>
   )
@@ -369,7 +378,7 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
   if (atual.id === 'resumo') {
     conteudo = (
       <div className="space-y-6">
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-4 gap-6">
           <NumeroTV rotulo="Faturado no mês" valor={brl(faturado).replace(',00', '')} detalhe="Recebimentos da Cobrança" />
           <NumeroTV rotulo="Fichas fotografadas" valor={num(fotografado.mes)} detalhe={`${pct(fotografado.pctMes)} da meta mensal`} />
           <NumeroTV rotulo="Contratos fechados" valor={num(contratos.mes)} detalhe={`Meta ${num(contratos.meta.mensal)} • hoje ${num(contratos.hoje)}`} />
@@ -380,20 +389,25 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
     )
   } else if (atual.id === 'equipe') {
     conteudo = (
-      <div className="h-[calc(100vh-15.5rem)] 2xl:h-[calc(100vh-17rem)]">
+      <div className="flex-1 min-h-0">
         <GradeTV s={s} mes={mes} pessoas={pessoas} producao ajustar />
       </div>
     )
   } else {
-    conteudo = <GradeEvolucao s={s} mes={mes} grande />
+    conteudo = (
+      <div className="flex-1 min-h-0">
+        <GradeEvolucao s={s} mes={mes} grande />
+      </div>
+    )
   }
 
   return (
-    <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white overflow-y-auto custom-scrollbar">
-
-      <div className="relative z-10 px-8 py-6 2xl:p-10 space-y-5 max-w-[2200px] mx-auto">
+    <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white overflow-hidden">
+      {/* palco fixo de 1920×1080, reduzido/ampliado para a tela (o navegador da TV desenha numa área pequena) */}
+      <PalcoTV>
+      <div className="relative z-10 h-full flex flex-col p-10 space-y-5">
         {/* barra superior */}
-        <div className="flex items-center justify-between gap-6">
+        <div className="shrink-0 flex items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <img src="/logo.png" alt="DLG Photos" className="w-14 h-14 object-contain" />
             <div>
@@ -436,17 +450,18 @@ export function ModoTV({ s, mes, onSair, telaInicial = 0 }: { s: ErpState; mes: 
 
         {/* barra de progresso da rotação */}
         {rodando && (
-          <div className="h-0.5 w-full bg-white/[0.05] rounded-full overflow-hidden">
+          <div className="shrink-0 h-0.5 w-full bg-white/[0.05] rounded-full overflow-hidden">
             <div key={`${atual.id}-${indice}`} className="h-full bg-zinc-500/70 animate-[tvprogresso_20s_linear_forwards]"></div>
           </div>
         )}
 
-        <div key={atual.id} className="animate-fade-in">
+        <div key={atual.id} className="animate-fade-in flex-1 min-h-0 flex flex-col overflow-y-auto custom-scrollbar">
           {conteudo}
         </div>
 
-        <p className="text-center text-[10px] text-zinc-600 uppercase tracking-widest">← → trocar tela • espaço pausa • Esc sai</p>
+        <p className="shrink-0 text-center text-[10px] text-zinc-600 uppercase tracking-widest">← → trocar tela • espaço pausa • Esc sai</p>
       </div>
+      </PalcoTV>
 
       <style>{`@keyframes tvprogresso { from { width: 0% } to { width: 100% } }`}</style>
     </div>

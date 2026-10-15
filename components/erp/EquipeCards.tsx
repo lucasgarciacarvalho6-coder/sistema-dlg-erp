@@ -12,6 +12,7 @@ import { PillSituacao, STATUS } from './status'
 import PainelMeta, { Anel, GraficoDiasUteis, LegendaDias } from './PainelMeta'
 import { GradeTV } from './CardsTV'
 import { FaixaGerente } from './GerenteVirtual'
+import PalcoTV from './PalcoTV'
 import Icon from './Icon'
 
 // Quanto precisa fazer por dia útil restante. Quantidades arredondam para CIMA (0,2 contrato/dia = 1).
@@ -277,8 +278,11 @@ function TelaCheiaEquipe({ s, mes, todos, onSair }: { s: ErpState; mes: string; 
   }, [])
   const lista = marcados.length ? todos.filter((x) => marcados.includes(x.c.setor)) : todos
   return createPortal(
-    <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white flex flex-col gap-5 px-8 py-6 2xl:px-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div ref={raiz} className="fixed inset-0 z-[100] bg-black text-white overflow-hidden">
+      {/* palco fixo de 1920×1080, reduzido/ampliado para a tela (o navegador da TV desenha numa área pequena) */}
+      <PalcoTV>
+      <div className="h-full flex flex-col gap-5 px-10 py-6">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="DLG Photos" className="w-12 h-12 object-contain" />
@@ -314,6 +318,8 @@ function TelaCheiaEquipe({ s, mes, todos, onSair }: { s: ErpState; mes: string; 
           ajustar
         />
       </div>
+      </div>
+      </PalcoTV>
     </div>,
     document.body,
   )

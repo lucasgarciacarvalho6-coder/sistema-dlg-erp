@@ -233,3 +233,20 @@ input[type='date']::-webkit-calendar-picker-indicator {
 .cq-fonte {
   font-size: clamp(var(--f-min, 7px), calc(var(--f-cqw) * 1cqw), var(--f-max, 14px));
 }
+
+/* Palco fixo da TV (PalcoTV.tsx): sempre 1920×1080, centralizado e reduzido/ampliado para caber na tela.
+   Sem "will-change" (deixaria as letras borradas ao ampliar) e sem o navegador aumentar letra sozinho. */
+.palco-tv {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  overflow: hidden;
+  transform-origin: 50% 50%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+html.palco-tv-aberto {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
