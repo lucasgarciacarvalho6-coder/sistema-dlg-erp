@@ -157,7 +157,29 @@ function Pizza({ partes }: { partes: Fatia[] }) {
 
 // (08/10) organizado em blocos: o título em cima, a pizza ao lado do valor; embaixo, em linhas inteiras,
 // a comparação com o mês anterior, o vendido × custos e o que ainda é estimado (nada fica cortado na coluna estreita)
-function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: LucroRebolo | null; compacto: boolean }) {
+// (19/10/2026) o resumo dos 2 meses anteriores, para o ADM acompanhar os 3 meses da vendedora
+const MES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+function MesesAnterioresTV({ meses }: { meses: { mes: string; l: LucroRebolo | null }[] }) {
+  return (
+    <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.7cqmin,13px)]" title="Lucro/Prejuízo dos 2 meses anteriores">
+      {meses.map(({ mes, l }, i) => (
+        <span key={mes}>
+          {i ? ' • ' : ''}
+          {MES_ABREV[Number(mes.slice(5, 7)) - 1]}{' '}
+          {l ? (
+            <b className="font-black text-[clamp(8px,3.2cqmin,17px)]" style={{ color: l.lucro >= 0 ? VERDE : VERMELHO }}>
+              {brl(l.lucro)}
+            </b>
+          ) : (
+            <span className="text-zinc-600">—</span>
+          )}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+function LucroPizzaTV({ l, anterior, anteriores, compacto }: { l: LucroRebolo; anterior: LucroRebolo | null; anteriores: { mes: string; l: LucroRebolo | null }[]; compacto: boolean }) {
   const comLucro = l.lucro >= 0 && l.vendido > 0
   const chaves = Object.keys(l.custos) as (keyof CustosLucroRebolo)[]
   const partes: Fatia[] = comLucro
@@ -197,10 +219,8 @@ function LucroPizzaTV({ l, anterior, compacto }: { l: LucroRebolo; anterior: Luc
           {brl(l.lucro)}
         </p>
       </div>
-      <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.7cqmin,13px)]">
-        {variacao}
-        {variacao ? ' • ' : ''}mês anterior <span className="text-white">{anterior ? brl(anterior.lucro) : '—'}</span>
-      </p>
+      {variacao && <p className="font-bold text-zinc-400 truncate text-[clamp(7px,2.7cqmin,13px)]">{variacao} sobre o mês anterior</p>}
+      <MesesAnterioresTV meses={anteriores} />
       <p className="text-zinc-500 truncate text-[clamp(7px,2.5cqmin,12px)]">
         Vendido <span className="text-zinc-300">{reais(l.vendido)}</span> • custos <span className="text-zinc-300">{reais(l.totalCustos)}</span>
       </p>
@@ -280,6 +300,8 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
   // vendedora do Rebolo: Lucro/Prejuízo do mês (pizza) e do ano (barras)
   const lucro = c.setor === 'rebolo' ? lucroReboloMes(s, c.id, mes) : null
   const lucroAnterior = lucro ? lucroReboloMes(s, c.id, mesAnteriorDe(mes)) : null
+  const mesAnterior2 = mesAnteriorDe(mesAnteriorDe(mes))
+  const lucroAnteriores = lucro ? [{ mes: mesAnterior2, l: lucroReboloMes(s, c.id, mesAnterior2) }, { mes: mesAnteriorDe(mes), l: lucroAnterior }] : []
   const lucroAno = lucro ? lucroReboloAno(s, c.id, mes.slice(0, 4)) : null
   const ind = cfg.indicadores[0]
   const r = resumo(s, c.setor, ind.id, mes, c.id)
@@ -359,7 +381,8 @@ export function CardPessoaTV({ s, c, mes, onAbrir, compacto = false }: { s: ErpS
             <div className="shrink-0 grid grid-cols-1 @md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-x-[3.5cqmin] gap-y-[2.2cqmin] items-start">
               <div className="min-w-0 flex flex-col gap-[2.2cqmin]">{blocoMeta(true)}</div>
               <div className="min-w-0 @md:border-l @md:border-white/[0.08] @md:pl-[3.5cqmin]">
-                <LucroPizzaTV l={lucro} anterior={lucroAnterior} compacto={compacto} />
+                <LucroPizzaTV l={lucro} anterior={lucroAnterior} anteriores={lucroAnteriores} compacto={compacto} />
+                {compacto && <MesesAnterioresTV meses={lucroAnteriores} />}
               </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col gap-[2cqmin] overflow-hidden">
