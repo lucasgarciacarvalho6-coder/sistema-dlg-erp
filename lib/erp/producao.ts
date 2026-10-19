@@ -290,6 +290,16 @@ export function painelEtapas(
 }
 
 // ---- Fotos de cada fotógrafo na escola (a Produção lança) ----
+// (SQL 057) a escola na Produção que veio desta visita
+export const loteDaVisita = (s: ErpState, visitaId: string) => colecao(s, 'producao_lotes').find((l) => l.visitaId === visitaId)
+// visitas encerradas cuja escola espera as Operações lançarem as fotos e o link
+export const fotosPendentes = (s: ErpState) => {
+  const visitas = new Map(colecao(s, 'agenda_visitas').map((v) => [v.id, v]))
+  return colecao(s, 'producao_lotes')
+    .filter((l) => !l.fotosLink && etapaDoLote(l) === 'Aguardando fotos' && visitas.has(String(l.visitaId)))
+    .map((l) => ({ lote: l, visita: visitas.get(String(l.visitaId))! }))
+    .sort((a, b) => String(a.visita.data).localeCompare(String(b.visita.data)))
+}
 export const fotosDoLote = (s: ErpState, loteId: string) =>
   colecao(s, 'producao_fotos')
     .filter((f) => f.loteId === loteId)

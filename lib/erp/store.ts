@@ -1247,6 +1247,11 @@ export function salvarFotosFotografo(loteId: string, fotografoId: string, quanti
   const params = { p_lote: loteId, p_fotografo: fotografoId, p_quantidade: quantidade }
   return acaoProducao('producao_salvar_fotos', params, (d, ctx) => F.salvarFotosFotografo(d, loteId, fotografoId, quantidade, ctx), 'Fotos lançadas.')
 }
+// (SQL 057) Operações lança o link da escola e as fotos de cada fotógrafo da equipe da visita
+export function lancarFotosOperacoes(visitaId: string, link: string, fotos: F.FotosDigitadas[]): Promise<string | null> {
+  const params = { p_visita: visitaId, p_link: link.trim(), p_fotos: fotos.map((f) => ({ fotografo: f.fotografoId, quantidade: Math.floor(Number(f.quantidade) || 0) })) }
+  return acaoProducao('operacoes_lancar_fotos', params, (d, ctx) => F.lancarFotosOperacoes(d, visitaId, link, fotos, ctx), 'Fotos e link lançados.')
+}
 // Lançou errado: apaga o lançamento daquele fotógrafo
 export async function removerFotosFotografo(id: string): Promise<string | null> {
   if (MODO === 'supabase') return gravar(() => sb().from('producao_fotos').delete().eq('id', id), 'Lançamento das fotos removido.')

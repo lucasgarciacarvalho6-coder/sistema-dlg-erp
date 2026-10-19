@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { Registro } from '@/lib/erp/types'
-import { ajustarLote, avancarLote, corrigirEtapaLote, listarFotografosDaEscola, removerFotosFotografo, salvarFotosFotografo, useErp, usePode, useUsuario } from '@/lib/erp/store'
+import { ajustarLote, avancarLote, corrigirEtapaLote, useErp, usePode, useUsuario } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, dataHoraBR, hoje, num } from '@/lib/erp/format'
 import {
@@ -16,10 +16,8 @@ import {
   type AcaoLote,
   type DadosAcaoLote,
   type EtapaLote,
-  type FotografoDaEscola,
 } from '@/lib/erp/producao'
 import { Modal, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
-import Icon from '@/components/erp/Icon'
 import { Drive, TextoComLinks } from './LinkDrive'
 
 // PRODUÇÃO › janela de uma escola: as 7 etapas com as datas, as fotos de cada fotógrafo, o botão do próximo passo,
@@ -148,121 +146,42 @@ function Numeros({ l }: { l: Registro }) {
   )
 }
 
-// Fotos de cada fotógrafo na escola: a Produção escolhe o fotógrafo e lança quantas fotos ele tirou.
-// Lançar de novo o mesmo fotógrafo troca a quantidade. Os da equipe da visita (Operações) aparecem primeiro na lista.
+// Fotos de cada fotógrafo na escola + o link (SQL 057, 19/10/2026): quem lança são as OPERAÇÕES (Agenda › visita ›
+// Fotos e link), depois de conferir as fotos que chegaram. Aqui a Produção só vê o que recebeu.
 function FotosFotografos({ l }: { l: Registro }) {
   const s = useErp()
-  const pode = usePode()('edicao', 'editar')
   const lancadas = fotosDoLote(s, l.id)
-  const [opcoes, setOpcoes] = useState<FotografoDaEscola[] | null>(null)
-  const [fotografoId, setFotografoId] = useState('')
-  const [qtd, setQtd] = useState('')
-  const [salvando, setSalvando] = useState(false)
-  const [apagar, setApagar] = useState<string | null>(null) // 1º clique pede confirmação
-  useEffect(() => {
-    if (!pode) return
-    let vivo = true
-    void listarFotografosDaEscola(l.id).then((lista) => {
-      if (vivo) setOpcoes(lista)
-    })
-    return () => {
-      vivo = false
-    }
-  }, [l.id, pode])
-  if (!pode && !lancadas.length) return null
-
   const total = lancadas.reduce((a, f) => a + (Number(f.quantidade) || 0), 0)
-  const doFotografo = new Map(lancadas.map((f) => [String(f.fotografoId), f]))
-  const ja = fotografoId ? doFotografo.get(fotografoId) : undefined
-  const equipe = (opcoes ?? []).filter((f) => f.naEquipe)
-  const outros = (opcoes ?? []).filter((f) => !f.naEquipe)
-  const opcao = (f: FotografoDaEscola) => {
-    const feito = doFotografo.get(f.id)
-    return (
-      <option key={f.id} value={f.id}>
-        {f.nome}
-        {feito ? ` (${num(Number(feito.quantidade))} fotos lançadas)` : ''}
-      </option>
-    )
-  }
-  const salvar = async () => {
-    setSalvando(true)
-    const erro = await salvarFotosFotografo(l.id, fotografoId, Number(qtd))
-    setSalvando(false)
-    if (!erro) {
-      setFotografoId('')
-      setQtd('')
-    }
-  }
-  const excluir = async (id: string) => {
-    if (apagar !== id) return setApagar(id)
-    setApagar(null)
-    await removerFotosFotografo(id)
-  }
-
+  if (!l.fotosLink && !lancadas.length && etapaDoLote(l) !== 'Aguardando fotos') return null
   return (
     <div className={`${caixaCls} p-5 space-y-3`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={labelCls}>Fotos por fotógrafo</p>
+        <p className={labelCls}>Fotos recebidas • lançadas pelas Operações</p>
         {total > 0 && (
           <p className="text-xs font-bold text-zinc-400">
             Total <span className="text-base font-black text-white">{num(total)}</span> fotos
           </p>
         )}
       </div>
-
-      {lancadas.length > 0 ? (
+      {l.fotosLink ? (
+        <p className="text-xs text-zinc-300 break-all">
+          Link das fotos:{' '}
+          <a href={String(l.fotosLink)} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 font-bold">
+            {String(l.fotosLink)}
+          </a>
+          {l.fotosLancadasPor ? <span className="text-zinc-500"> • por {String(l.fotosLancadasPor)}</span> : null}
+        </p>
+      ) : (
+        <p className="text-sm font-bold text-yellow-400">⚠ Aguardando as Operações lançarem o link e as fotos de cada fotógrafo.</p>
+      )}
+      {lancadas.length > 0 && (
         <div className="divide-y divide-white/[0.04] rounded-xl border border-white/[0.05]">
           {lancadas.map((f) => (
             <div key={f.id} className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span className="text-sm font-bold text-white flex-1 min-w-[9rem] break-words">{String(f.fotografoNome)}</span>
-              <span className="flex items-center gap-2 shrink-0 ml-auto">
-                <span className="text-sm font-black text-white whitespace-nowrap">{num(Number(f.quantidade))} fotos</span>
-                {pode && (opcoes ?? []).some((o) => o.id === f.fotografoId) && (
-                  <button
-                    onClick={() => {
-                      setFotografoId(String(f.fotografoId))
-                      setQtd(String(f.quantidade))
-                    }}
-                    className="px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300"
-                  >
-                    Alterar
-                  </button>
-                )}
-                {pode && (
-                  <button onClick={() => excluir(f.id)} title="Apagar" className={`p-1.5 ${apagar === f.id ? 'text-red-400 font-black text-[10px] uppercase tracking-widest' : 'text-zinc-400 hover:text-red-400'}`}>
-                    {apagar === f.id ? 'Confirmar?' : <Icon nome="trash" className="w-4 h-4" />}
-                  </button>
-                )}
-              </span>
+              <span className="text-sm font-black text-white whitespace-nowrap">{num(Number(f.quantidade))} fotos</span>
             </div>
           ))}
-        </div>
-      ) : (
-        <p className="text-[11px] text-zinc-500">Nenhuma foto lançada ainda.</p>
-      )}
-
-      {pode && (
-        <div className="space-y-2">
-          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_150px_auto] gap-3 items-end">
-            <label className="space-y-1.5 min-w-0">
-              <span className={labelCls}>Fotógrafo</span>
-              <select value={fotografoId} onChange={(e) => setFotografoId(e.target.value)} disabled={opcoes === null} className={inputCls}>
-                <option value="">{opcoes === null ? 'Carregando...' : 'Escolha o fotógrafo'}</option>
-                {equipe.length > 0 && <optgroup label="Equipe desta escola">{equipe.map(opcao)}</optgroup>}
-                {outros.length > 0 && <optgroup label={equipe.length ? 'Outros fotógrafos' : 'Fotógrafos'}>{outros.map(opcao)}</optgroup>}
-              </select>
-            </label>
-            <label className="space-y-1.5">
-              <span className={labelCls}>Quantidade de fotos</span>
-              <input type="number" min={1} value={qtd} onChange={(e) => setQtd(e.target.value)} placeholder="Ex.: 968" className={inputCls} />
-            </label>
-            <button disabled={salvando || !fotografoId || !(Number(qtd) > 0)} onClick={salvar} className={btnPrimario}>
-              {salvando ? 'Salvando...' : ja ? 'Atualizar' : 'Adicionar'}
-            </button>
-          </div>
-          {ja && <p className="text-[11px] text-yellow-400">Este fotógrafo já tem {num(Number(ja.quantidade))} fotos lançadas nesta escola: o número novo substitui.</p>}
-          {opcoes !== null && opcoes.length === 0 && <p className="text-[11px] text-zinc-500">Nenhum fotógrafo ativo cadastrado nas Operações.</p>}
         </div>
       )}
     </div>
@@ -283,7 +202,8 @@ function ProximoPasso({ l }: { l: Registro }) {
   const [analistaId, setAnalistaId] = useState('')
   const [prevista, setPrevista] = useState('') // data prevista da entrega do editor
   const [recebido, setRecebido] = useState(hoje()) // data em que o editor devolveu
-  const [drive, setDrive] = useState('') // drive do envio / do recebimento (texto livre)
+  // drive do envio / do recebimento (texto livre); ao enviar ao editor já vem o link das fotos lançado pelas Operações
+  const [drive, setDrive] = useState(etapaDoLote(l) === 'Aguardando fotos' ? String(l.fotosLink || '') : '')
   if (!podeFazer('edicao', 'editar')) return null
   const dia = hoje()
   const atraso = diasAtraso(l, dia)
@@ -359,16 +279,11 @@ function ProximoPasso({ l }: { l: Registro }) {
     case 'Aguardando fotos':
       return caixa(
         'Próximo passo: enviar ao editor',
-        l.fotosRecebidasEm
+        l.fotosLink
           ? `Fotos recebidas em ${dataBR(String(l.fotosRecebidasEm))}. Escolha o editor que vai fazer a diagramação e a montagem.`
-          : 'Aguardando as fotos dos fotógrafos. Quando chegarem, envie ao editor.',
+          : 'Aguardando as Operações lançarem as fotos e o link desta escola: só dá para enviar ao editor depois.',
         <div className="space-y-3">
-          {!l.fotosRecebidasEm && (
-            <button disabled={enviando} onClick={() => fazer('fotos')} className={btnSecundario}>
-              ✓ Fotos recebidas
-            </button>
-          )}
-          {editores.length ? (
+          {!l.fotosLink ? null : editores.length ? (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <label className="space-y-1.5">

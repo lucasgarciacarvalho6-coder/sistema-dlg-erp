@@ -5,7 +5,7 @@
 
 import type { ErpState, Lancamento, Notificacao, Registro, Setor, TipoLog } from './types'
 import { ETAPAS_PRODUCAO, VALOR_APROVACAO_CONTA, indicador } from './config'
-import { avisosRascunhoVisita, bloqueioVisitaEncerrada, camposFaltando, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
+import { avisosRascunhoVisita, bloqueioVisitaEncerrada, camposFaltando, fotografosDa, lerJSON, responsavelOperacional, type Beneficiario } from './operacional'
 import { addDias, addMeses, brl, dataBR, diaLocal, hoje, uid } from './format'
 import { metaColaborador, somar } from './metrics'
 import { ETAPAS_LOTE, ETAPA_DA_ACAO, PALETA_CIDADES, chaveCidade, etapaDoLote, type AcaoLote, type DadosAcaoLote, type EtapaLote } from './producao'
@@ -1075,11 +1075,14 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
 
   switch (acao) {
     case 'fotos':
+      // (SQL 057) quem marca "Fotos recebidas" é o lançamento das Operações (fotos + link)
+      if (!l.fotosLink) return 'As fotos são lançadas pelas Operações (com o link): a escola fica com "Fotos recebidas" sozinha.'
       if (l.fotosRecebidasEm) return 'As fotos já foram marcadas como recebidas.'
       l.fotosRecebidasEm = dia
       h = { etapa: 'Aguardando fotos', acao: 'Fotos recebidas', quantidade: null, descricao: 'Fotos recebidas dos fotógrafos.' }
       break
     case 'enviar_editor': {
+      if (!l.fotosLink) return 'As Operações ainda não lançaram as fotos e o link desta escola: só dá para enviar ao editor depois.'
       const ed = col(d, 'editores').find((e) => e.id === dados.editorId && e.status === 'Ativo')
       if (!ed) return 'Escolha o editor.'
       Object.assign(l, {
@@ -1353,19 +1356,11 @@ export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: num
   return null
 }
 
-// Produção: lança (ou troca) quantas fotos o fotógrafo tirou na escola — mesma regra do SQL 025 (producao_salvar_fotos)
+// Produção: lançava as fotos de cada fotógrafo (SQL 025); desde o SQL 057 quem lança é Operações
 export function salvarFotosFotografo(d: ErpState, loteId: string, fotografoId: string, quantidade: number, ctx: Contexto): string | null {
-  const l = col(d, 'producao_lotes').find((x) => x.id === loteId)
-  if (!l) return 'Escola não encontrada na Produção.'
-  const f = col(d, 'freelancers').find((x) => x.id === fotografoId && x.tipo === 'Fotógrafo')
-  if (!f) return 'Escolha o fotógrafo.'
-  const q = Math.floor(Number(quantidade))
-  if (!(q > 0)) return 'Informe a quantidade de fotos (maior que zero).'
-  const ja = col(d, 'producao_fotos').find((x) => x.loteId === loteId && x.fotografoId === fotografoId)
-  if (ja) Object.assign(ja, { quantidade: q, fotografoNome: f.nome })
-  else inserir(d, 'producao_fotos', { loteId, fotografoId, fotografoNome: f.nome, quantidade: q })
-  auditar(d, ctx, ja ? 'EDITAR' : 'CRIAR', `Produção • ${l.escola}: ${q} fotos de ${f.nome}`, 'edicao')
-  return null
+  // (SQL 057) a Produção só vê: quem lança as fotos de cada fotógrafo e o link é Operações (lancarFotosOperacoes)
+  void [d, loteId, fotografoId, quantidade, ctx]
+  return 'As fotos de cada fotógrafo e o link agora são lançados pelas Operações (Agenda › visita › Fotos e link).'
 }
 
 // Caixa registrada errado (ainda sem conferência): sai da meta junto
@@ -2358,5 +2353,38 @@ export function financeiroSpc(d: ErpState, id: string, acao: AcaoFinanceiroSpc, 
     Object.assign(x, { spcEstado: 'Removido', spcHistorico: eventoSpc(x, ctx, 'Retirada do SPC confirmada', obs) })
   } else return 'Ação inválida.'
   auditar(d, ctx, 'EDITAR', `SPC (Financeiro): ${acao}`, ctx.autorSetor)
+  return null
+}
+
+// ---------------- Operações: fotos de cada fotógrafo + link da escola (SQL 057 — mesmas regras do banco) ----------------
+export interface FotosDigitadas {
+  fotografoId: string
+  quantidade: number
+}
+export function lancarFotosOperacoes(d: ErpState, visitaId: string, link: string, fotos: FotosDigitadas[], ctx: Contexto): string | null {
+  const v = col(d, 'agenda_visitas').find((x) => x.id === visitaId)
+  if (!v) return 'Visita não encontrada.'
+  const l = col(d, 'producao_lotes').find((x) => x.visitaId === v.id)
+  if (!l) return 'Esta visita ainda não chegou na Produção (encerre a visita primeiro).'
+  if (etapaDoLote(l) !== 'Aguardando fotos') return 'A escola já foi enviada ao editor: as fotos não podem mais ser mudadas.'
+  if (!link.trim()) return 'Informe o link das fotos da escola.'
+  const equipe = fotografosDa(v)
+  if (!equipe.length) return 'A visita não tem fotógrafo na equipe: complete a equipe primeiro.'
+  if (fotos.some((f) => !equipe.includes(f.fotografoId))) return 'Só os fotógrafos da equipe desta visita.'
+  const nome = (id: string) => String(col(d, 'freelancers').find((x) => x.id === id)?.nome ?? 'Fotógrafo')
+  const falta = equipe.filter((id) => !(Math.floor(Number(fotos.find((f) => f.fotografoId === id)?.quantidade)) > 0))
+  if (falta.length) return `Informe a quantidade de fotos de: ${falta.map(nome).join(', ')}.`
+  const primeira = !l.fotosLink
+  d.colecoes.producao_fotos = col(d, 'producao_fotos').filter((x) => x.loteId !== l.id)
+  let total = 0
+  for (const f of fotos) {
+    const q = Math.floor(Number(f.quantidade))
+    total += q
+    inserir(d, 'producao_fotos', { loteId: l.id, fotografoId: f.fotografoId, fotografoNome: nome(f.fotografoId), quantidade: q })
+  }
+  Object.assign(l, { fotosLink: link.trim(), fotosLancadasPor: ctx.autorNome, fotosRecebidasEm: l.fotosRecebidasEm || hoje() })
+  inserir(d, 'producao_historico', { loteId: l.id, data: agora(), etapa: 'Aguardando fotos', acao: primeira ? 'Fotos lançadas' : 'Fotos corrigidas', quantidade: total, descricao: `Operações: ${total} fotos de ${fotos.length} fotógrafo(s) • link das fotos registrado.`, autor: ctx.autorNome })
+  if (primeira) notificar(d, ctx, { setores: ['edicao'], tipo: 'info', titulo: 'Fotos lançadas', descricao: `${l.escola}: ${total} fotos e o link lançados pelas Operações. Pode enviar ao editor.`, link: '/edicao' })
+  auditar(d, ctx, 'EDITAR', `Operações • ${l.escola}: ${total} fotos e link`, 'operacional')
   return null
 }

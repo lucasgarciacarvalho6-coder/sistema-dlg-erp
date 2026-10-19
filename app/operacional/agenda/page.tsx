@@ -3,10 +3,11 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { Registro } from '@/lib/erp/types'
-import { agendarRetorno, atualizarRegistro, cancelarAgendamento, corrigirFichasVisita, desfazerEncerramento, editarAgendamento, encerrarVisita, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
+import { agendarRetorno, atualizarRegistro, cancelarAgendamento, corrigirFichasVisita, desfazerEncerramento, editarAgendamento, encerrarVisita, lancarFotosOperacoes, registrarHistoricoVisita, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { MAX_FOTOGRAFOS, bloqueioVisitaEncerrada, conflitosEquipe, contratoDaVisita, equipeDaVisita, fotografosDa, nomePJ, nomeVeiculo, pixCompleto, retornoDaVisita, ultimaComposicao } from '@/lib/erp/operacional'
 import { addDias, dataBR, diasNoMes, hoje, mesAtual, nomeMes, num } from '@/lib/erp/format'
+import { etapaDoLote, fotosDoLote, fotosPendentes, loteDaVisita } from '@/lib/erp/producao'
 import Icon from '@/components/erp/Icon'
 import { Modal, PageHeader, TONS, btnPrimario, btnSecundario, inputCls, labelCls } from '@/components/erp/ui'
 import type { Tom } from '@/lib/erp/types'
@@ -105,6 +106,9 @@ export default function AgendaFotograficaPage() {
   const semanas = useMemo(() => semanasDoMes(mes), [mes])
   const visita = visitas.find((v) => v.id === visitaId) ?? null
   const responsavelRMC = s.colaboradores.find((c) => c.setor === 'operacional' && /rmc|coorden/i.test(c.funcao))
+  // (SQL 057) visitas encerradas que ainda esperam o link e as fotos de cada fotógrafo
+  const pendentesFotos = fotosPendentes(s)
+  const semFotos = new Set(pendentesFotos.map((x) => x.visita.id))
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -131,6 +135,27 @@ export default function AgendaFotograficaPage() {
           </>
         }
       />
+
+      {/* Fotos a lançar: as fotos são tiradas de dia e enviadas à noite — o link e as quantidades entram depois */}
+      {pendentesFotos.length > 0 && (
+        <div className="bg-yellow-500/[0.06] border border-yellow-500/25 rounded-3xl p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-black text-yellow-400">⚠ Fotos a lançar • {pendentesFotos.length} escola(s)</p>
+            <p className="text-[11px] text-zinc-400">Lance o link das fotos e a quantidade de cada fotógrafo: a Produção só envia ao editor depois.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {pendentesFotos.map(({ visita: v }) => (
+              <button key={v.id} onClick={() => setVisitaId(v.id)} className="text-left px-4 py-2.5 rounded-xl border border-white/[0.1] bg-black/30 hover:border-yellow-500/50 transition-all">
+                <p className="text-xs font-bold text-white">{String(v.escola)}</p>
+                <p className="text-[10px] text-zinc-400">
+                  {dataBR(String(v.data))} • {String(v.cidade)}-{String(v.uf)}
+                  {v.equipe ? ` • ${String(v.equipe)}` : ''}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Controle do mês + indicadores */}
       <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-6 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-2xl">
@@ -271,6 +296,7 @@ export default function AgendaFotograficaPage() {
                             </span>
                           </div>
                           {naoEncerrada(v) && <p className="text-[9px] font-bold text-red-400 leading-tight">⚠ dia passou: falta encerrar</p>}
+                          {semFotos.has(v.id) && <p className="text-[9px] font-bold text-yellow-400 leading-tight">⚠ falta lançar fotos e link</p>}
                           {v.status === 'Agendada' && !eq.completa && <p className="text-[9px] font-bold text-yellow-400 leading-tight">⚠ falta {eq.faltando.join(', ')}</p>}
                         </button>
                       )
@@ -297,6 +323,7 @@ function PorEquipe({ s, visitas, corDa, onAbrir }: { s: ReturnType<typeof useErp
     grupos.set(k, [...(grupos.get(k) ?? []), v])
   }
   const ordem = [...grupos.keys()].sort((a, b) => (a ? (b ? a.localeCompare(b) : -1) : 1)) // "sem equipe" por último
+  const faltaFotos = new Set(fotosPendentes(s).map((x) => x.visita.id))
   if (!ordem.length) return <div className="bg-painel/80 border border-white/[0.05] rounded-3xl p-10 text-center text-sm text-zinc-500">Nenhuma visita no mês com esses filtros.</div>
 
   return (
@@ -349,6 +376,7 @@ function PorEquipe({ s, visitas, corDa, onAbrir }: { s: ReturnType<typeof useErp
                         {diasDuplos.has(String(v.data)) && <span className="text-yellow-400 font-bold"> • 2 cidades no mesmo dia</span>}
                         {v.status === 'Agendada' && !e.completa && <span className="text-yellow-400 font-bold"> • falta {e.faltando.join(', ')}</span>}
                         {naoEncerrada(v) && <span className="text-red-400 font-bold"> • dia passou: falta encerrar</span>}
+                        {faltaFotos.has(v.id) && <span className="text-yellow-400 font-bold"> • falta lançar fotos e link</span>}
                       </p>
                     </div>
                     <span className={`flex items-center gap-1.5 text-[9px] font-bold uppercase whitespace-nowrap ${st.texto}`}>
@@ -538,6 +566,9 @@ function DetalheVisita({ visita, podeEditar, onFechar }: { visita: Registro; pod
           </div>
         ))}
       </div>
+
+      {/* fotos de cada fotógrafo + link da escola: lançados depois do encerramento (SQL 057) */}
+      {encerrada && <FotosELink visita={visita} podeEditar={podeEditar} />}
 
       {agendada && podeEditar && (
         <>
@@ -1097,5 +1128,115 @@ function AcaoVisitaEncerrada({ visita, tipo, onFechar, onFeito }: { visita: Regi
       )}
       {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
     </Modal>
+  )
+}
+
+// Fotos e link (19/10/2026): depois de encerrar a visita, as Operações conferem as fotos que chegaram e lançam o link
+// da escola (um só) e a quantidade de cada fotógrafo da equipe da visita. Só controle (não entra no pagamento).
+// A Produção vê e só envia ao editor depois disto. Corrige enquanto a escola está em "Aguardando fotos".
+function FotosELink({ visita, podeEditar }: { visita: Registro; podeEditar: boolean }) {
+  const s = useErp()
+  const lote = loteDaVisita(s, visita.id)
+  const lancadas = lote ? fotosDoLote(s, lote.id) : []
+  const equipe = fotografosDa(visita)
+  const nome = (id: string) => String(colecao(s, 'freelancers').find((f) => f.id === id)?.nome ?? 'Fotógrafo')
+  const pode = podeEditar && !!lote && etapaDoLote(lote) === 'Aguardando fotos'
+  const [editando, setEditando] = useState(false)
+  const [link, setLink] = useState(String(lote?.fotosLink || ''))
+  const [qtd, setQtd] = useState<Record<string, string>>(() => Object.fromEntries(equipe.map((id) => [id, String(lancadas.find((f) => f.fotografoId === id)?.quantidade ?? '')])))
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+  const total = equipe.reduce((a, id) => a + (Math.floor(Number(qtd[id])) || 0), 0)
+  const lancado = !!lote?.fotosLink
+  const salvar = async () => {
+    setSalvando(true)
+    const e = await lancarFotosOperacoes(visita.id, link, equipe.map((id) => ({ fotografoId: id, quantidade: Math.floor(Number(qtd[id])) || 0 })))
+    setSalvando(false)
+    if (e) return setErro(e)
+    setErro('')
+    setEditando(false)
+  }
+  const caixa = `rounded-2xl p-5 space-y-3 border ${lancado ? 'bg-white/[0.02] border-white/[0.05]' : 'bg-yellow-500/[0.06] border-yellow-500/25'}`
+  if (!lote)
+    return (
+      <div className={caixa}>
+        <p className="text-xs font-bold text-white uppercase tracking-wider">Fotos e link</p>
+        <p className="text-sm text-zinc-400">Esta escola não está na Produção.</p>
+      </div>
+    )
+  return (
+    <div className={caixa}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold text-white uppercase tracking-wider">Fotos e link</p>
+        {lancado ? (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400">✓ Lançado{lote.fotosLancadasPor ? ` por ${String(lote.fotosLancadasPor)}` : ''}</span>
+        ) : (
+          <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-400">⚠ Falta lançar: a Produção não envia ao editor sem isto</span>
+        )}
+      </div>
+      {!editando ? (
+        <>
+          {lancado ? (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-300 break-all">
+                Link:{' '}
+                <a href={String(lote.fotosLink)} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 font-bold">
+                  {String(lote.fotosLink)}
+                </a>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {lancadas.map((f) => (
+                  <span key={f.id} className="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-zinc-200">
+                    {String(f.fotografoNome)} <strong className="text-white">{num(Number(f.quantidade))}</strong>
+                  </span>
+                ))}
+                <span className="px-3 py-1.5 rounded-lg text-xs text-zinc-400">
+                  Total <strong className="text-white">{num(lancadas.reduce((a, f) => a + (Number(f.quantidade) || 0), 0))}</strong> fotos
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">Quando as fotos chegarem, confira e lance o link da escola e quantas fotos cada fotógrafo tirou.</p>
+          )}
+          {pode && (
+            <button onClick={() => setEditando(true)} className={lancado ? btnSecundario : btnPrimario}>
+              {lancado ? 'Corrigir fotos e link' : 'Lançar fotos e link'}
+            </button>
+          )}
+          {!pode && lancado && etapaDoLote(lote) !== 'Aguardando fotos' && <p className="text-[11px] text-zinc-500">A escola já foi enviada ao editor: não muda mais.</p>}
+        </>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className={labelCls}>Link das fotos da escola</label>
+            <input value={link} onChange={(e) => (setLink(e.target.value), setErro(''))} placeholder="Cole o link do Google Drive / OneDrive" className={inputCls} />
+          </div>
+          {equipe.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {equipe.map((id) => (
+                <div key={id} className="space-y-1.5">
+                  <label className={labelCls}>Fotos de {nome(id)}</label>
+                  <input type="number" min={1} inputMode="numeric" value={qtd[id] ?? ''} onChange={(e) => (setQtd({ ...qtd, [id]: e.target.value }), setErro(''))} className={inputCls} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-yellow-400">A visita não tem fotógrafo na equipe: complete a equipe primeiro.</p>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-zinc-400">
+              Total <strong className="text-white">{num(total)}</strong> fotos • só os fotógrafos da equipe desta visita
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setEditando(false)} className={btnSecundario}>Voltar</button>
+              <button disabled={salvando} onClick={() => void salvar()} className={btnPrimario}>
+                {salvando ? 'Salvando...' : 'Salvar fotos e link'}
+              </button>
+            </div>
+          </div>
+          {erro && <p className="text-xs font-bold text-red-400">{erro}</p>}
+        </div>
+      )}
+    </div>
   )
 }
