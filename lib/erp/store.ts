@@ -1170,12 +1170,11 @@ async function acaoProducao(rpc: string, params: Record<string, unknown>, demo: 
 const OK_ACAO_LOTE: Record<AcaoLote, string> = {
   fotos: 'Fotos recebidas.',
   enviar_editor: 'Enviado ao editor.',
-  editor_devolveu: 'Voltou do editor: agora é a análise de qualidade.',
-  aprovar_qualidade: 'Aprovado! Agora está pronto para enviar para a conferência.',
-  reprovar_qualidade: 'Álbuns devolvidos ao editor.',
-  enviar_conferencia: 'Enviado para a conferência final.',
-  confirmar: 'Conferência final aprovada: liberado para a Revelação.',
-  reprovar_conferencia: 'Devolvido ao editor.',
+  editor_devolveu: 'Voltou do editor: agora é a Conferência Produção.',
+  aprovar_qualidade: 'Conferido! Enviado para a Conferência Beatriz.',
+  reprovar_qualidade: 'Álbuns reenviados ao editor.',
+  confirmar: 'Conferência Beatriz aprovada: HD liberado para a Revelação.',
+  reprovar_conferencia: 'Recusado: voltou para a Conferência Produção.',
   revelando: 'Marcado como Revelando.',
   na_caixa: 'Marcado como Na caixa.',
 }

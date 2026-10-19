@@ -7,7 +7,9 @@ import { colecao } from '@/lib/erp/metrics'
 import { dataBR, dataHoraBR, hoje, num } from '@/lib/erp/format'
 import {
   ETAPAS_LOTE,
+  NOME_ETAPA,
   TOM_ETAPA,
+  normalizarEtapa,
   caixasDoLote,
   diasAtraso,
   etapaDoLote,
@@ -50,7 +52,7 @@ export default function LoteDetalhe({ loteId, onFechar }: { loteId: string | nul
   )
 }
 
-// As 8 etapas (2 linhas de 4): ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
+// As 7 etapas (SQL 058): ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
 function LinhaDoTempo({ l }: { l: Registro }) {
   const s = useErp()
   const atual = indiceEtapa(l)
@@ -60,8 +62,7 @@ function LinhaDoTempo({ l }: { l: Registro }) {
     'Aguardando fotos': l.fotosRecebidasEm ? `fotos ✓ ${curta(l.fotosRecebidasEm)}` : `foto ${curta(l.dataFoto)}`,
     'Em edição': [editor ? String(editor.nome) : '', curta(l.enviadoEditorEm), l.entregaPrevista ? `prev. ${curta(l.entregaPrevista)}` : ''].filter(Boolean).join(' • '),
     'Análise de qualidade': curta(l.devolvidoEditorEm),
-    'Pronto para conferência Beatriz': [curta(l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
-    'Conferência final': curta(l.enviadoConferenciaEm),
+    'Conferência final': [curta(l.enviadoConferenciaEm || l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
     'Aguardando revelação': curta(l.confirmadoEm),
     Revelando: curta(l.revelandoEm),
     'Na caixa': curta(l.naCaixaEm),
@@ -76,7 +77,7 @@ function LinhaDoTempo({ l }: { l: Registro }) {
           <div key={e} className={`rounded-xl border px-3 py-2.5 ${agora ? `${t.borda} ${t.suave}` : feito ? 'border-white/[0.08] bg-white/[0.03]' : 'border-white/[0.04] opacity-40'}`}>
             <p className={`text-[9px] font-black uppercase tracking-widest leading-tight ${agora ? 'text-white' : feito ? 'text-zinc-300' : 'text-zinc-500'}`}>
               {feito ? '✓ ' : ''}
-              {e}
+              {NOME_ETAPA[e]}
             </p>
             <p className="text-[10px] text-zinc-400 mt-1 leading-tight min-h-[1em]">{i <= atual ? info[e] : ''}</p>
           </div>
@@ -191,6 +192,11 @@ function FotosFotografos({ l }: { l: Registro }) {
 // O botão da etapa em que a escola está (mesmas regras do banco: SQL 022)
 function ProximoPasso({ l }: { l: Registro }) {
   const s = useErp()
+  // a Beatriz recusou e a escola voltou para a Conferência Produção: mostra o motivo (último registro do histórico)
+  const ultimo = colecao(s, 'producao_historico')
+    .filter((h) => h.loteId === l.id)
+    .sort((a, b) => String(b.criadoEm || b.data).localeCompare(String(a.criadoEm || a.data)))[0]
+  const ultimaRecusa = ultimo?.acao === 'Recusado na Conferência Beatriz' ? String(ultimo.descricao) : ''
   const eu = useUsuario()
   const podeFazer = usePode()
   const etapa = etapaDoLote(l)
@@ -245,17 +251,19 @@ function ProximoPasso({ l }: { l: Registro }) {
           <span className={labelCls}>Motivo</span>
           <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: foto tremida, nome errado na capa" className={inputCls} />
         </label>
-        <label className="space-y-1.5">
-          <span className={labelCls}>Nova entrega prevista</span>
-          <input type="date" min={dia} value={prevista} onChange={(e) => setPrevista(e.target.value)} className={inputCls} />
-        </label>
+        {acao === 'reprovar_qualidade' && (
+          <label className="space-y-1.5">
+            <span className={labelCls}>Nova entrega prevista</span>
+            <input type="date" min={dia} value={prevista} onChange={(e) => setPrevista(e.target.value)} className={inputCls} />
+          </label>
+        )}
       </div>
       <div className="flex flex-wrap justify-end gap-2">
         <button onClick={() => setReprovando(false)} className={btnSecundario}>
           Cancelar
         </button>
-        <button disabled={enviando || !prevista} onClick={() => fazer(acao, { quantidade: Number(qtd), motivo, prevista })} className={btnPerigo}>
-          Devolver ao editor
+        <button disabled={enviando || (acao === 'reprovar_qualidade' && !prevista)} onClick={() => fazer(acao, acao === 'reprovar_qualidade' ? { quantidade: Number(qtd), motivo, prevista } : { quantidade: Number(qtd), motivo })} className={btnPerigo}>
+          {acao === 'reprovar_qualidade' ? 'Reenviar ao editor' : 'Recusar → volta para a Conferência Produção'}
         </button>
       </div>
     </div>
@@ -263,7 +271,7 @@ function ProximoPasso({ l }: { l: Registro }) {
 
   const seletorAnalista = (
     <label className="block space-y-1.5 max-w-sm">
-      <span className={labelCls}>Quem fez a análise de qualidade</span>
+      <span className={labelCls}>Quem fez a Conferência Produção</span>
       <select value={analistaId} onChange={(e) => setAnalistaId(e.target.value)} className={inputCls}>
         <option value="">Escolha…</option>
         {analistas.map((c) => (
@@ -349,58 +357,45 @@ function ProximoPasso({ l }: { l: Registro }) {
           </div>
           <div className="flex justify-end">
             <button disabled={enviando || !recebido} onClick={() => fazer('editor_devolveu', { data: recebido, drive })} className={btnPrimario}>
-              Editor devolveu → análise de qualidade
+              Editor devolveu → Conferência Produção
             </button>
           </div>
         </div>,
       )
     case 'Análise de qualidade':
       return caixa(
-        'Análise de qualidade',
-        'Confira se todos os álbuns estão no padrão da empresa. Se algum tiver erro, devolva ao editor.',
+        'Conferência Produção',
+        `Confira se todos os álbuns estão no padrão da empresa e mande para a Conferência Beatriz. Se algum tiver erro, reenvie ao editor.${ultimaRecusa ? ` A Beatriz recusou: ${ultimaRecusa}` : ''}`,
         reprovando ? (
           formReprovar('reprovar_qualidade')
         ) : (
           <div className="space-y-3">
             {escolheAnalista && seletorAnalista}
+            <label className="block space-y-1.5">
+              <span className={labelCls}>Como foi enviado para a Beatriz (opcional)</span>
+              <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Cole o link do Google Drive / OneDrive ou escreva (pendrive, HD...)" className={inputCls} />
+            </label>
             <div className="flex flex-wrap gap-2">
-              <button disabled={enviando || (escolheAnalista && !analistaId)} onClick={() => fazer('aprovar_qualidade', { analistaId })} className={btnPrimario}>
-                ✓ Aprovar todos ({num(albuns)} álbuns)
+              <button disabled={enviando || (escolheAnalista && !analistaId)} onClick={() => fazer('aprovar_qualidade', { analistaId, drive })} className={btnPrimario}>
+                ✓ Conferido ({num(albuns)} álbuns) → Conferência Beatriz
               </button>
               <button onClick={() => setReprovando(true)} className={btnPerigo}>
-                Reprovar álbuns
+                Reenviar ao editor
               </button>
             </div>
           </div>
         ),
       )
-    case 'Pronto para conferência Beatriz':
-      return caixa(
-        'Pronto para conferência Beatriz',
-        `${num(albuns)} álbuns aprovados na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}${l.aprovadoQualidadeEm ? ` em ${dataBR(String(l.aprovadoQualidadeEm))}` : ''}. Envie para a conferência final e marque aqui.`,
-        <div className="space-y-3">
-          <label className="block space-y-1.5">
-            <span className={labelCls}>Como foi enviado (opcional)</span>
-            <input value={drive} onChange={(e) => setDrive(e.target.value)} placeholder="Cole o link do Google Drive / OneDrive ou escreva (pendrive, HD...)" className={inputCls} />
-          </label>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] text-zinc-500">O envio fica registrado com a data de hoje ({dataBR(dia)}).</p>
-            <button disabled={enviando} onClick={() => fazer('enviar_conferencia', { drive })} className={btnPrimario}>
-              Enviado para a conferência →
-            </button>
-          </div>
-        </div>,
-      )
     case 'Conferência final':
       if (!souAdm)
         return caixa(
-          'Conferência final',
-          `Aprovada na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}${l.enviadoConferenciaEm ? ` e enviada para a conferência em ${dataBR(String(l.enviadoConferenciaEm))}` : ''}. Aguardando a conferência final do ADM.`,
+          'Conferência Beatriz',
+          `Conferida na Produção${aprovou ? ` por ${aprovou}` : ''}${l.enviadoConferenciaEm ? ` e enviada em ${dataBR(String(l.enviadoConferenciaEm))}` : ''}. Aguardando a Beatriz conferir e liberar o HD.`,
           null,
         )
       return caixa(
-        'Conferência final (ADM)',
-        `${num(albuns)} álbuns aprovados na análise de qualidade${aprovou ? ` por ${aprovou}` : ''}. Ao aprovar, a escola vai para a Revelação e os álbuns entram na meta de quem fez a análise.`,
+        'Conferência Beatriz (ADM)',
+        `${num(albuns)} álbuns conferidos na Produção${aprovou ? ` por ${aprovou}` : ''}. Ao liberar, o HD vai para a Revelação e os álbuns entram na meta de quem fez a Conferência Produção. Se recusar, volta para a Conferência Produção reenviar ao editor.`,
         reprovando ? (
           formReprovar('reprovar_conferencia')
         ) : (
@@ -408,10 +403,10 @@ function ProximoPasso({ l }: { l: Registro }) {
             {!l.aprovadoQualidadePor && !(Number(l.albunsContados) > 0) && analistas.length > 0 && seletorAnalista}
             <div className="flex flex-wrap gap-2">
               <button disabled={enviando} onClick={() => fazer('confirmar', { analistaId })} className={btnPrimario}>
-                ✓ Aprovar e liberar para a Revelação
+                ✓ Aprovar e liberar o HD
               </button>
               <button onClick={() => setReprovando(true)} className={btnPerigo}>
-                Devolver ao editor
+                Recusar
               </button>
             </div>
           </div>
@@ -419,8 +414,8 @@ function ProximoPasso({ l }: { l: Registro }) {
       )
     case 'Aguardando revelação':
       return caixa(
-        'Aguardando a Revelação',
-        `Liberada${l.confirmadoEm ? ` em ${dataBR(String(l.confirmadoEm))}` : ''}. Marque quando a Revelação pegar o HD para revelar.`,
+        'No HD',
+        `HD liberado pela Beatriz${l.confirmadoEm ? ` em ${dataBR(String(l.confirmadoEm))}` : ''}: as fotos estão no HD aguardando a revelação. Marque quando a Revelação começar a revelar.`,
         <button disabled={enviando} onClick={() => fazer('revelando')} className={btnPrimario}>
           A Revelação pegou o HD → Revelando
         </button>,
@@ -434,7 +429,7 @@ function ProximoPasso({ l }: { l: Registro }) {
         </button>,
       )
     case 'Na caixa':
-      return caixa('Concluída', `Álbuns revelados e na caixa${l.naCaixaEm ? ` desde ${dataBR(String(l.naCaixaEm))}` : ''}.`, null)
+      return caixa('Na caixa', `Revelação finalizou: álbuns na caixa${l.naCaixaEm ? ` desde ${dataBR(String(l.naCaixaEm))}` : ''}, no estoque.`, null)
   }
 }
 
@@ -511,7 +506,7 @@ function CorrigirEtapa({ l }: { l: Registro }) {
             <select value={etapa} onChange={(e) => setEtapa(e.target.value as EtapaLote)} className={inputCls}>
               {ETAPAS_LOTE.map((e) => (
                 <option key={e} value={e}>
-                  {e}
+                  {NOME_ETAPA[e]}
                 </option>
               ))}
             </select>
@@ -554,7 +549,7 @@ function Historico({ l }: { l: Registro }) {
       <p className={labelCls}>Histórico</p>
       <div className={`${caixaCls} divide-y divide-white/[0.04]`}>
         {itens.map((h) => {
-          const e = ETAPAS_LOTE.includes(String(h.etapa) as EtapaLote) ? (String(h.etapa) as EtapaLote) : 'Aguardando fotos'
+          const e = normalizarEtapa(h.etapa)
           return (
             <div key={h.id} className="px-4 py-3 flex gap-3">
               <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${TONS[TOM_ETAPA[e]].solido}`}></span>

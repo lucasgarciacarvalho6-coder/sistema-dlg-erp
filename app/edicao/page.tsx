@@ -5,13 +5,13 @@ import type { Registro } from '@/lib/erp/types'
 import { trazerParaProducao, useErp, usePode } from '@/lib/erp/store'
 import { colecao } from '@/lib/erp/metrics'
 import { dataBR, hoje, mesAtual, num } from '@/lib/erp/format'
-import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, TOM_ETAPA, corDaEtapa, diasAtraso, escolasParadas, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
+import { ETAPAS_EM_PRODUCAO, ETAPAS_LOTE, NOME_ETAPA, TOM_ETAPA, corDaEtapa, diasAtraso, escolasParadas, etapaDoLote, indiceEtapa, lotesProducao, visitasForaDaProducao, type EtapaLote } from '@/lib/erp/producao'
 import { Badge, EmptyState, PageHeader, Panel, StatCard, TONS, btnPrimario, btnSecundario, inputCls } from '@/components/erp/ui'
 import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 import { Drive } from '@/components/edicao/LinkDrive'
 
 // PRODUÇÃO › Controle: a planilha da Produção dentro do sistema. Uma linha por escola (visita encerrada nas Operações),
-// com a etapa em que está: Aguardando fotos → Em edição → Análise de qualidade → Pronto para conferência Beatriz → Conferência final → Aguardando revelação
+// com a etapa em que está (7 etapas, SQL 058): Conferência Operações → Em edição → Conferência Produção → Conferência Beatriz → No HD
 // → Revelando → Na caixa. Retorno fica em laranja, como na planilha.
 
 type Filtro = 'andamento' | 'atrasadas' | EtapaLote
@@ -53,7 +53,7 @@ export default function ControleProducaoPage() {
       <PageHeader
         modulo="Módulo / Produção"
         titulo="Controle da produção"
-        descricao="Cada escola fotografada chega sozinha das Operações. Clique numa escola para ver as etapas e passar para a próxima: fotos, editor, análise de qualidade, conferência final e Revelação."
+        descricao="Cada escola fotografada chega sozinha das Operações. Clique numa escola para ver as etapas e passar para a próxima: Conferência Operações, Em edição, Conferência Produção, Conferência Beatriz, No HD, Revelando e Na caixa."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -79,7 +79,7 @@ export default function ControleProducaoPage() {
           const nParadas = ls.filter((l) => paradas.has(l.id)).length
           return (
             <button key={e} onClick={() => setFiltro(e)} className={pill(filtro === e)}>
-              <p className={`text-[10px] font-black uppercase tracking-widest ${TONS[TOM_ETAPA[e]].texto}`}>{e}</p>
+              <p className={`text-[10px] font-black uppercase tracking-widest ${TONS[TOM_ETAPA[e]].texto}`}>{NOME_ETAPA[e]}</p>
               <p className="text-xl font-black text-white mt-1">{ls.length}</p>
               <p className="text-[10px] text-zinc-500">{num(soma(ls))} álbuns</p>
               {nParadas > 0 && <p className="text-[10px] font-bold text-yellow-400">{num(nParadas)} parada(s)</p>}
@@ -90,7 +90,7 @@ export default function ControleProducaoPage() {
 
       <Panel
         semPadding
-        titulo={filtro === 'andamento' ? 'Escolas em andamento' : filtro === 'atrasadas' ? 'Atrasadas com o editor' : filtro}
+        titulo={filtro === 'andamento' ? 'Escolas em andamento' : filtro === 'atrasadas' ? 'Atrasadas com o editor' : NOME_ETAPA[filtro]}
         subtitulo={`${lista.length} escola(s) • ${num(lista.reduce((a, l) => a + (Number(l.alunos) || 0), 0))} alunos • ${num(soma(lista))} álbuns`}
         acoes={<input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar escola, cidade, vendedor ou editor" className={`campo-busca ${inputCls} !py-2.5 w-72 max-w-full`} />}
       >
@@ -186,7 +186,7 @@ export default function ControleProducaoPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <Badge texto={etapa} tom={corDaEtapa(etapa, diasAtraso(l, dia) > 0 || paradas.has(l.id))} />
+                        <Badge texto={NOME_ETAPA[etapa]} tom={corDaEtapa(etapa, diasAtraso(l, dia) > 0 || paradas.has(l.id))} />
                         {paradas.has(l.id) && (
                           <span className="block mt-1 text-[10px] font-black text-red-400" title={`Mais de ${paradas.get(l.id)!.prazo} dias úteis nesta etapa`}>
                             parada há {num(paradas.get(l.id)!.dias)} dias úteis

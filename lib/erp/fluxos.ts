@@ -1046,7 +1046,7 @@ export function trazerParaProducao(d: ErpState, visitaIds: string[], ctx: Contex
   return n
 }
 
-const SO_ADM_CONFERENCIA = 'Só o ADM faz a conferência final.'
+const SO_ADM_CONFERENCIA = 'Só o ADM faz a Conferência Beatriz.'
 
 function historicoLote(d: ErpState, l: Registro, ctx: Contexto, h: { etapa: string; acao: string; quantidade: number | null; descricao: string }) {
   inserir(d, 'producao_historico', { loteId: l.id, data: agora(), ...h, autor: ctx.autorNome })
@@ -1067,7 +1067,7 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
   const drive = (dados.drive ?? '').trim()
   const prevista = dados.prevista ?? ''
   // prazo do editor: obrigatório ao enviar e ao devolver álbuns reprovados
-  if (acao === 'enviar_editor' || acao === 'reprovar_qualidade' || acao === 'reprovar_conferencia') {
+  if (acao === 'enviar_editor' || acao === 'reprovar_qualidade') {
     if (!prevista) return 'Informe a data prevista da entrega do editor.'
     if (prevista < dia) return 'A data prevista da entrega não pode ser antes de hoje.'
   }
@@ -1120,23 +1120,31 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         analista = daProducao(dados.analistaId)
         if (!analista) return 'Quem fez a análise precisa ser da Produção.'
       } else if (!analista && d.colaboradores.some((c) => c.setor === 'edicao' && c.status === 'ATIVO')) return 'Escolha quem fez a análise de qualidade.'
-      Object.assign(l, { aprovadoQualidadeEm: dia, aprovadoQualidadePor: analista?.id ?? '', etapa: 'Pronto para conferência Beatriz', enviadoConferenciaEm: '', driveConferencia: '' })
+      // (SQL 058) Conferência Produção aprovada: já vai para a Conferência Beatriz (drive opcional)
+      Object.assign(l, { aprovadoQualidadeEm: dia, aprovadoQualidadePor: analista?.id ?? '', etapa: 'Conferência final', enviadoConferenciaEm: dia, driveConferencia: drive })
       h = {
-        etapa: 'Pronto para conferência Beatriz',
-        acao: 'Aprovado na análise de qualidade',
+        etapa: 'Conferência final',
+        acao: 'Conferência Produção aprovada',
         quantidade: albuns,
-        descricao: `${albuns} álbuns aprovados${analista ? ` por ${analista.nome}` : ''}. Pronto para enviar para a conferência.`,
+        descricao: `${albuns} álbuns conferidos${analista ? ` por ${analista.nome}` : ''} e enviados para a Conferência Beatriz${drive ? ` (${drive})` : ''}.`,
       }
+      notificar(d, ctx, { setores: ['adm'], tipo: 'info', titulo: 'Escola para a Conferência Beatriz', descricao: `${l.escola}: ${albuns} álbuns conferidos pela Produção.`, link: '/edicao' })
       break
     }
-    case 'enviar_conferencia':
-      Object.assign(l, { enviadoConferenciaEm: dia, driveConferencia: drive, etapa: 'Conferência final' })
-      h = { etapa: 'Conferência final', acao: 'Enviado para a conferência', quantidade: albuns, descricao: `${albuns} álbuns enviados para a conferência final${drive ? ` (${drive})` : ''}.` }
-      notificar(d, ctx, { setores: ['adm'], tipo: 'info', titulo: 'Escola pronta para a conferência final', descricao: `${l.escola}: ${albuns} álbuns enviados para a conferência.`, link: '/edicao' })
-      break
-    case 'reprovar_qualidade':
     case 'reprovar_conferencia': {
-      if (acao === 'reprovar_conferencia' && eu?.perfil !== 'ADM') return SO_ADM_CONFERENCIA
+      // (SQL 058) a Beatriz recusa: volta para quem fez a Conferência Produção, que reenvia ao editor
+      if (eu?.perfil !== 'ADM') return SO_ADM_CONFERENCIA
+      const q = Math.floor(Number(dados.quantidade) || 0)
+      const motivo = (dados.motivo ?? '').trim()
+      if (q <= 0) return 'Informe quantos álbuns têm problema.'
+      if (q > albuns) return `São só ${albuns} álbuns nesta escola.`
+      if (!motivo) return 'Informe o motivo.'
+      Object.assign(l, { etapa: 'Análise de qualidade', aprovadoQualidadeEm: '', enviadoConferenciaEm: '', driveConferencia: '' })
+      h = { etapa: 'Análise de qualidade', acao: 'Recusado na Conferência Beatriz', quantidade: q, descricao: `${q} álbum(ns) com problema. Motivo: ${motivo} • volta para a Conferência Produção reenviar ao editor.` }
+      notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Conferência Beatriz recusou', descricao: `${l.escola}: ${q} álbum(ns) com problema. Motivo: ${motivo}. Reenvie ao editor.`, link: '/edicao' })
+      break
+    }
+    case 'reprovar_qualidade': {
       const q = Math.floor(Number(dados.quantidade) || 0)
       const motivo = (dados.motivo ?? '').trim()
       if (q <= 0) return 'Informe quantos álbuns voltam para o editor.'
@@ -1158,12 +1166,10 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
       })
       h = {
         etapa: 'Em edição',
-        acao: acao === 'reprovar_qualidade' ? 'Reprovado na análise de qualidade' : 'Reprovado na conferência final',
+        acao: 'Reenviado ao editor',
         quantidade: q,
         descricao: `${q} álbum(ns) de volta para ${nomeEditor || 'o editor'}. Motivo: ${motivo} • nova entrega prevista ${dataBR(prevista)}.`,
       }
-      if (acao === 'reprovar_conferencia')
-        notificar(d, ctx, { setores: ['edicao'], tipo: 'alerta', titulo: 'Conferência final devolveu ao editor', descricao: `${l.escola}: ${q} álbum(ns) com erro. Motivo: ${motivo}`, link: '/edicao' })
       break
     }
     case 'confirmar': {
@@ -1174,15 +1180,15 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         if (!analista) return 'Quem fez a análise precisa ser da Produção.'
       }
       Object.assign(l, { confirmadoEm: dia, confirmadoPor: ctx.autorId, etapa: 'Aguardando revelação', aprovadoQualidadePor: analista?.id ?? '' })
-      let descricao = `${albuns} álbuns liberados para a Revelação`
+      let descricao = `Conferência Beatriz: ${albuns} álbuns liberados, HD para a Revelação`
       if (Number(l.albunsContados) > 0) descricao += ' (já tinham entrado na meta).'
       else if (analista && albuns > 0) {
         lancar(d, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: analista.id, quantidade: albuns, descricao: `Álbuns entregues: ${l.escola}`, data: dia })
         l.albunsContados = albuns
         descricao += `. Contam na meta de ${analista.nome}.`
       } else descricao += ' (sem analista: não entrou na meta).'
-      h = { etapa: 'Aguardando revelação', acao: 'Conferência final aprovada', quantidade: albuns, descricao }
-      notificar(d, ctx, { setores: ['edicao'], tipo: 'sucesso', titulo: 'Conferência final aprovada', descricao: `${l.escola}: ${albuns} álbuns liberados para a Revelação.`, link: '/edicao' })
+      h = { etapa: 'Aguardando revelação', acao: 'Conferência Beatriz aprovada', quantidade: albuns, descricao }
+      notificar(d, ctx, { setores: ['edicao'], tipo: 'sucesso', titulo: 'Conferência Beatriz aprovada', descricao: `${l.escola}: ${albuns} álbuns liberados — HD para a Revelação.`, link: '/edicao' })
       break
     }
     case 'revelando':
