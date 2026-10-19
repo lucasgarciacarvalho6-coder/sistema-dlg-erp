@@ -67,14 +67,15 @@ export const REGRAS_REBOLO = [
 
 // Custos do Lucro/Prejuízo de cada vendedora (planilha "REBOLO - BASE PRINCIPAL", 07/10/2026):
 // vendido − reserva do boleto − frete − taxa do cartão − taxa do boleto − álbum − saquinho − comissão − salário com encargos.
-// O frete e a taxa do cartão reais o Rebolo lança no envio; o salário, o Financeiro (holerite). Sem o real, vale a estimativa.
+// O frete real o Rebolo lança no envio; o salário, o Financeiro (holerite). Sem o real, vale a estimativa.
+// (19/10/2026) Taxa do boleto = R$ 5 por boleto (10x = 10 boletos); taxa do cartão = 15% do valor total da venda (regra fixa).
 export const CUSTOS_REBOLO = [
   { chave: 'rebolo_reserva_boleto', label: 'Reserva de inadimplência do boleto (% da venda)', padrao: 35 },
   { chave: 'rebolo_custo_album', label: 'Custo do álbum (R$ por álbum)', padrao: 200 },
   { chave: 'rebolo_custo_saquinho', label: 'Saquinho (R$ por álbum)', padrao: 5 },
-  { chave: 'rebolo_taxa_boleto', label: 'Taxa do boleto (R$ por venda)', padrao: 0 },
+  { chave: 'rebolo_taxa_boleto_parcela', label: 'Taxa do boleto (R$ por boleto: 10x = 10 boletos)', padrao: 5 },
   { chave: 'rebolo_frete_estimado', label: 'Frete estimado (R$, até lançar o real)', padrao: 101.2 },
-  { chave: 'rebolo_taxa_cartao_estimada', label: 'Taxa do cartão estimada (%, até lançar a real)', padrao: 18 },
+  { chave: 'rebolo_taxa_cartao', label: 'Taxa do cartão (% do valor total da venda)', padrao: 15 },
   { chave: 'rebolo_salario_estimado', label: 'Salário estimado (R$, até o Financeiro lançar)', padrao: 1925 },
   { chave: 'rebolo_encargos', label: 'Encargos sobre o salário (%)', padrao: 35 },
 ] as const
@@ -83,9 +84,9 @@ export interface CustosRebolo {
   reservaBoleto: number // %
   custoAlbum: number
   custoSaquinho: number
-  taxaBoleto: number
+  taxaBoleto: number // R$ por boleto (parcela)
   freteEstimado: number
-  taxaCartaoEstimada: number // %
+  taxaCartao: number // % do valor total da venda no cartão
   salarioEstimado: number
   encargos: number // %
 }
@@ -129,9 +130,9 @@ export function tabelaDeValores(v: Record<string, number>): TabelaRebolo {
       reservaBoleto: Math.max(0, v.rebolo_reserva_boleto ?? 0),
       custoAlbum: Math.max(0, v.rebolo_custo_album ?? 0),
       custoSaquinho: Math.max(0, v.rebolo_custo_saquinho ?? 0),
-      taxaBoleto: Math.max(0, v.rebolo_taxa_boleto ?? 0),
+      taxaBoleto: Math.max(0, v.rebolo_taxa_boleto_parcela ?? 0),
       freteEstimado: Math.max(0, v.rebolo_frete_estimado ?? 0),
-      taxaCartaoEstimada: Math.max(0, v.rebolo_taxa_cartao_estimada ?? 0),
+      taxaCartao: Math.max(0, v.rebolo_taxa_cartao ?? 0),
       salarioEstimado: Math.max(0, v.rebolo_salario_estimado ?? 0),
       encargos: Math.max(0, v.rebolo_encargos ?? 0),
     },

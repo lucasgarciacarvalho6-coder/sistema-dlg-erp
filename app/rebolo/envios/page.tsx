@@ -46,7 +46,7 @@ export default function EnviosReboloPage() {
   const lista = (aba === 'enviar' ? aEnviar : enviados).filter((f) => !t || `${f.aluno} ${comprador(f, vendaDe(f))} ${f.rastreio} ${f.cidade} ${f.numeroFicha}`.toLowerCase().includes(t))
   const podeEnviar = (f: Registro) => (f.vendedoraId === eu?.id || supervisao) && podeFazer('rebolo', 'editar')
   const ficha = fichas.find((f) => f.id === aberta) ?? null
-  const { freteEstimado, taxaCartaoEstimada } = tabela.custos
+  const { freteEstimado, taxaCartao } = tabela.custos
 
   return (
     <div className="space-y-8 animate-fade-in-up">
@@ -103,7 +103,6 @@ export default function EnviosReboloPage() {
                   const sit = entrega(f)
                   const atrasada = aba === 'enviados' && sit === 'Pendente' && !!f.previsaoEntrega && String(f.previsaoEntrega).slice(0, 10) < hoje()
                   const custo = valorOuVazio(f.custoPostagem)
-                  const taxa = valorOuVazio(f.taxaCartao)
                   return (
                     <tr key={f.id} className="hover:bg-white/[0.02] align-top">
                       <td className="px-5 py-3.5">
@@ -169,7 +168,7 @@ export default function EnviosReboloPage() {
                       <td className="px-5 py-3.5 whitespace-nowrap text-xs">
                         <p className="text-zinc-200">{String(v?.formaPagamento || '—')}</p>
                         {forma === 'cartao' && (
-                          <p className={taxa ? 'text-zinc-400' : 'text-zinc-500'}>{taxa ? `taxa ${brl(Number(taxa))}` : `taxa estimada ${taxaCartaoEstimada}%`}</p>
+                          <p className="text-zinc-400">taxa {taxaCartao}% • {brl(((Number(v?.valor) || 0) * taxaCartao) / 100)}</p>
                         )}
                       </td>
                     </tr>
@@ -189,7 +188,7 @@ export default function EnviosReboloPage() {
             venda={vendaDe(ficha)}
             podeEditar={podeEnviar(ficha)}
             freteEstimado={freteEstimado}
-            taxaEstimada={taxaCartaoEstimada}
+            taxaEstimada={taxaCartao}
             onFechar={() => setAberta(null)}
           />
         )}
@@ -220,7 +219,7 @@ function AcompanhamentoEnvio({
   const [previsao, setPrevisao] = useState(String(ficha.previsaoEntrega || '').slice(0, 10))
   const [situacao, setSituacao] = useState(String(ficha.situacaoEntrega || 'Pendente'))
   const [boleto, setBoleto] = useState(!!ficha.boletoEnviadoEm)
-  const [taxa, setTaxa] = useState(valorOuVazio(ficha.taxaCartao))
+  const [taxa] = useState(valorOuVazio(ficha.taxaCartao)) // (19/10) a taxa do cartão passou a ser 15% automática; o valor antigo fica como estava
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [copiado, setCopiado] = useState(false)
@@ -321,9 +320,11 @@ function AcompanhamentoEnvio({
 
       {forma === 'cartao' && (
         <div className="space-y-1">
-          <label className={labelCls}>Taxa do cartão (R$)</label>
-          <input type="number" min="0" step="0.01" inputMode="decimal" disabled={!podeEditar} value={taxa} onChange={(e) => setTaxa(e.target.value)} placeholder={`vazio = estimado ${taxaEstimada}% (${brl((valor * taxaEstimada) / 100)})`} className={inputCls} />
-          <p className="text-[11px] text-zinc-500">O valor que a maquininha/link de pagamento cobrou nesta venda.</p>
+          <p className={labelCls}>Taxa do cartão</p>
+          <p className="text-sm font-bold text-white">
+            {taxaEstimada}% do valor da venda • {brl((valor * taxaEstimada) / 100)}
+          </p>
+          <p className="text-[11px] text-zinc-500">Calculada sozinha (regra da empresa): não precisa lançar.</p>
         </div>
       )}
 

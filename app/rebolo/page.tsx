@@ -17,6 +17,7 @@ import PainelMeta, { GraficoDiasUteis } from '@/components/erp/PainelMeta'
 import { STATUS } from '@/components/erp/status'
 import { EmptyState, PageHeader, Panel, StatCard } from '@/components/erp/ui'
 import { useRebolo } from '@/components/rebolo/comum'
+import { lucroReboloMes } from '@/lib/erp/rebolo-lucro'
 
 const UMA_CASA = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 })
 // R$ curto em cima das barras (cabe numa barrinha): 850 • 1,3k • 12,5k
@@ -105,6 +106,9 @@ export default function ReboloDashboardPage() {
         <StatCard label="Books vendidos no mês" valor={num(rb.mes)} detalhe={rb.meta.mensal > 0 ? `Meta ${num(rb.meta.mensal)} • ${pct(rb.pctMes)}` : 'sem meta de books'} progresso={rb.meta.mensal > 0 ? rb.pctMes : undefined} />
         <StatCard label="Projeção do mês" valor={brl(atual ? r.projecao : r.mes)} detalhe={semMeta ? 'no ritmo atual' : `${pct(((atual ? r.projecao : r.mes) / (r.meta.mensal || 1)) * 100)} da meta • ${atual ? 'no ritmo atual' : 'mês fechado'}`} />
       </div>
+
+      {/* conferência do lucro/prejuízo da vendedora: só o ADM vê (não vai para a Visão TV) */}
+      {eu?.perfil === 'ADM' && <LucroConferencia alvoId={alvoId} mes={mes} />}
 
       {/* meta em R$ e em books, com uma barra por dia útil */}
       {semMeta ? (
@@ -212,6 +216,55 @@ function VendasDoAno({ alvoId, ano }: { alvoId: string; ano: string }) {
         <span style={{ color: STATUS.bom.cor }}>Verde</span> = bateu a meta do mês • <span style={{ color: STATUS.atencao.cor }}>Amarelo</span> = passou do piso •{' '}
         <span style={{ color: STATUS.critico.cor }}>Vermelho</span> = abaixo do piso • mês atual pelo ritmo • cinza = sem meta ou antes da primeira venda
       </p>
+    </Panel>
+  )
+}
+
+// Lucro/Prejuízo da vendedora no mês, para o ADM conferir (pedido de 19/10/2026): só neste Dashboard, nunca na Visão TV.
+// Mesma conta do card da TV e da planilha do Financeiro (lib/erp/rebolo-lucro.ts); o que ainda não foi lançado aparece como estimado.
+function LucroConferencia({ alvoId, mes }: { alvoId: string; mes: string }) {
+  const { s, tabela } = useRebolo()
+  const l = lucroReboloMes(s, alvoId, mes)
+  if (!l)
+    return (
+      <Panel titulo={`Lucro / Prejuízo • ${nomeMes(mes)}`} subtitulo="Conferência do ADM">
+        <p className="text-sm text-zinc-400">Sem conta neste mês: a vendedora ainda não tinha pacote nem venda no sistema.</p>
+      </Panel>
+    )
+  const d = l.detalhe
+  const item = (rotulo: string, valor: number, detalhe: string, sinal = '−') => (
+    <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{rotulo}</p>
+      <p className="text-xl font-black text-white mt-1">
+        {sinal === '+' ? '' : '− '}
+        {brl(valor)}
+      </p>
+      <p className="text-[11px] text-zinc-500 mt-1">{detalhe}</p>
+    </div>
+  )
+  const estimado = (v: number, qtd: number) => (v > 0 ? ` • + ${brl(v)} estimado (${qtd} sem lançar)` : '')
+  return (
+    <Panel titulo={`Lucro / Prejuízo • ${nomeMes(mes)}`} subtitulo="Conferência do ADM • vendas com contrato assinado no mês • não aparece na Visão TV">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {item('Valor vendido', l.vendido, `${num(l.vendas)} venda(s) • ${num(l.albuns)} álbum(ns)`, '+')}
+        {item('Comissões', l.custos.comissao, 'PIX, cartão e boleto pela Tabela de Preços')}
+        {item('Fretes lançados', d.freteLancado, `${num(d.enviosLancados)} envio(s) com custo${estimado(d.freteEstimado, l.estimado.fretes)}`)}
+        {item('Taxas do cartão', d.cartao, `${num(tabela.custos.taxaCartao)}% do valor das vendas no cartão`)}
+        {item('Taxas do boleto', d.taxaBoleto, `${brl(tabela.custos.taxaBoleto)} por boleto (cada parcela)`)}
+        {item('Reserva do boleto', l.custos.reserva, 'inadimplência sobre as vendas no boleto')}
+        {item('Álbuns + saquinhos', l.custos.album, `${num(l.albuns)} álbum(ns)`)}
+        {item('Salário + encargos', l.custos.salario, l.estimado.salario ? 'estimado (holerite ainda não lançado)' : 'holerite do Financeiro')}
+      </div>
+      <div className={`mt-4 rounded-2xl border p-4 flex flex-wrap items-center justify-between gap-3 ${l.lucro >= 0 ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-red-500/30 bg-red-500/10'}`}>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{l.lucro >= 0 ? 'Lucro do mês' : 'Prejuízo do mês'}</p>
+          <p className={`text-3xl font-black mt-1 ${l.lucro >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{brl(l.lucro)}</p>
+        </div>
+        <p className="text-xs text-zinc-400">
+          Vendido {brl(l.vendido)} − custos {brl(l.totalCustos)}
+          {l.estimado.fretes || l.estimado.salario ? ' • tem valor estimado' : ''}
+        </p>
+      </div>
     </Panel>
   )
 }

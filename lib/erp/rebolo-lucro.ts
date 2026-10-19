@@ -3,7 +3,8 @@
 //   vendido − reserva do boleto − frete − taxa do cartão − taxa do boleto − álbum − saquinho − comissão − salário com encargos
 // • Vendas: as do Rebolo com o contrato assinado anexado (não esperam o Financeiro — SQL 044), pelo dia da assinatura —
 //   o mesmo "vendido no mês" da meta e do card.
-// • Frete e taxa do cartão: os reais do envio (Rebolo › Envios); sem eles, a estimativa da Tabela de Preços ("estimado").
+// • Frete: o real do envio (Rebolo › Envios); sem ele, a estimativa da Tabela de Preços ("estimado").
+// • Taxa do cartão: 15% do valor total da venda; taxa do boleto: R$ 5 por boleto (cada parcela) — regras de 19/10/2026.
 // • Álbum e saquinho: por álbum vendido (o Pôster com Moldura sozinho não leva álbum nem saquinho).
 // • Salário: o do holerite (Financeiro › Custo do Rebolo) + encargos; sem ele, o estimado. O mês corrente conta o salário cheio.
 // • Meses antes de a vendedora ter pacote ou venda no sistema ficam sem conta (não viram prejuízo falso).
@@ -31,6 +32,8 @@ export interface LucroRebolo {
   totalCustos: number
   lucro: number
   estimado: { fretes: number; taxas: number; salario: boolean } // o que ainda é estimativa
+  // separado para o card de conferência do ADM (Dashboard Rebolo): lançado (real) × estimado
+  detalhe: { freteLancado: number; freteEstimado: number; cartao: number; taxaBoleto: number; enviosLancados: number }
 }
 
 export const ROTULOS_CUSTOS: Record<keyof CustosLucroRebolo, string> = {
@@ -76,6 +79,7 @@ export function lucroReboloMes(s: ErpState, vendedoraId: string, mes: string, ve
   const fichas = colecao(s, 'rebolo_fichas')
   const custos: CustosLucroRebolo = { album: 0, reserva: 0, frete: 0, taxas: 0, comissao: 0, salario: 0 }
   const estimado = { fretes: 0, taxas: 0, salario: false }
+  const detalhe = { freteLancado: 0, freteEstimado: 0, cartao: 0, taxaBoleto: 0, enviosLancados: 0 }
   let vendido = 0
   let albuns = 0
   const doMes = vendas.filter((v) => mesDe(diaDaVendaRebolo(v)) === mes)
@@ -89,19 +93,24 @@ export function lucroReboloMes(s: ErpState, vendedoraId: string, mes: string, ve
     custos.album += qtd * (k.custoAlbum + k.custoSaquinho)
     if (forma === 'boleto') {
       custos.reserva += (valor * k.reservaBoleto) / 100
-      custos.taxas += k.taxaBoleto
+      // R$ por boleto: cada parcela é um boleto (10x = 10 boletos)
+      const boletos = Math.max(1, Number(v.parcelas) || 1)
+      custos.taxas += k.taxaBoleto * boletos
+      detalhe.taxaBoleto += k.taxaBoleto * boletos
     }
-    if (ficha && !vazio(ficha.custoPostagem)) custos.frete += Number(ficha.custoPostagem) || 0
-    else {
+    if (ficha && !vazio(ficha.custoPostagem)) {
+      custos.frete += Number(ficha.custoPostagem) || 0
+      detalhe.freteLancado += Number(ficha.custoPostagem) || 0
+      detalhe.enviosLancados++
+    } else {
       custos.frete += k.freteEstimado
+      detalhe.freteEstimado += k.freteEstimado
       estimado.fretes++
     }
+    // cartão: % fixa sobre o valor total da venda (19/10/2026)
     if (forma === 'cartao') {
-      if (ficha && !vazio(ficha.taxaCartao)) custos.taxas += Number(ficha.taxaCartao) || 0
-      else {
-        custos.taxas += (valor * k.taxaCartaoEstimada) / 100
-        estimado.taxas++
-      }
+      custos.taxas += (valor * k.taxaCartao) / 100
+      detalhe.cartao += (valor * k.taxaCartao) / 100
     }
     custos.comissao += comissaoDaVenda(t, forma, valor)
   }
@@ -111,7 +120,8 @@ export function lucroReboloMes(s: ErpState, vendedoraId: string, mes: string, ve
   custos.salario = salario * (1 + k.encargos / 100)
   for (const chave of Object.keys(custos) as (keyof CustosLucroRebolo)[]) custos[chave] = centavos(custos[chave])
   const totalCustos = centavos(Object.values(custos).reduce((a, b) => a + b, 0))
-  return { mes, vendido: centavos(vendido), vendas: doMes.length, albuns, custos, totalCustos, lucro: centavos(vendido - totalCustos), estimado }
+  for (const chave of Object.keys(detalhe) as (keyof typeof detalhe)[]) if (chave !== 'enviosLancados') detalhe[chave] = centavos(detalhe[chave])
+  return { mes, vendido: centavos(vendido), vendas: doMes.length, albuns, custos, totalCustos, lucro: centavos(vendido - totalCustos), estimado, detalhe }
 }
 
 // Os 12 meses do ano (null = antes de começar ou ainda não chegou)
