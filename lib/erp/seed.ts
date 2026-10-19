@@ -557,8 +557,8 @@ export function gerarSeed(): ErpState {
   recentes.forEach((v, i) => {
     const l = criarLoteProducao(s, v, ctxOp, 'Chegou das Operações')
     if (!l) return
-    // (SQL 058) "Pronto para conferência Beatriz" juntou com a Conferência Beatriz ("Conferência final" no banco)
-    const etapa = etapasDemo[i] === 'Pronto para conferência Beatriz' ? 'Conferência final' : etapasDemo[i]
+    // (SQLs 058/060) "Pronto para conferência Beatriz" juntou com a Conferência Beatriz e "No HD" virou Revelando
+    const etapa = etapasDemo[i] === 'Pronto para conferência Beatriz' ? 'Conferência final' : etapasDemo[i] === 'Aguardando revelação' ? 'Revelando' : etapasDemo[i]
     const ordem = ['Aguardando fotos', 'Em edição', 'Análise de qualidade', 'Pronto para conferência Beatriz', 'Conferência final', 'Aguardando revelação', 'Revelando', 'Na caixa'].indexOf(etapasDemo[i]) // datas do fluxo antigo de 8 etapas
     const d0 = String(v.data)
     const ate = (n: number) => (addDias(d0, n) > hoje() ? hoje() : addDias(d0, n)) // nenhuma data depois de hoje

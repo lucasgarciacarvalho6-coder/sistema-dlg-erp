@@ -11,7 +11,7 @@ import LoteDetalhe from '@/components/edicao/LoteDetalhe'
 import { Drive } from '@/components/edicao/LinkDrive'
 
 // PRODUÇÃO › Controle: a planilha da Produção dentro do sistema. Uma linha por escola (visita encerrada nas Operações),
-// com a etapa em que está (7 etapas, SQL 058): Conferência Operações → Em edição → Conferência Produção → Conferência Beatriz → No HD
+// com a etapa em que está (6 etapas, SQLs 058/060): Conferência Operações → Em edição → Conferência Produção → Conferência Beatriz
 // → Revelando → Na caixa. Retorno fica em laranja, como na planilha.
 
 type Filtro = 'andamento' | 'atrasadas' | EtapaLote
@@ -53,7 +53,7 @@ export default function ControleProducaoPage() {
       <PageHeader
         modulo="Módulo / Produção"
         titulo="Controle da produção"
-        descricao="Cada escola fotografada chega sozinha das Operações. Clique numa escola para ver as etapas e passar para a próxima: Conferência Operações, Em edição, Conferência Produção, Conferência Beatriz, No HD, Revelando e Na caixa."
+        descricao="Cada escola fotografada chega sozinha das Operações. Clique numa escola para ver as etapas e passar para a próxima: Conferência Operações, Em edição, Conferência Produção, Conferência Beatriz, Revelando e Na caixa."
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">

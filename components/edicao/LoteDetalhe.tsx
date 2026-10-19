@@ -52,7 +52,7 @@ export default function LoteDetalhe({ loteId, onFechar }: { loteId: string | nul
   )
 }
 
-// As 7 etapas (SQL 058): ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
+// As 6 etapas (SQLs 058/060): ✓ as que já passaram, destaque na atual, e o dia em que a escola entrou em cada uma
 function LinhaDoTempo({ l }: { l: Registro }) {
   const s = useErp()
   const atual = indiceEtapa(l)
@@ -63,7 +63,6 @@ function LinhaDoTempo({ l }: { l: Registro }) {
     'Em edição': [editor ? String(editor.nome) : '', curta(l.enviadoEditorEm), l.entregaPrevista ? `prev. ${curta(l.entregaPrevista)}` : ''].filter(Boolean).join(' • '),
     'Análise de qualidade': curta(l.devolvidoEditorEm),
     'Conferência final': [curta(l.enviadoConferenciaEm || l.aprovadoQualidadeEm), analista ?? ''].filter(Boolean).join(' • '),
-    'Aguardando revelação': curta(l.confirmadoEm),
     Revelando: curta(l.revelandoEm),
     'Na caixa': curta(l.naCaixaEm),
   }
@@ -412,18 +411,10 @@ function ProximoPasso({ l }: { l: Registro }) {
           </div>
         ),
       )
-    case 'Aguardando revelação':
-      return caixa(
-        'No HD',
-        `HD liberado pela Beatriz${l.confirmadoEm ? ` em ${dataBR(String(l.confirmadoEm))}` : ''}: as fotos estão no HD aguardando a revelação. Marque quando a Revelação começar a revelar.`,
-        <button disabled={enviando} onClick={() => fazer('revelando')} className={btnPrimario}>
-          A Revelação pegou o HD → Revelando
-        </button>,
-      )
     case 'Revelando':
       return caixa(
         'Revelando',
-        `A Revelação está com o HD${l.revelandoEm ? ` desde ${dataBR(String(l.revelandoEm))}` : ''}.`,
+        `Liberado pela Beatriz${l.revelandoEm ? ` em ${dataBR(String(l.revelandoEm))}` : ''}: as fotos estão sendo reveladas. A escola vai para "Na caixa" quando a Revelação soltar todas as caixas (ou marque aqui).`,
         <button disabled={enviando} onClick={() => fazer('na_caixa')} className={btnPrimario}>
           Revelado → Na caixa
         </button>,

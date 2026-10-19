@@ -1173,9 +1173,8 @@ const OK_ACAO_LOTE: Record<AcaoLote, string> = {
   editor_devolveu: 'Voltou do editor: agora é a Conferência Produção.',
   aprovar_qualidade: 'Conferido! Enviado para a Conferência Beatriz.',
   reprovar_qualidade: 'Álbuns reenviados ao editor.',
-  confirmar: 'Conferência Beatriz aprovada: HD liberado para a Revelação.',
+  confirmar: 'Conferência Beatriz aprovada: liberado para a Revelação (revelando).',
   reprovar_conferencia: 'Recusado: voltou para a Conferência Produção.',
-  revelando: 'Marcado como Revelando.',
   na_caixa: 'Marcado como Na caixa.',
 }
 

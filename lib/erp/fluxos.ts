@@ -1179,22 +1179,18 @@ export function avancarLote(d: ErpState, loteId: string, acao: AcaoLote, dados: 
         analista = daProducao(dados.analistaId)
         if (!analista) return 'Quem fez a análise precisa ser da Produção.'
       }
-      Object.assign(l, { confirmadoEm: dia, confirmadoPor: ctx.autorId, etapa: 'Aguardando revelação', aprovadoQualidadePor: analista?.id ?? '' })
-      let descricao = `Conferência Beatriz: ${albuns} álbuns liberados, HD para a Revelação`
+      Object.assign(l, { confirmadoEm: dia, confirmadoPor: ctx.autorId, etapa: 'Revelando', revelandoEm: dia, aprovadoQualidadePor: analista?.id ?? '' })
+      let descricao = `Conferência Beatriz: ${albuns} álbuns liberados para a Revelação (revelando)`
       if (Number(l.albunsContados) > 0) descricao += ' (já tinham entrado na meta).'
       else if (analista && albuns > 0) {
         lancar(d, ctx, { setor: 'edicao', indicador: 'albuns_entregues', colaboradorId: analista.id, quantidade: albuns, descricao: `Álbuns entregues: ${l.escola}`, data: dia })
         l.albunsContados = albuns
         descricao += `. Contam na meta de ${analista.nome}.`
       } else descricao += ' (sem analista: não entrou na meta).'
-      h = { etapa: 'Aguardando revelação', acao: 'Conferência Beatriz aprovada', quantidade: albuns, descricao }
-      notificar(d, ctx, { setores: ['edicao'], tipo: 'sucesso', titulo: 'Conferência Beatriz aprovada', descricao: `${l.escola}: ${albuns} álbuns liberados — HD para a Revelação.`, link: '/edicao' })
+      h = { etapa: 'Revelando', acao: 'Conferência Beatriz aprovada', quantidade: albuns, descricao }
+      notificar(d, ctx, { setores: ['edicao'], tipo: 'sucesso', titulo: 'Conferência Beatriz aprovada', descricao: `${l.escola}: ${albuns} álbuns liberados para a Revelação.`, link: '/edicao' })
       break
     }
-    case 'revelando':
-      Object.assign(l, { revelandoEm: dia, etapa: 'Revelando' })
-      h = { etapa: 'Revelando', acao: 'Revelando', quantidade: null, descricao: 'A Revelação pegou o HD para revelar.' }
-      break
     case 'na_caixa':
       Object.assign(l, { naCaixaEm: dia, etapa: 'Na caixa' })
       h = { etapa: 'Na caixa', acao: 'Na caixa', quantidade: null, descricao: 'Álbuns revelados e na caixa.' }
@@ -1348,10 +1344,6 @@ export function registrarCaixa(d: ErpState, loteId: string, dados: { albuns: num
   const hist = (etapaH: string, acao: string, descricao: string, quantidade: number | null = null) =>
     inserir(d, 'producao_historico', { loteId, data: agora(), etapa: etapaH, acao, quantidade, descricao, autor: ctx.autorNome })
   hist(etapa, 'Caixa da Revelação', `Caixa ${numero}: ${albuns} álbuns${posteres > 0 ? ` + ${posteres} pôster/brindes` : ''}. Aguardando a conferência da Produção.`, albuns)
-  if (etapa === 'Aguardando revelação') {
-    Object.assign(l, { etapa: 'Revelando', revelandoEm: l.revelandoEm || data })
-    hist('Revelando', 'Revelando', 'A Revelação começou a soltar as caixas.')
-  }
   const total = col(d, 'producao_caixas').filter((c) => c.loteId === loteId && !c.origemCargaId).reduce((a, c) => a + (Number(c.albuns) || 0), 0)
   if (l.etapa === 'Revelando' && total >= (Number(l.albuns) || 0)) {
     Object.assign(l, { etapa: 'Na caixa', naCaixaEm: dia })
