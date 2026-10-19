@@ -1606,6 +1606,15 @@ export const reabrirFichaRebolo = (fichaId: string, situacao: 'Em negociação' 
     `Ficha reaberta: voltou para "${situacao}".`,
   )
 
+// Venda cancelada por engano: o ADM devolve à vendedora (volta como estava antes do cancelamento — SQL 059)
+export const devolverCanceladaRebolo = (vendaId: string, observacao: string) =>
+  acaoRebolo(
+    'rebolo_devolver_cancelada',
+    { p_venda: vendaId, p_observacao: observacao.trim() || null },
+    (d, ctx) => F.devolverCanceladaRebolo(d, vendaId, observacao, ctx),
+    'Venda devolvida à vendedora: o cancelamento foi desfeito.',
+  )
+
 // A supervisão ajusta o próximo número de pacote de uma vendedora (SQL 034)
 export const definirProximoPacoteRebolo = (vendedoraId: string, proximo: number) =>
   acaoRebolo(

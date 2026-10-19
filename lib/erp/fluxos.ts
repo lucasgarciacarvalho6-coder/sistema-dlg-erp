@@ -1592,6 +1592,28 @@ export function reabrirFichaRebolo(d: ErpState, fichaId: string, situacao: strin
   return null
 }
 
+// (SQL 059) o ADM devolve à vendedora a venda cancelada por engano: volta como estava antes do cancelamento
+export function devolverCanceladaRebolo(d: ErpState, vendaId: string, observacao: string, ctx: Contexto): string | null {
+  const eu = d.colaboradores.find((c) => c.id === ctx.autorId)
+  if (eu?.perfil !== 'ADM') return 'Só o ADM devolve uma venda cancelada.'
+  const v = col(d, 'vendas_ebooks').find((x) => x.id === vendaId)
+  if (!v || v.canal !== 'Rebolo') return 'Venda não encontrada.'
+  if (v.conferencia !== 'Cancelada') return 'Esta venda não está cancelada.'
+  const f = col(d, 'rebolo_fichas').find((x) => x.id === v.fichaReboloId)
+  if (!f) return 'A ficha desta venda não foi encontrada.'
+  if (f.situacao !== 'Cancelada') return `A ficha já está em "${f.situacao}": não dá para devolver esta venda.`
+  if (col(d, 'vendas_ebooks').some((x) => x.fichaReboloId === f.id && x.id !== v.id && x.conferencia !== 'Cancelada')) return 'Esta ficha já tem outra venda em andamento.'
+  const contrato = !!lerJSON<{ contratoAssinado?: string }>(v.anexos, {}).contratoAssinado
+  const volta = contrato ? 'Devolvida' : 'Aguardando contrato'
+  Object.assign(v, { conferencia: volta, conferenciaMotivo: contrato ? 'Cancelamento desfeito pelo ADM: confira e reenvie ao Financeiro' : '' })
+  Object.assign(f, { situacao: 'Venda a efetivar', vendaId: v.id, ultimoContato: agora() })
+  if (contrato) contarVendaRebolo(d, v, ctx, v.assinaturaEm ? diaLocal(String(v.assinaturaEm)) : String(v.data || ''))
+  inserir(d, 'rebolo_contatos', { fichaId: f.id, vendedoraId: ctx.autorId, resultado: 'Reaberta', observacao: [`Venda cancelada devolvida pelo ADM → ${volta}`, observacao.trim()].filter(Boolean).join(' • '), agendadoPara: '', data: agora() })
+  notificar(d, ctx, { setores: ['rebolo'], tipo: 'info', titulo: 'Venda devolvida pelo ADM', descricao: `${v.responsavel} • ${v.pacote}: o cancelamento foi desfeito.`, link: '/rebolo/vendas' })
+  auditar(d, ctx, 'EDITAR', `Venda rebolo devolvida (cancelamento desfeito): ${v.responsavel}`, 'rebolo')
+  return null
+}
+
 export function pedirDescontoRebolo(d: ErpState, fichaId: string, valor: number, motivo: string, ctx: Contexto): string | null {
   const f = col(d, 'rebolo_fichas').find((x) => x.id === fichaId)
   if (!f) return 'Ficha não encontrada.'

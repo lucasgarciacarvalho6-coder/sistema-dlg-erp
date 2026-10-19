@@ -12,7 +12,7 @@ import Link from 'next/link'
 import type { Registro, Valor } from '@/lib/erp/types'
 import type { ResultadoContato } from '@/lib/erp/fluxos'
 import { addDias, brl, dataBR, hoje } from '@/lib/erp/format'
-import { editarVendaRebolo, fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarContatoRebolo, salvarFichaRebolo, usePode } from '@/lib/erp/store'
+import { devolverCanceladaRebolo, editarVendaRebolo, fecharVendaRebolo, pedirDescontoRebolo, reabrirFichaRebolo, registrarContatoRebolo, salvarFichaRebolo, usePode } from '@/lib/erp/store'
 import {
   buscarCep,
   comissaoDaVenda,
@@ -167,6 +167,7 @@ function SemAcao({ ficha, venda, podeMexer }: { ficha: Registro; venda?: Registr
   const [destino, setDestino] = useState<'Em negociação' | 'Tentar de novo'>('Em negociação')
   const [obs, setObs] = useState('')
   const [editando, setEditando] = useState(false)
+  if (ficha.situacao === 'Cancelada') return <VendaCancelada ficha={ficha} />
   if (ficha.situacao === 'Descarte')
     return (
       <div className="space-y-4">
@@ -750,6 +751,57 @@ function PedirDesconto({ ficha, faixa }: { ficha: Registro; faixa: 1 | 2 | 3 }) 
         {status === 'Pendente' ? 'Aguardando a Gerência...' : '🏷 Enviar para a Gerência aprovar'}
       </button>
       <p className="text-[11px] text-zinc-500">Aprovado, o valor aparece em &quot;Fechar venda&quot; para usar.</p>
+    </div>
+  )
+}
+
+// Venda cancelada (19/10/2026): a vendedora pode ter cancelado por engano — o ADM devolve a venda para ela,
+// como estava antes do cancelamento (sem contrato: "a efetivar"; com contrato assinado: "devolvida", e volta para a meta).
+function VendaCancelada({ ficha }: { ficha: Registro }) {
+  const { eu, vendas } = useRebolo()
+  const venda = vendas
+    .filter((v) => v.fichaReboloId === ficha.id && v.conferencia === 'Cancelada')
+    .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))[0]
+  const [obs, setObs] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
+  const adm = eu?.perfil === 'ADM'
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-zinc-300">
+        Venda cancelada{venda?.conferenciaMotivo ? <>: <strong className="text-red-400">{String(venda.conferenciaMotivo)}</strong></> : '.'}
+        {venda ? ` • ${String(venda.pacote || '')} • ${brl(Number(venda.valor) || 0)}` : ''}
+      </p>
+      {adm && venda && (
+        <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-black text-white">↺ Devolver a venda para a vendedora (cancelada por engano)</p>
+          <p className="text-[11px] text-zinc-400">A venda volta como estava antes do cancelamento e a vendedora é avisada.</p>
+          <div className="space-y-1.5">
+            <label className={labelCls}>Observação (fica no histórico)</label>
+            <input value={obs} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: cancelou sem querer" className={inputCls} />
+          </div>
+          {confirmar ? (
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setConfirmar(false)} className="px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-widest bg-white/[0.05] text-white">Voltar</button>
+              <button
+                disabled={salvando}
+                onClick={async () => {
+                  setSalvando(true)
+                  await devolverCanceladaRebolo(String(venda.id), obs)
+                  setSalvando(false)
+                }}
+                className={btnPrimario}
+              >
+                {salvando ? 'Devolvendo...' : 'Confirmar: devolver à vendedora'}
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setConfirmar(true)} className={btnPrimario}>
+              Devolver à vendedora
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
